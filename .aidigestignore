@@ -1,0 +1,22 @@
+# Build outputs
+artifacts/
+cache/
+dist/
+dist-ssr/
+
+# Dependencies
+node_modules/
+
+# Hardhat build info (huge JSON files, not useful)
+artifacts/build-info/
+
+# Binary assets
+public/assets/*.png
+public/assets/*.jpg
+public/favicon.png
+
+# Generated files
+*.output.json
+
+# Env secrets
+.env
