@@ -217,6 +217,9 @@ if not exist ".env" (
 echo        .env found OK
 
 echo.
+echo [1.5/3] Clearing port 3001...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :3001') do taskkill /PID %%a /F >nul 2>nul
+echo        Done.
 echo [2/3] Starting Socket.io server on port 3001...
 start "OCB - Socket Server" cmd /k "cd /d %PROJECT_DIR% && node server/index.js"
 ping -n 3 127.0.0.1 >nul
@@ -268,6 +271,118 @@ scene-awake An event emitted at the end of the `editorCreate()` method generated
 # Add your events like this:
 #
 # my-event My event documentation. 
+```
+
+# git_push.bat
+
+```bat
+@echo off
+title OnChainBattles - Auto Commit & Push
+color 0B
+
+REM ── Set your project root ─────────────────────────────────────
+set PROJECT_DIR=D:\OnChainBattles
+cd /d "%PROJECT_DIR%"
+
+REM ── Get current date and time for commit message ──────────────
+for /f "tokens=1-4 delims=/ " %%a in ('date /t') do (
+    set DAY=%%a
+    set MONTH=%%b
+    set YEAR=%%c
+)
+for /f "tokens=1-2 delims=: " %%a in ('time /t') do (
+    set HOUR=%%a
+    set MIN=%%b
+)
+
+REM ── Windows date format varies by locale - use wmic as fallback ─
+for /f "skip=1 tokens=1 delims=." %%a in ('wmic os get LocalDateTime') do (
+    if not defined DATETIME set DATETIME=%%a
+)
+
+REM Parse: YYYYMMDDHHMMSS
+set YEAR=%DATETIME:~0,4%
+set MONTH=%DATETIME:~4,2%
+set DAY=%DATETIME:~6,2%
+set HOUR=%DATETIME:~8,2%
+set MIN=%DATETIME:~10,2%
+
+set TIMESTAMP=%YEAR%-%MONTH%-%DAY% %HOUR%:%MIN%
+
+echo.
+echo  ==========================================
+echo   OnChainBattles - Auto Commit
+echo   Time: %TIMESTAMP%
+echo  ==========================================
+echo.
+
+REM ── Check Git is installed ────────────────────────────────────
+where git >nul 2>nul
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] Git not found.
+    pause
+    exit /b 1
+)
+
+REM ── Check if there is anything to commit ─────────────────────
+git status --porcelain > temp_status.txt
+set /p STATUS=<temp_status.txt
+del temp_status.txt
+
+if "%STATUS%"=="" (
+    echo  [INFO] Nothing to commit - working tree clean.
+    echo.
+    pause
+    exit /b 0
+)
+
+REM ── Optional: let user type a short message ───────────────────
+echo  Add a short note (or press ENTER to use auto message):
+set /p USER_MSG="  Note: "
+
+if "%USER_MSG%"=="" (
+    set COMMIT_MSG=update: %TIMESTAMP%
+) else (
+    set COMMIT_MSG=%USER_MSG% [%TIMESTAMP%]
+)
+
+echo.
+echo [1/3] Staging all changes...
+git add .
+echo        Done.
+
+echo.
+echo [2/3] Committing: "%COMMIT_MSG%"
+git commit -m "%COMMIT_MSG%"
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] Commit failed.
+    pause
+    exit /b 1
+)
+echo        Done.
+
+echo.
+echo [3/3] Pushing to GitHub...
+git push origin main
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo [ERROR] Push failed. Possible reasons:
+    echo   - No internet connection
+    echo   - Remote not set (run git_init.bat first)
+    echo   - Auth issue: set up Git credential manager
+    echo.
+    pause
+    exit /b 1
+)
+
+echo.
+echo  ==========================================
+echo   [SUCCESS] Pushed to GitHub!
+echo   Commit: %COMMIT_MSG%
+echo  ==========================================
+echo.
+pause
+
 ```
 
 # hardhat.config.ts
@@ -359,7 +474,6 @@ module.exports = buildModule("EscrowModule", (m) => {
         "@types/mocha": "^10.0.10",
         "@types/node": "^22.19.11",
         "chai": "^5.3.3",
-        "ethers": "^6.16.0",
         "forge-std": "github:foundry-rs/forge-std#v1.9.4",
         "hardhat": "^3.1.9",
         "mocha": "^11.7.5",
@@ -371,6 +485,7 @@ module.exports = buildModule("EscrowModule", (m) => {
     "dependencies": {
         "@phaserjs/editor-scripts-base": "^2.0.1",
         "dotenv": "^17.3.1",
+        "ethers": "^6.16.0",
         "express": "^5.2.1",
         "phaser": "^4.0.0-rc.6",
         "socket.io": "^4.8.3",
@@ -378,7 +493,6 @@ module.exports = buildModule("EscrowModule", (m) => {
     },
     "type": "module"
 }
-
 ```
 
 # phasereditor2d.config.json
@@ -594,6 +708,9 @@ console.log("Transaction sent successfully");
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import { ethers } from 'ethers';
+import dotenv from 'dotenv';
+dotenv.config();
 
 const app = express();
 const server = createServer(app);
@@ -601,13 +718,68 @@ const io = new Server(server, {
   cors: { origin: '*' }
 });
 
+// ─── Escrow Contract Setup ─────────────────────────────────────
+const ESCROW_ADDRESS = "0xa145f82DC5b285B970BE71F48Cf5173E722cF515";
+const ESCROW_ABI = [
+  "function claimWinnings(bytes32 matchId, address winner) external",
+  "function refundTie(bytes32 matchId) external",
+  "function matches(bytes32) view returns (address playerA, address playerB, uint256 stake, uint8 status)",
+];
+
+const FUJI_RPC = "https://api.avax-test.network/ext/bc/C/rpc";
+const provider = new ethers.JsonRpcProvider(FUJI_RPC);
+const ownerWallet = new ethers.Wallet(process.env.FUJI_PRIVATE_KEY, provider);
+const escrowContract = new ethers.Contract(ESCROW_ADDRESS, ESCROW_ABI, ownerWallet);
+
+console.log(`[Server] Owner wallet: ${ownerWallet.address}`);
+
+// ─── Helper: matchId from room code (must match frontend) ──────
+function matchIdFromCode(roomCode) {
+  const hex = Buffer.from(roomCode, 'utf8').toString('hex');
+  const padded = hex.padStart(64, '0');
+  return '0x' + padded;
+}
+
+// ─── Payout Logic ─────────────────────────────────────────────
+async function payoutWinner(roomCode, winnerAddress) {
+  const matchId = matchIdFromCode(roomCode);
+  console.log(`[Escrow] Paying winner ${winnerAddress} for room ${roomCode}`);
+  try {
+    const tx = await escrowContract.claimWinnings(matchId, winnerAddress);
+    await tx.wait();
+    console.log(`[Escrow] Payout done! tx: ${tx.hash}`);
+    return { success: true, txHash: tx.hash };
+  } catch (err) {
+    console.error(`[Escrow] Payout failed:`, err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+async function refundTie(roomCode) {
+  const matchId = matchIdFromCode(roomCode);
+  console.log(`[Escrow] Refunding tie for room ${roomCode}`);
+  try {
+    const tx = await escrowContract.refundTie(matchId);
+    await tx.wait();
+    console.log(`[Escrow] Tie refund done! tx: ${tx.hash}`);
+    return { success: true, txHash: tx.hash };
+  } catch (err) {
+    console.error(`[Escrow] Tie refund failed:`, err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// ─── Room State ───────────────────────────────────────────────
 const rooms = {};
 
 io.on('connection', (socket) => {
   console.log(`[Server] Player connected: ${socket.id}`);
 
   socket.on('createRoom', ({ roomCode, playerName }) => {
-    rooms[roomCode] = { players: [{ id: socket.id, name: playerName }] };
+    rooms[roomCode] = {
+      players: [{ id: socket.id, name: playerName, roll: null, wallet: null }],
+      cryptoReady: { count: 0 }
+    };
     socket.join(roomCode);
     socket.emit('roomCreated', { roomCode });
     console.log(`[Server] Room created: ${roomCode} by ${playerName}`);
@@ -618,7 +790,7 @@ io.on('connection', (socket) => {
     if (!room) { socket.emit('error', { message: 'Room not found. Check the code.' }); return; }
     if (room.players.length >= 2) { socket.emit('error', { message: 'Room is full.' }); return; }
 
-    room.players.push({ id: socket.id, name: playerName });
+    room.players.push({ id: socket.id, name: playerName, roll: null, wallet: null });
     socket.join(roomCode);
     socket.emit('roomJoined', { roomCode });
 
@@ -628,9 +800,84 @@ io.on('connection', (socket) => {
     console.log(`[Server] ${playerName} joined room: ${roomCode}`);
   });
 
+  // Player registers their wallet address (for crypto payout)
+  socket.on('registerWallet', ({ roomCode, walletAddress }) => {
+    const room = rooms[roomCode];
+    if (!room) return;
+    const player = room.players.find(p => p.id === socket.id);
+    if (player) {
+      player.wallet = walletAddress;
+      console.log(`[Server] Wallet registered for ${player.name}: ${walletAddress}`);
+    }
+  });
+
+  // Player signals their escrow deposit is confirmed on-chain
+  socket.on('cryptoReady', ({ roomCode }) => {
+    const room = rooms[roomCode];
+    if (!room) return;
+    room.cryptoReady.count = (room.cryptoReady.count || 0) + 1;
+    console.log(`[Server] cryptoReady: ${room.cryptoReady.count}/2 in room ${roomCode}`);
+
+    if (room.cryptoReady.count >= 2) {
+      // Both players locked funds — enable rolling
+      io.to(roomCode).emit('bothCryptoReady');
+      console.log(`[Server] Both players crypto-ready in room ${roomCode}, enabling dice roll`);
+    }
+  });
+
   socket.on('diceRoll', ({ roomCode, playerName, roll }) => {
+    const room = rooms[roomCode];
+    if (!room) return;
+
+    const player = room.players.find(p => p.id === socket.id);
+    if (player) player.roll = roll;
+
     socket.to(roomCode).emit('opponentRoll', { roll, playerName });
     console.log(`[Server] ${playerName} rolled ${roll} in room ${roomCode}`);
+
+    // Check if both players have rolled
+    const [p1, p2] = room.players;
+    if (p1 && p2 && p1.roll !== null && p2.roll !== null) {
+      const isCrypto = p1.wallet && p2.wallet;
+      console.log(`[Server] Both rolled in room ${roomCode}. p1:${p1.roll} p2:${p2.roll} crypto:${isCrypto}`);
+
+      if (p1.roll === p2.roll) {
+        // Tie — reset rolls for re-roll
+        p1.roll = null;
+        p2.roll = null;
+        if (isCrypto) {
+          // For crypto tie, refund and let them know
+          // (In Phase 1, ties just re-roll in free mode; for crypto we could refund or re-roll)
+          // For now: re-roll (don't touch escrow on tie, just reset)
+          io.to(roomCode).emit('tieReroll');
+        }
+        // Free mode tie handled client-side already
+      } else {
+        const winner = p1.roll > p2.roll ? p1 : p2;
+        const loser = p1.roll > p2.roll ? p2 : p1;
+
+        if (isCrypto) {
+          // Trigger on-chain payout
+          payoutWinner(roomCode, winner.wallet).then(result => {
+            io.to(roomCode).emit('cryptoMatchResult', {
+              winnerName: winner.name,
+              loserName: loser.name,
+              winnerRoll: winner.roll,
+              loserRoll: loser.roll,
+              txHash: result.txHash,
+              success: result.success,
+              error: result.error
+            });
+          });
+        }
+        // Free mode result handled client-side
+      }
+
+      // Reset for next match
+      p1.roll = null;
+      p2.roll = null;
+      room.cryptoReady.count = 0;
+    }
   });
 
   socket.on('disconnect', () => {
@@ -929,135 +1176,170 @@ export default game;
 // Equivalent to PhotonManager.cs in Unity
 
 import { io, Socket } from "socket.io-client";
-import GameState, { RoomAction } from "../GameState";
+import GameState, { RoomAction } from "../GameState.ts";
 
 // ─── Event Callbacks ──────────────────────────────────────────
-// RoomScene registers these so SocketManager can notify it
 export interface RoomCallbacks {
-    onRoomCreated: (code: string) => void;
-    onRoomJoined: (code: string) => void;
-    onOpponentJoined: (opponentName: string) => void;
-    onOpponentRollReceived: (roll: number, opponentName: string) => void;
-    onOpponentDisconnected: () => void;
-    onError: (message: string) => void;
+  onRoomCreated: (code: string) => void;
+  onRoomJoined: (code: string) => void;
+  onOpponentJoined: (opponentName: string) => void;
+  onOpponentRollReceived: (roll: number, opponentName: string) => void;
+  onOpponentDisconnected: () => void;
+  onError: (message: string) => void;
+  // Crypto-specific
+  onBothCryptoReady?: () => void;
+  onCryptoMatchResult?: (result: CryptoMatchResult) => void;
+  onTieReroll?: () => void;
+}
+
+export interface CryptoMatchResult {
+  winnerName: string;
+  loserName: string;
+  winnerRoll: number;
+  loserRoll: number;
+  txHash?: string;
+  success: boolean;
+  error?: string;
 }
 
 class SocketManagerClass {
-    private socket: Socket | null = null;
-    private callbacks: RoomCallbacks | null = null;
+  private socket: Socket | null = null;
+  private callbacks: RoomCallbacks | null = null;
+  private serverUrl: string = "http://localhost:3001";
 
-    // ─── Server URL ───────────────────────────────────────────
-    // Change this to your Railway.app URL when deployed
-    private serverUrl: string = "http://localhost:3001";
+  connect(callbacks: RoomCallbacks): void {
+    this.callbacks = callbacks;
 
-    // ─── Connect ──────────────────────────────────────────────
-    connect(callbacks: RoomCallbacks): void {
-        this.callbacks = callbacks;
-
-        if (this.socket?.connected) {
-            console.log("[SocketManager] Already connected.");
-            this.actOnRoomAction();
-            return;
-        }
-
-        console.log("[SocketManager] Connecting to server...");
-        this.socket = io(this.serverUrl);
-
-        this.socket.on("connect", () => {
-            console.log("[SocketManager] Connected to server.");
-            this.actOnRoomAction();
-        });
-
-        this.socket.on("disconnect", () => {
-            console.log("[SocketManager] Disconnected from server.");
-        });
-
-        this.registerEvents();
+    if (this.socket?.connected) {
+      console.log("[SocketManager] Already connected.");
+      this.actOnRoomAction();
+      return;
     }
 
-    // ─── Act on Room Action ───────────────────────────────────
-    private actOnRoomAction(): void {
-        if (GameState.roomAction === RoomAction.Create) {
-            this.createRoom();
-        } else {
-            this.joinRoom(GameState.roomCode);
-        }
+    console.log("[SocketManager] Connecting to server...");
+    this.socket = io(this.serverUrl);
+
+    this.socket.on("connect", () => {
+      console.log("[SocketManager] Connected to server.");
+      this.actOnRoomAction();
+    });
+
+    this.socket.on("disconnect", () => {
+      console.log("[SocketManager] Disconnected from server.");
+    });
+
+    this.registerEvents();
+  }
+
+  private actOnRoomAction(): void {
+    if (GameState.roomAction === RoomAction.Create) {
+      this.createRoom();
+    } else {
+      this.joinRoom(GameState.roomCode);
     }
+  }
 
-    // ─── Create Room ──────────────────────────────────────────
-    private createRoom(): void {
-        const code = Math.floor(100000 + Math.random() * 900000).toString();
-        GameState.setRoomCode(code);
-        console.log(`[SocketManager] Creating room: ${code}`);
-        this.socket?.emit("createRoom", {
-            roomCode: code,
-            playerName: GameState.playerName,
-        });
-    }
+  private createRoom(): void {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    GameState.setRoomCode(code);
+    console.log(`[SocketManager] Creating room: ${code}`);
+    this.socket?.emit("createRoom", {
+      roomCode: code,
+      playerName: GameState.playerName,
+    });
+  }
 
-    // ─── Join Room ────────────────────────────────────────────
-    private joinRoom(code: string): void {
-        console.log(`[SocketManager] Joining room: ${code}`);
-        this.socket?.emit("joinRoom", {
-            roomCode: code,
-            playerName: GameState.playerName,
-        });
-    }
+  private joinRoom(code: string): void {
+    console.log(`[SocketManager] Joining room: ${code}`);
+    this.socket?.emit("joinRoom", {
+      roomCode: code,
+      playerName: GameState.playerName,
+    });
+  }
 
-    // ─── Send Dice Roll ───────────────────────────────────────
-    sendDiceRoll(roll: number): void {
-        console.log(`[SocketManager] Sending roll: ${roll}`);
-        this.socket?.emit("diceRoll", {
-            roomCode: GameState.roomCode,
-            playerName: GameState.playerName,
-            roll,
-        });
-    }
+  // Register wallet address with server (needed for payout)
+  registerWallet(walletAddress: string): void {
+    console.log(`[SocketManager] Registering wallet: ${walletAddress}`);
+    this.socket?.emit("registerWallet", {
+      roomCode: GameState.roomCode,
+      walletAddress,
+    });
+  }
 
-    // ─── Register Server Events ───────────────────────────────
-    private registerEvents(): void {
-        if (!this.socket) return;
+  // Signal to server that escrow deposit is confirmed
+  signalCryptoReady(): void {
+    console.log("[SocketManager] Signaling crypto ready");
+    this.socket?.emit("cryptoReady", {
+      roomCode: GameState.roomCode,
+    });
+  }
 
-        this.socket.on("roomCreated", (data: { roomCode: string }) => {
-            console.log(`[SocketManager] Room created: ${data.roomCode}`);
-            this.callbacks?.onRoomCreated(data.roomCode);
-        });
+  sendDiceRoll(roll: number): void {
+    console.log(`[SocketManager] Sending roll: ${roll}`);
+    this.socket?.emit("diceRoll", {
+      roomCode: GameState.roomCode,
+      playerName: GameState.playerName,
+      roll,
+    });
+  }
 
-        this.socket.on("roomJoined", (data: { roomCode: string }) => {
-            console.log(`[SocketManager] Room joined: ${data.roomCode}`);
-            this.callbacks?.onRoomJoined(data.roomCode);
-        });
+  private registerEvents(): void {
+    if (!this.socket) return;
 
-        this.socket.on("opponentJoined", (data: { playerName: string }) => {
-            console.log(`[SocketManager] Opponent joined: ${data.playerName}`);
-            this.callbacks?.onOpponentJoined(data.playerName);
-        });
+    this.socket.on("roomCreated", (data: { roomCode: string }) => {
+      console.log(`[SocketManager] Room created: ${data.roomCode}`);
+      this.callbacks?.onRoomCreated(data.roomCode);
+    });
 
-        this.socket.on("opponentRoll", (data: { roll: number; playerName: string }) => {
-            console.log(`[SocketManager] Opponent rolled: ${data.roll}`);
-            this.callbacks?.onOpponentRollReceived(data.roll, data.playerName);
-        });
+    this.socket.on("roomJoined", (data: { roomCode: string }) => {
+      console.log(`[SocketManager] Room joined: ${data.roomCode}`);
+      this.callbacks?.onRoomJoined(data.roomCode);
+    });
 
-        this.socket.on("opponentDisconnected", () => {
-            console.log("[SocketManager] Opponent disconnected.");
-            this.callbacks?.onOpponentDisconnected();
-        });
+    this.socket.on("opponentJoined", (data: { playerName: string }) => {
+      console.log(`[SocketManager] Opponent joined: ${data.playerName}`);
+      this.callbacks?.onOpponentJoined(data.playerName);
+    });
 
-        this.socket.on("error", (data: { message: string }) => {
-            console.error(`[SocketManager] Error: ${data.message}`);
-            this.callbacks?.onError(data.message);
-        });
-    }
+    this.socket.on("opponentRoll", (data: { roll: number; playerName: string }) => {
+      console.log(`[SocketManager] Opponent rolled: ${data.roll}`);
+      this.callbacks?.onOpponentRollReceived(data.roll, data.playerName);
+    });
 
-    // ─── Disconnect ───────────────────────────────────────────
-    disconnect(): void {
-        this.socket?.disconnect();
-        this.socket = null;
-        console.log("[SocketManager] Manually disconnected.");
-    }
+    this.socket.on("opponentDisconnected", () => {
+      console.log("[SocketManager] Opponent disconnected.");
+      this.callbacks?.onOpponentDisconnected();
+    });
+
+    this.socket.on("error", (data: { message: string }) => {
+      console.error(`[SocketManager] Error: ${data.message}`);
+      this.callbacks?.onError(data.message);
+    });
+
+    // Crypto events
+    this.socket.on("bothCryptoReady", () => {
+      console.log("[SocketManager] Both players crypto ready!");
+      this.callbacks?.onBothCryptoReady?.();
+    });
+
+    this.socket.on("cryptoMatchResult", (result: CryptoMatchResult) => {
+      console.log("[SocketManager] Crypto match result:", result);
+      this.callbacks?.onCryptoMatchResult?.(result);
+    });
+
+    this.socket.on("tieReroll", () => {
+      console.log("[SocketManager] Tie — re-rolling");
+      this.callbacks?.onTieReroll?.();
+    });
+  }
+
+  disconnect(): void {
+    this.socket?.disconnect();
+    this.socket = null;
+    console.log("[SocketManager] Manually disconnected.");
+  }
 }
 
-// Singleton
 const SocketManager = new SocketManagerClass();
 export default SocketManager;
 ```
@@ -1327,17 +1609,22 @@ export default class ResultScene extends Phaser.Scene {
 
 ```ts
 import Phaser from 'phaser';
-import GameState, { RoomAction } from '../GameState';
-import SocketManager from '../network/SocketManager';
+import GameState, { GameMode, RoomAction } from '../GameState';
+import SocketManager, { CryptoMatchResult } from '../network/SocketManager';
+import EscrowManager, { STAKE_AVAX } from '../web3/EscrowManager';
 import { createMatchState } from '../data/MatchState';
+
+type CryptoPhase = 'idle' | 'depositing' | 'waiting_opponent_deposit' | 'both_ready' | 'rolling' | 'waiting_payout';
 
 export default class RoomScene extends Phaser.Scene {
   private statusText!: Phaser.GameObjects.Text;
+  private subStatusText!: Phaser.GameObjects.Text;
   private roomCodeText!: Phaser.GameObjects.Text;
   private myRollText!: Phaser.GameObjects.Text;
   private opponentRollText!: Phaser.GameObjects.Text;
   private opponentNameText!: Phaser.GameObjects.Text;
   private rollButton!: Phaser.GameObjects.Text;
+  private stakeText!: Phaser.GameObjects.Text;
 
   private myRoll: number = 0;
   private opponentRoll: number = 0;
@@ -1345,51 +1632,75 @@ export default class RoomScene extends Phaser.Scene {
   private myRollSent: boolean = false;
   private opponentRollReceived: boolean = false;
 
+  // Crypto state
+  private cryptoPhase: CryptoPhase = 'idle';
+  private isCryptoMode: boolean = false;
+  private opponentJoined: boolean = false;
+
   constructor() {
     super('RoomScene');
   }
 
   create() {
     const { width, height } = this.scale;
+    this.isCryptoMode = GameState.currentMode === GameMode.CryptoPlay;
 
     // Title
-    this.add.text(width / 2, 60, 'OnChainBattles', {
-      fontSize: '32px', color: '#ffffff', fontStyle: 'bold',
+    this.add.text(width / 2, 40, 'OnChainBattles', {
+      fontSize: '28px', color: '#ffffff', fontStyle: 'bold',
+    }).setOrigin(0.5);
+
+    // Mode indicator
+    const modeLabel = this.isCryptoMode ? '🔺 CRYPTO MODE' : '🎮 FREE PLAY';
+    const modeColor = this.isCryptoMode ? '#f5a623' : '#00ff88';
+    this.add.text(width / 2, 75, modeLabel, {
+      fontSize: '16px', color: modeColor,
     }).setOrigin(0.5);
 
     // Room code
-    this.roomCodeText = this.add.text(width / 2, 120, 'Room: ------', {
-      fontSize: '22px', color: '#aaaaaa',
+    this.roomCodeText = this.add.text(width / 2, 110, 'Room: ------', {
+      fontSize: '20px', color: '#aaaaaa',
     }).setOrigin(0.5);
+
+    // Stake info (crypto only)
+    if (this.isCryptoMode) {
+      this.stakeText = this.add.text(width / 2, 140, `Stake: ${STAKE_AVAX} AVAX each | Pot: ${STAKE_AVAX * 2 * 0.95} AVAX to winner`, {
+        fontSize: '14px', color: '#f5a623',
+      }).setOrigin(0.5);
+    }
 
     // Player labels
-    this.add.text(width / 4, 220, GameState.playerName, {
-      fontSize: '24px', color: '#00ff88',
+    this.add.text(width / 4, 200, GameState.playerName, {
+      fontSize: '22px', color: '#00ff88',
     }).setOrigin(0.5);
 
-    this.opponentNameText = this.add.text((width / 4) * 3, 220, 'Waiting...', {
-      fontSize: '24px', color: '#ff6666',
+    this.opponentNameText = this.add.text((width / 4) * 3, 200, 'Waiting...', {
+      fontSize: '22px', color: '#ff6666',
     }).setOrigin(0.5);
 
     // Dice displays
-    this.myRollText = this.add.text(width / 4, 320, '?', {
+    this.myRollText = this.add.text(width / 4, 310, '?', {
       fontSize: '72px', color: '#ffffff',
     }).setOrigin(0.5);
 
-    this.opponentRollText = this.add.text((width / 4) * 3, 320, '?', {
+    this.opponentRollText = this.add.text((width / 4) * 3, 310, '?', {
       fontSize: '72px', color: '#ffffff',
     }).setOrigin(0.5);
 
     // Status
-    this.statusText = this.add.text(width / 2, 460, 'Connecting...', {
-      fontSize: '22px', color: '#ffff00',
+    this.statusText = this.add.text(width / 2, 430, 'Connecting...', {
+      fontSize: '20px', color: '#ffff00',
+    }).setOrigin(0.5);
+
+    // Sub-status (for crypto flow details)
+    this.subStatusText = this.add.text(width / 2, 460, '', {
+      fontSize: '14px', color: '#aaaaaa',
     }).setOrigin(0.5);
 
     // Roll button
-    this.rollButton = this.add.text(width / 2, 560, '[ ROLL DICE ]', {
+    this.rollButton = this.add.text(width / 2, 530, '[ ROLL DICE ]', {
       fontSize: '28px', color: '#555555',
     }).setOrigin(0.5);
-    this.rollButton.setInteractive({ useHandCursor: true });
     this.rollButton.disableInteractive();
 
     this.rollButton.on('pointerdown', () => this.onRollClicked());
@@ -1403,18 +1714,26 @@ export default class RoomScene extends Phaser.Scene {
     // Connect to socket server
     SocketManager.connect({
       onRoomCreated: (code) => {
-        this.roomCodeText.setText(`Room: ${code}`);
+        this.roomCodeText.setText(`Room: ${code} (share this code!)`);
         this.statusText.setText('Waiting for opponent...');
       },
       onRoomJoined: (code) => {
         this.roomCodeText.setText(`Room: ${code}`);
-        this.statusText.setText('Joined! Waiting for opponent to ready...');
+        this.statusText.setText('Joined! Getting ready...');
       },
       onOpponentJoined: (name) => {
         this.opponentName = name;
         this.opponentNameText.setText(name);
-        this.statusText.setText('Opponent joined! Roll when ready.');
-        this.enableRollButton();
+        this.opponentJoined = true;
+
+        if (this.isCryptoMode) {
+          this.statusText.setText('Opponent joined! Locking funds...');
+          this.subStatusText.setText('Check MetaMask/Core for the transaction');
+          this.startCryptoDeposit();
+        } else {
+          this.statusText.setText('Opponent joined! Roll when ready.');
+          this.enableRollButton();
+        }
       },
       onOpponentRollReceived: (roll, name) => {
         this.opponentRoll = roll;
@@ -1425,15 +1744,71 @@ export default class RoomScene extends Phaser.Scene {
       },
       onOpponentDisconnected: () => {
         this.statusText.setText('Opponent disconnected.');
+        this.subStatusText.setText('');
         this.rollButton.disableInteractive();
         this.rollButton.setColor('#555555');
       },
       onError: (message) => {
         this.statusText.setText(`Error: ${message}`);
+        this.subStatusText.setText('');
+      },
+
+      // ─── Crypto callbacks ──────────────────────────────────
+      onBothCryptoReady: () => {
+        this.cryptoPhase = 'both_ready';
+        this.statusText.setText('Funds locked! Roll the dice!');
+        this.subStatusText.setText(`${STAKE_AVAX * 2 * 0.95} AVAX goes to winner`);
+        this.enableRollButton();
+      },
+      onTieReroll: () => {
+        this.resetRolls();
+        this.statusText.setText("Tie! Roll again.");
+        this.subStatusText.setText('');
+        this.enableRollButton();
+      },
+      onCryptoMatchResult: (result) => {
+        this.handleCryptoResult(result);
       },
     });
   }
 
+  // ─── Crypto Deposit Flow ──────────────────────────────────────
+  private async startCryptoDeposit() {
+    this.cryptoPhase = 'depositing';
+    const roomCode = GameState.roomCode;
+    const isCreator = GameState.roomAction === RoomAction.Create;
+
+    try {
+      // Register wallet address with server so it knows who to pay
+      SocketManager.registerWallet(GameState.walletAddress);
+
+      let txHash: string;
+      if (isCreator) {
+        this.statusText.setText('Creating escrow match...');
+        this.subStatusText.setText('Approve the transaction in your wallet (0.01 AVAX)');
+        txHash = await EscrowManager.createMatch(roomCode);
+      } else {
+        this.statusText.setText('Joining escrow match...');
+        this.subStatusText.setText('Approve the transaction in your wallet (0.01 AVAX)');
+        txHash = await EscrowManager.joinMatch(roomCode);
+      }
+
+      this.cryptoPhase = 'waiting_opponent_deposit';
+      this.statusText.setText('Funds locked ✓ Waiting for opponent...');
+      this.subStatusText.setText(`Tx: ${txHash.slice(0, 20)}...`);
+
+      // Tell server our deposit is confirmed
+      SocketManager.signalCryptoReady();
+
+    } catch (err: any) {
+      console.error('[RoomScene] Escrow error:', err);
+      this.statusText.setText('Transaction failed!');
+      this.subStatusText.setText(err.message || 'Check wallet and AVAX balance');
+      this.cryptoPhase = 'idle';
+    }
+  }
+
+  // ─── Roll Button ──────────────────────────────────────────────
   private enableRollButton() {
     this.rollButton.setInteractive({ useHandCursor: true });
     this.rollButton.setColor('#00ff88');
@@ -1448,20 +1823,23 @@ export default class RoomScene extends Phaser.Scene {
     this.rollButton.disableInteractive();
     this.rollButton.setColor('#555555');
     this.statusText.setText('Waiting for opponent roll...');
+    this.subStatusText.setText('');
 
     SocketManager.sendDiceRoll(this.myRoll);
     this.tryResolveMatch();
   }
 
+  // ─── Free Play Match Resolution ───────────────────────────────
   private tryResolveMatch() {
     if (!this.myRollSent || !this.opponentRollReceived) return;
+    if (this.isCryptoMode) return; // Crypto is resolved by server via onCryptoMatchResult
 
     const match = createMatchState(
       GameState.playerName,
       this.opponentName,
       this.myRoll,
       this.opponentRoll,
-      GameState.currentStake
+      0
     );
 
     GameState.setLastMatch(match);
@@ -1483,6 +1861,38 @@ export default class RoomScene extends Phaser.Scene {
     this.time.delayedCall(2000, () => this.scene.start('ResultScene'));
   }
 
+  // ─── Crypto Match Resolution (from server) ────────────────────
+  private handleCryptoResult(result: CryptoMatchResult) {
+    const iWon = result.winnerName === GameState.playerName;
+
+    const match = createMatchState(
+      GameState.playerName,
+      this.opponentName,
+      iWon ? result.winnerRoll : result.loserRoll,
+      iWon ? result.loserRoll : result.winnerRoll,
+      STAKE_AVAX
+    );
+
+    GameState.setLastMatch(match);
+
+    if (result.success) {
+      if (iWon) {
+        GameState.recordWin();
+        this.statusText.setText('You Win! 🎉 Payout sent!');
+        this.subStatusText.setText(`Tx: ${result.txHash?.slice(0, 20)}...` || '');
+      } else {
+        GameState.recordLoss();
+        this.statusText.setText('You Lose! Better luck next time.');
+        this.subStatusText.setText(`Winner: ${result.winnerName}`);
+      }
+    } else {
+      this.statusText.setText('Match done — payout failed!');
+      this.subStatusText.setText(result.error || 'Check Snowtrace manually');
+    }
+
+    this.time.delayedCall(3000, () => this.scene.start('ResultScene'));
+  }
+
   private resetRolls() {
     this.myRoll = 0;
     this.opponentRoll = 0;
@@ -1490,8 +1900,9 @@ export default class RoomScene extends Phaser.Scene {
     this.opponentRollReceived = false;
     this.myRollText.setText('?');
     this.opponentRollText.setText('?');
-    this.enableRollButton();
     this.statusText.setText('Roll again!');
+    this.subStatusText.setText('');
+    this.enableRollButton();
   }
 }
 ```
@@ -1514,16 +1925,20 @@ interface Window {
 # src\web3\EscrowManager.ts
 
 ```ts
-import { Contract, parseEther, formatEther, id, zeroPadValue, toBeArray } from "ethers";
+import { Contract, parseEther } from "ethers";
 import WalletManager from "./WalletManager";
+
+export const STAKE_AVAX = 0.01; // Hardcoded stake for Phase 1
 
 const ESCROW_ADDRESS = "0xa145f82DC5b285B970BE71F48Cf5173E722cF515";
 
 const ESCROW_ABI = [
   "function createMatch(bytes32 matchId) external payable",
   "function joinMatch(bytes32 matchId) external payable",
+  "function matches(bytes32) view returns (address playerA, address playerB, uint256 stake, uint8 status)",
   "event MatchCreated(bytes32 matchId, address playerA, uint256 stake)",
   "event MatchReady(bytes32 matchId, address playerA, address playerB)",
+  "event MatchFinished(bytes32 matchId, address winner, uint256 payout)",
 ];
 
 class EscrowManagerClass {
@@ -1533,32 +1948,38 @@ class EscrowManagerClass {
     return new Contract(ESCROW_ADDRESS, ESCROW_ABI, signer);
   }
 
-  // Generate a matchId from room code
+  // Generate matchId from room code — MUST match server logic
+  // Server uses: Buffer.from(roomCode, 'utf8').toString('hex').padStart(64, '0')
   matchIdFromCode(roomCode: string): string {
-    const bytes = zeroPadValue(toBeArray(BigInt("0x" + Buffer.from(roomCode).toString("hex"))), 32);
-    return bytes;
+    const hex = Array.from(new TextEncoder().encode(roomCode))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    const padded = hex.padStart(64, '0');
+    return '0x' + padded;
   }
 
-  async createMatch(roomCode: string, stakeAvax: number): Promise<void> {
+  async createMatch(roomCode: string): Promise<string> {
     const contract = this.getContract();
     const matchId = this.matchIdFromCode(roomCode);
-    const value = parseEther(stakeAvax.toString());
+    const value = parseEther(STAKE_AVAX.toString());
 
-    console.log(`[EscrowManager] Creating match: ${roomCode}, stake: ${stakeAvax} AVAX`);
+    console.log(`[EscrowManager] Creating match: ${roomCode} (matchId: ${matchId}), stake: ${STAKE_AVAX} AVAX`);
     const tx = await contract.createMatch(matchId, { value });
-    await tx.wait();
+    const receipt = await tx.wait();
     console.log(`[EscrowManager] Match created, tx: ${tx.hash}`);
+    return tx.hash;
   }
 
-  async joinMatch(roomCode: string, stakeAvax: number): Promise<void> {
+  async joinMatch(roomCode: string): Promise<string> {
     const contract = this.getContract();
     const matchId = this.matchIdFromCode(roomCode);
-    const value = parseEther(stakeAvax.toString());
+    const value = parseEther(STAKE_AVAX.toString());
 
-    console.log(`[EscrowManager] Joining match: ${roomCode}, stake: ${stakeAvax} AVAX`);
+    console.log(`[EscrowManager] Joining match: ${roomCode} (matchId: ${matchId}), stake: ${STAKE_AVAX} AVAX`);
     const tx = await contract.joinMatch(matchId, { value });
     await tx.wait();
     console.log(`[EscrowManager] Match joined, tx: ${tx.hash}`);
+    return tx.hash;
   }
 }
 
