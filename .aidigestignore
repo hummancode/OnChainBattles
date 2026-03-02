@@ -1,22 +1,36 @@
-# Build outputs
-artifacts/
-cache/
-dist/
-dist-ssr/
+# Binary assets - useless as text in codebase.md
+public/assets/**/*.png
+public/assets/**/*.jpg
+public/assets/**/*.jpeg
+public/assets/**/*.gif
+public/assets/**/*.webp
+public/assets/**/*.svg
+public/assets/**/*.ico
 
-# Dependencies
-node_modules/
+# Compiled smart contract artifacts - massive hex/bytecode noise
+artifacts/**
+cache/**
+typechain-types/**
+ignition/deployments/**
 
-# Hardhat build info (huge JSON files, not useful)
-artifacts/build-info/
+# Phaser Editor boilerplate - not our code
+phasereditor2d.config.json
+public/assets/asset-pack.json
 
-# Binary assets
-public/assets/*.png
-public/assets/*.jpg
-public/favicon.png
+# Placeholder / generator scripts
+scripts/generate_placeholder_assets.py
 
-# Generated files
-*.output.json
+# The digest file itself
+codebase.md
 
-# Env secrets
-.env
+# This script itself
+code_gen.bat
+src/code_gen.bat
+
+# Build output and deps
+dist/**
+node_modules/**
+
+# Compiled or cached files
+*.js.map
+*.d.ts

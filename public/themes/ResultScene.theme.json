@@ -1,0 +1,220 @@
+{
+  "schemaVersion": "2.0",
+  "scene": "ResultScene",
+  "colors": {
+    "BG_DEEP": "#1A1A2E",
+    "BG_MID": "#16213E",
+    "BG_BOARD": "#0F3460",
+    "ACCENT_GOLD": "#F5A623",
+    "ACCENT_GREEN": "#00FF88",
+    "ACCENT_RED": "#FF4444",
+    "ACCENT_BLUE": "#4FC3F7",
+    "TEXT_PRIMARY": "#FFFFFF",
+    "TEXT_SECONDARY": "#AAAAAA",
+    "CARD_STANDARD": "#2A2A4A",
+    "CARD_ROYAL": "#3D2B1F",
+    "CARD_STATIC": "#1B3A2A",
+    "CARD_SPELL": "#2A1B3D",
+    "OVERLAY_BLACK": "#000000"
+  },
+  "fonts": {
+    "title": {
+      "family": "Rajdhani",
+      "size": 32,
+      "color": "#FFFFFF"
+    },
+    "heading": {
+      "family": "Exo 2",
+      "size": 18,
+      "color": "#FFFFFF"
+    },
+    "body": {
+      "family": "Exo 2",
+      "size": 14,
+      "color": "#FFFFFF"
+    },
+    "small": {
+      "family": "Exo 2",
+      "size": 11,
+      "color": "#AAAAAA"
+    },
+    "cardName": {
+      "family": "Exo 2",
+      "size": 12,
+      "color": "#FFFFFF"
+    },
+    "cardStat": {
+      "family": "Share Tech Mono",
+      "size": 12,
+      "color": "#FFFFFF"
+    },
+    "cardAbility": {
+      "family": "Exo 2",
+      "size": 11,
+      "color": "#AAAAAA"
+    },
+    "coordLabel": {
+      "family": "Share Tech Mono",
+      "size": 11,
+      "color": "#AAAAAA"
+    }
+  },
+  "board": {
+    "cellEvenFill": "#0F3460",
+    "cellOddFill": "#0D2B4E",
+    "gridLineColor": "#1A3A6A",
+    "playerHalfTint": "#00FF8814",
+    "enemyHalfTint": "#FF444414",
+    "coordColor": "#AAAAAA",
+    "cellHover": "#FFFFFF1F",
+    "cellSelected": "#00FF88",
+    "cellValidMove": "#00FF8833",
+    "cellValidAtk": "#FF444433",
+    "cellAura": "#4FC3F71A",
+    "unitBandPlayer": "#00FF88",
+    "unitBandEnemy": "#FF4444",
+    "unitBandHeight": 8,
+    "hpBarFull": "#00FF88",
+    "hpBarMid": "#F5A623",
+    "hpBarLow": "#FF4444",
+    "hpBarBackground": "#333333"
+  },
+  "cards": {
+    "STANDARD": {
+      "bodyColor": "#2A2A4A",
+      "bandColor": "#2A2A4A",
+      "frameAsset": "card_frame_standard",
+      "legPipColor": "#4FC3F7",
+      "borderColor": "#4A4A8A",
+      "borderWidth": 2,
+      "glowColor": "",
+      "glowSize": 0
+    },
+    "ROYAL": {
+      "bodyColor": "#3D2B1F",
+      "bandColor": "#F5A623",
+      "frameAsset": "card_frame_royal",
+      "legPipColor": "#F5A623",
+      "borderColor": "#8A6A2A",
+      "borderWidth": 2,
+      "glowColor": "#F5A623",
+      "glowSize": 4
+    },
+    "STATIC": {
+      "bodyColor": "#1B3A2A",
+      "bandColor": "#1B3A2A",
+      "frameAsset": "card_frame_static",
+      "legPipColor": "#4FC3F7",
+      "borderColor": "#2A5A3A",
+      "borderWidth": 2,
+      "glowColor": "",
+      "glowSize": 0
+    },
+    "SPELL": {
+      "bodyColor": "#2A1B3D",
+      "bandColor": "#9B59B6",
+      "frameAsset": "card_frame_spell",
+      "legPipColor": "#4FC3F7",
+      "borderColor": "#5A2A8A",
+      "borderWidth": 2,
+      "glowColor": "#a855f7",
+      "glowSize": 4
+    },
+    "atkBadgeColor": "#FF4444",
+    "defBadgeColor": "#4FC3F7",
+    "nameBarBg": "#1A1A2EB3",
+    "nameColor": "#FFFFFF",
+    "abilityTextColor": "#AAAAAA",
+    "exhaustedAlpha": 0.4,
+    "selectedGlowColor": "#00FF88",
+    "selectedGlowSize": 6
+  },
+  "hud": {
+    "panelBg": "#16213E",
+    "panelAlpha": 0.97,
+    "playerNameColor": "#00FF88",
+    "enemyNameColor": "#FF4444",
+    "legColor": "#F5A623",
+    "legRateColor": "#AAAAAA",
+    "hpBarFull": "#00FF88",
+    "hpBarMid": "#F5A623",
+    "hpBarLow": "#FF4444",
+    "hpBarBg": "#333333",
+    "phaseLabelColor": "#F5A623",
+    "cardPlayZoneBorderColor": "#4FC3F7",
+    "cardPlayZoneBorderAlpha": 0.6
+  },
+  "buttons": {
+    "primary": {
+      "fillColor": "#4FC3F7",
+      "strokeColor": "#4FC3F7",
+      "strokeWidth": 1,
+      "textColor": "#000000",
+      "fontSize": 14,
+      "hoverFillColor": "#7dd6ff",
+      "hoverTextColor": "#000",
+      "cornerRadius": 6,
+      "paddingX": 16,
+      "paddingY": 8
+    },
+    "secondary": {
+      "fillColor": "#2A2A4A",
+      "strokeColor": "#4A4A7A",
+      "strokeWidth": 1,
+      "textColor": "#AAAAAA",
+      "fontSize": 14,
+      "hoverFillColor": "#3a3a6a",
+      "hoverTextColor": "#fff",
+      "cornerRadius": 6,
+      "paddingX": 16,
+      "paddingY": 8
+    },
+    "danger": {
+      "fillColor": "#FF4444",
+      "strokeColor": "#FF4444",
+      "strokeWidth": 1,
+      "textColor": "#FFFFFF",
+      "fontSize": 14,
+      "hoverFillColor": "#ff7777",
+      "hoverTextColor": "#fff",
+      "cornerRadius": 6,
+      "paddingX": 16,
+      "paddingY": 8
+    },
+    "endTurn": {
+      "fillColor": "#00FF88",
+      "strokeColor": "#00FF88",
+      "strokeWidth": 1,
+      "textColor": "#000000",
+      "fontSize": 14,
+      "hoverFillColor": "#33ffaa",
+      "hoverTextColor": "#000",
+      "cornerRadius": 6,
+      "paddingX": 16,
+      "paddingY": 8
+    },
+    "pass": {
+      "fillColor": "#16213E",
+      "strokeColor": "#4FC3F7",
+      "strokeWidth": 1,
+      "textColor": "#AAAAAA",
+      "fontSize": 14,
+      "hoverFillColor": "#1e2e50",
+      "hoverTextColor": "#fff",
+      "cornerRadius": 6,
+      "paddingX": 16,
+      "paddingY": 8
+    }
+  },
+  "overlays": {
+    "dimmerColor": "#000000",
+    "dimmerAlpha": 0.8,
+    "panelColor": "#16213E",
+    "panelAlpha": 0.97,
+    "panelStroke": "#4FC3F7",
+    "panelStrokeWidth": 1,
+    "titleColor": "#FFFFFF",
+    "bodyColor": "#AAAAAA",
+    "cornerRadius": 10
+  }
+}

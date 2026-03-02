@@ -4,16 +4,25 @@
 
 import { io, Socket } from "socket.io-client";
 import GameState, { RoomAction } from "../GameState.ts";
-
+export interface GameAction {
+  type: 'PLAY_CARD' | 'MOVE_UNIT' | 'ATTACK_UNIT' | 'END_PLAY_PHASE' | 'END_ACT_PHASE';
+  handIndex?: number;
+  col?: number;
+  row?: number;
+  fromCol?: number;
+  fromRow?: number;
+  targetCol?: number;
+  targetRow?: number;
+}
 // ─── Event Callbacks ──────────────────────────────────────────
 export interface RoomCallbacks {
   onRoomCreated: (code: string) => void;
   onRoomJoined: (code: string) => void;
   onOpponentJoined: (opponentName: string) => void;
-  onOpponentRollReceived: (roll: number, opponentName: string) => void;
+  onOpponentAction: (action: GameAction) => void;   // ← ADD
   onOpponentDisconnected: () => void;
+  onOpponentRollReceived: (roll: number, opponentName: string) => void;
   onError: (message: string) => void;
-  // Crypto-specific
   onBothCryptoReady?: () => void;
   onCryptoMatchResult?: (result: CryptoMatchResult) => void;
   onTieReroll?: () => void;
@@ -113,21 +122,28 @@ class SocketManagerClass {
   private registerEvents(): void {
     if (!this.socket) return;
 
-    this.socket.on("roomCreated", (data: { roomCode: string }) => {
-      console.log(`[SocketManager] Room created: ${data.roomCode}`);
-      this.callbacks?.onRoomCreated(data.roomCode);
-    });
-
-    this.socket.on("roomJoined", (data: { roomCode: string }) => {
-      console.log(`[SocketManager] Room joined: ${data.roomCode}`);
-      this.callbacks?.onRoomJoined(data.roomCode);
-    });
-
-    this.socket.on("opponentJoined", (data: { playerName: string }) => {
-      console.log(`[SocketManager] Opponent joined: ${data.playerName}`);
-      this.callbacks?.onOpponentJoined(data.playerName);
-    });
-
+  this.socket.on("roomCreated", (data: { roomCode: string; playerIndex: number }) => {
+  console.log(`[SocketManager] Room created: ${data.roomCode}, playerIndex: ${data.playerIndex ?? 0}`);
+  GameState.setPlayerIndex(data.playerIndex ?? 0);
+  this.callbacks?.onRoomCreated(data.roomCode);
+});
+    this.socket.on("roomJoined", (data: { roomCode: string; playerIndex: number }) => {
+  console.log(`[SocketManager] Room joined: ${data.roomCode}, playerIndex: ${data.playerIndex ?? 1}`);
+  GameState.setPlayerIndex(data.playerIndex ?? 1);
+  this.callbacks?.onRoomJoined(data.roomCode);
+});
+    this.socket.on("opponentJoined", (data: { playerName: string; playerIndex?: number }) => {
+  console.log(`[SocketManager] Opponent joined: ${data.playerName}`);
+  this.callbacks?.onOpponentJoined(data.playerName);
+});
+this.socket.on("opponent_action", (action: GameAction) => {
+  console.log('[SocketManager] Received opponent_action:', action.type);
+  this.callbacks?.onOpponentAction(action);
+});
+this.socket.on("game_seed", (data: { seed: number }) => {
+  console.log(`[SocketManager] Game seed received: ${data.seed}`);
+  GameState.setGameSeed(data.seed);
+});
     this.socket.on("opponentRoll", (data: { roll: number; playerName: string }) => {
       console.log(`[SocketManager] Opponent rolled: ${data.roll}`);
       this.callbacks?.onOpponentRollReceived(data.roll, data.playerName);
@@ -158,8 +174,24 @@ class SocketManagerClass {
       console.log("[SocketManager] Tie — re-rolling");
       this.callbacks?.onTieReroll?.();
     });
-  }
 
+  }
+sendGameAction(action: GameAction): void {
+  if (!this.socket?.connected) {
+    console.warn('[SocketManager] Cannot send game_action — not connected');
+    return;
+  }
+  this.socket.emit('game_action', {
+    roomCode: GameState.roomCode,
+    action,
+  });
+  console.log('[SocketManager] Sent game_action:', action.type);
+}
+// ADD this method to SocketManagerClass, before disconnect():
+setCallbacks(callbacks: RoomCallbacks): void {
+  this.callbacks = callbacks;
+  console.log('[SocketManager] Callbacks updated.');
+}
   disconnect(): void {
     this.socket?.disconnect();
     this.socket = null;

@@ -66,6 +66,12 @@ async function refundTie(roomCode) {
 const rooms = {};
 
 io.on('connection', (socket) => {
+
+  // Game action relay — forward to opponent only
+socket.on('game_action', ({ roomCode, action }) => {
+    socket.to(roomCode).emit('opponent_action', action);
+    console.log(`[Server] game_action relayed in ${roomCode}: ${action.type}`);
+});
   console.log(`[Server] Player connected: ${socket.id}`);
 
   socket.on('createRoom', ({ roomCode, playerName }) => {
@@ -74,7 +80,8 @@ io.on('connection', (socket) => {
       cryptoReady: { count: 0 }
     };
     socket.join(roomCode);
-    socket.emit('roomCreated', { roomCode });
+    socket.emit('roomCreated', { roomCode, playerIndex: 0 });
+
     console.log(`[Server] Room created: ${roomCode} by ${playerName}`);
   });
 
@@ -85,12 +92,16 @@ io.on('connection', (socket) => {
 
     room.players.push({ id: socket.id, name: playerName, roll: null, wallet: null });
     socket.join(roomCode);
-    socket.emit('roomJoined', { roomCode });
-
+    socket.emit('roomJoined', { roomCode, playerIndex: 1 });
     const host = room.players[0];
-    io.to(host.id).emit('opponentJoined', { playerName });
-    socket.emit('opponentJoined', { playerName: host.name });
-    console.log(`[Server] ${playerName} joined room: ${roomCode}`);
+    io.to(host.id).emit('opponentJoined', { playerName, playerIndex: 0 });
+    socket.emit('opponentJoined', { playerName: host.name, playerIndex: 1 });
+
+    // Broadcast shared shuffle seed to both players
+    const seed = Math.floor(Math.random() * 999999);
+    room.gameSeed = seed;
+    io.to(roomCode).emit('game_seed', { seed });
+    console.log(`[Server] ${playerName} joined room: ${roomCode}, seed: ${seed}`)
   });
 
   // Player registers their wallet address (for crypto payout)

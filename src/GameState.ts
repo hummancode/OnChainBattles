@@ -1,6 +1,5 @@
 // ─── GameState.ts ─────────────────────────────────────────────
 // Global singleton — survives scene changes
-// Equivalent to GameManager.cs in Unity
 
 export enum GameMode {
     FreePlay = "FreePlay",
@@ -26,6 +25,7 @@ export interface MatchResult {
 class GameStateClass {
     // ─── Player ───────────────────────────────────────────────
     playerName: string = "Player";
+    opponentName: string = "";          // ← ADDED
     walletAddress: string = "";
     isWalletConnected: boolean = false;
 
@@ -35,17 +35,23 @@ class GameStateClass {
     // ─── Room ─────────────────────────────────────────────────
     roomCode: string = "";
     roomAction: RoomAction = RoomAction.Create;
-
+    playerIndex: number = 0;     // ← ADD: 0 = P1/creator, 1 = P2/joiner
+    gameSeed: number = 0;        // ← ADD: shared shuffle seed (set in Step 5)
     // ─── Match ────────────────────────────────────────────────
     currentStake: number = 1;
     winCount: number = 0;
     lossCount: number = 0;
     lastMatch: MatchResult | null = null;
 
-    // ─── Player ───────────────────────────────────────────────
+    // ─── Setters ──────────────────────────────────────────────
     setPlayerName(name: string): void {
         this.playerName = name;
         console.log(`[GameState] Player name set: ${name}`);
+    }
+
+    setOpponentName(name: string): void {   // ← ADDED
+        this.opponentName = name;
+        console.log(`[GameState] Opponent name set: ${name}`);
     }
 
     // ─── Wallet ───────────────────────────────────────────────
@@ -79,7 +85,15 @@ class GameStateClass {
         this.roomAction = action;
         console.log(`[GameState] Room action: ${action}`);
     }
+    setPlayerIndex(index: number): void {
+    this.playerIndex = index;
+    console.log(`[GameState] Player index set: ${index} (${index === 0 ? 'P1/Creator' : 'P2/Joiner'})`);
+}
 
+setGameSeed(seed: number): void {
+    this.gameSeed = seed;
+    console.log(`[GameState] Game seed set: ${seed}`);
+}
     // ─── Match ────────────────────────────────────────────────
     recordWin(): void {
         this.winCount++;
@@ -93,7 +107,7 @@ class GameStateClass {
 
     setLastMatch(match: MatchResult): void {
         this.lastMatch = match;
-        console.log(`[GameState] Match saved — Player: ${match.playerRoll} | Opponent: ${match.opponentRoll} | Won: ${match.playerWon}`);
+        console.log(`[GameState] Match saved — Won: ${match.playerWon}`);
     }
 
     // ─── Debug ────────────────────────────────────────────────
@@ -102,12 +116,10 @@ class GameStateClass {
             `[GameState] Player: ${this.playerName} | ` +
             `Mode: ${this.currentMode} | ` +
             `Wallet: ${this.isWalletConnected ? this.walletAddress : "None"} | ` +
-            `Stake: ${this.currentStake} AVAX | ` +
             `W/L: ${this.winCount}/${this.lossCount}`
         );
     }
 }
 
-// Export single instance — this is the global singleton
 const GameState = new GameStateClass();
 export default GameState;
