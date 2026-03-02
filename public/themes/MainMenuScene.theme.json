@@ -1,220 +1,147 @@
 {
   "schemaVersion": "2.0",
   "scene": "MainMenuScene",
+
   "colors": {
-    "BG_DEEP": "#1A1A2E",
-    "BG_MID": "#16213E",
-    "BG_BOARD": "#0F3460",
-    "ACCENT_GOLD": "#F5A623",
-    "ACCENT_GREEN": "#00FF88",
-    "ACCENT_RED": "#FF4444",
-    "ACCENT_BLUE": "#4FC3F7",
-    "TEXT_PRIMARY": "#FFFFFF",
+    "BG_DEEP":        "#1A1A2E",
+    "BG_MID":         "#16213E",
+    "BG_BOARD":       "#0F3460",
+    "ACCENT_GOLD":    "#F5A623",
+    "ACCENT_GREEN":   "#00FF88",
+    "ACCENT_RED":     "#FF4444",
+    "ACCENT_BLUE":    "#4FC3F7",
+    "TEXT_PRIMARY":   "#FFFFFF",
     "TEXT_SECONDARY": "#AAAAAA",
-    "CARD_STANDARD": "#2A2A4A",
-    "CARD_ROYAL": "#3D2B1F",
-    "CARD_STATIC": "#1B3A2A",
-    "CARD_SPELL": "#2A1B3D",
-    "OVERLAY_BLACK": "#000000"
+    "CARD_STANDARD":  "#2A2A4A",
+    "CARD_ROYAL":     "#3D2B1F",
+    "CARD_STATIC":    "#1B3A2A",
+    "CARD_SPELL":     "#2A1B3D",
+    "OVERLAY_BLACK":  "#000000"
   },
+
   "fonts": {
-    "title": {
-      "family": "Rajdhani",
-      "size": 32,
-      "color": "#FFFFFF"
-    },
-    "heading": {
-      "family": "Exo 2",
-      "size": 18,
-      "color": "#FFFFFF"
-    },
-    "body": {
-      "family": "Exo 2",
-      "size": 14,
-      "color": "#FFFFFF"
-    },
-    "small": {
-      "family": "Exo 2",
-      "size": 11,
-      "color": "#AAAAAA"
-    },
-    "cardName": {
-      "family": "Exo 2",
-      "size": 12,
-      "color": "#FFFFFF"
-    },
-    "cardStat": {
-      "family": "Share Tech Mono",
-      "size": 12,
-      "color": "#FFFFFF"
-    },
-    "cardAbility": {
-      "family": "Exo 2",
-      "size": 11,
-      "color": "#AAAAAA"
-    },
-    "coordLabel": {
-      "family": "Share Tech Mono",
-      "size": 11,
-      "color": "#AAAAAA"
-    }
+    "title":       { "family": "Arial", "size": 32, "color": "#FFFFFF" },
+    "heading":     { "family": "Arial", "size": 18, "color": "#FFFFFF" },
+    "body":        { "family": "Arial", "size": 14, "color": "#FFFFFF" },
+    "small":       { "family": "Arial", "size": 11, "color": "#AAAAAA" },
+    "cardName":    { "family": "Arial", "size": 12, "color": "#FFFFFF" },
+    "cardStat":    { "family": "Arial", "size": 12, "color": "#FFFFFF" },
+    "cardAbility": { "family": "Arial", "size": 11, "color": "#AAAAAA" },
+    "coordLabel":  { "family": "Arial", "size": 11, "color": "#AAAAAA" }
   },
+
+  "assets": {
+    "bg_main_menu":        "backgrounds/bg_main_menu.png",
+    "bg_battle":           "backgrounds/bg_battle.png",
+    "bg_result":           "backgrounds/bg_result.png",
+    "board_skin":          "board/board_skin.png",
+    "card_frame_standard": "cards/card_frame_standard.png",
+    "card_frame_royal":    "cards/card_frame_royal.png",
+    "card_frame_static":   "cards/card_frame_static.png",
+    "card_frame_spell":    "cards/card_frame_spell.png",
+    "card_back":           "cards/card_back_pattern.png",
+    "icon_atk":            "icons/icon_atk.png",
+    "icon_def":            "icons/icon_def.png",
+    "icon_leg":            "icons/icon_leg.png",
+    "icon_move":           "icons/icon_move.png",
+    "icon_cavalry":        "icons/icon_cavalry.png",
+    "icon_clock":          "icons/icon_clock.png",
+    "icon_ranged":         "icons/icon_ranged.png",
+    "icon_type_standard":  "icons/icon_type_standard.png",
+    "icon_type_royal":     "icons/icon_type_royal.png",
+    "icon_type_static":    "icons/icon_type_static.png",
+    "icon_type_spell":     "icons/icon_type_spell.png",
+    "marker_move":         "fx/marker_move.png",
+    "marker_attack":       "fx/marker_attack.png",
+    "marker_aura":         "fx/marker_aura.png",
+    "marker_selected":     "fx/marker_selected.png",
+    "marker_danger":       "fx/marker_danger.png",
+    "logo":                "ui/logo.png"
+  },
+
   "board": {
-    "cellEvenFill": "#0F3460",
-    "cellOddFill": "#0D2B4E",
-    "gridLineColor": "#1A3A6A",
-    "playerHalfTint": "#00FF8814",
-    "enemyHalfTint": "#FF444414",
-    "coordColor": "#AAAAAA",
-    "cellHover": "#FFFFFF1F",
-    "cellSelected": "#00FF88",
-    "cellValidMove": "#00FF8833",
-    "cellValidAtk": "#FF444433",
-    "cellAura": "#4FC3F71A",
-    "unitBandPlayer": "#00FF88",
-    "unitBandEnemy": "#FF4444",
-    "unitBandHeight": 8,
-    "hpBarFull": "#00FF88",
-    "hpBarMid": "#F5A623",
-    "hpBarLow": "#FF4444",
-    "hpBarBackground": "#333333"
+    "cellEvenFill":     "#0F3460",
+    "cellOddFill":      "#0C2D55",
+    "gridLineColor":    "#1A4A80",
+    "playerHalfTint":   "#00FF8814",
+    "enemyHalfTint":    "#FF444414",
+    "coordColor":       "#AAAAAA",
+    "cellHover":        "#4FC3F733",
+    "cellSelected":     "#F5A62366",
+    "cellValidMove":    "#00FF8833",
+    "cellValidAtk":     "#FF444433",
+    "cellAura":         "#4FC3F722",
+    "unitBandPlayer":   "#00FF88",
+    "unitBandEnemy":    "#FF4444",
+    "unitBandHeight":   4,
+    "useBoardSkinTexture": true,
+    "cardPlayZoneBorderColor": "#F5A623",
+    "cardPlayZoneBorderAlpha": 0.4
   },
+
   "cards": {
-    "STANDARD": {
-      "bodyColor": "#2A2A4A",
-      "bandColor": "#2A2A4A",
-      "frameAsset": "card_frame_standard",
-      "legPipColor": "#4FC3F7",
-      "borderColor": "#4A4A8A",
-      "borderWidth": 2,
-      "glowColor": "",
-      "glowSize": 0
-    },
-    "ROYAL": {
-      "bodyColor": "#3D2B1F",
-      "bandColor": "#F5A623",
-      "frameAsset": "card_frame_royal",
-      "legPipColor": "#F5A623",
-      "borderColor": "#8A6A2A",
-      "borderWidth": 2,
-      "glowColor": "#F5A623",
-      "glowSize": 4
-    },
-    "STATIC": {
-      "bodyColor": "#1B3A2A",
-      "bandColor": "#1B3A2A",
-      "frameAsset": "card_frame_static",
-      "legPipColor": "#4FC3F7",
-      "borderColor": "#2A5A3A",
-      "borderWidth": 2,
-      "glowColor": "",
-      "glowSize": 0
-    },
-    "SPELL": {
-      "bodyColor": "#2A1B3D",
-      "bandColor": "#9B59B6",
-      "frameAsset": "card_frame_spell",
-      "legPipColor": "#4FC3F7",
-      "borderColor": "#5A2A8A",
-      "borderWidth": 2,
-      "glowColor": "#a855f7",
-      "glowSize": 4
-    },
-    "atkBadgeColor": "#FF4444",
-    "defBadgeColor": "#4FC3F7",
-    "nameBarBg": "#1A1A2EB3",
-    "nameColor": "#FFFFFF",
-    "abilityTextColor": "#AAAAAA",
-    "exhaustedAlpha": 0.4,
-    "selectedGlowColor": "#00FF88",
-    "selectedGlowSize": 6
+    "STANDARD": { "frameAsset": "card_frame_standard", "tintColor": "#2A2A4A", "nameBarColor": "#1A1A3A" },
+    "ROYAL":    { "frameAsset": "card_frame_royal",    "tintColor": "#3D2B1F", "nameBarColor": "#2A1A0A" },
+    "STATIC":   { "frameAsset": "card_frame_static",   "tintColor": "#1B3A2A", "nameBarColor": "#0A2A1A" },
+    "SPELL":    { "frameAsset": "card_frame_spell",    "tintColor": "#2A1B3D", "nameBarColor": "#1A0A2A" }
   },
+
   "hud": {
-    "panelBg": "#16213E",
-    "panelAlpha": 0.97,
-    "playerNameColor": "#00FF88",
-    "enemyNameColor": "#FF4444",
-    "legColor": "#F5A623",
-    "legRateColor": "#AAAAAA",
-    "hpBarFull": "#00FF88",
-    "hpBarMid": "#F5A623",
-    "hpBarLow": "#FF4444",
-    "hpBarBg": "#333333",
-    "phaseLabelColor": "#F5A623",
-    "cardPlayZoneBorderColor": "#4FC3F7",
-    "cardPlayZoneBorderAlpha": 0.6
+    "panelColor":              "#16213E",
+    "panelAlpha":              0.92,
+    "panelStroke":             "#4FC3F7",
+    "panelStrokeWidth":        1,
+    "hpBarBg":                 "#333333",
+    "hpBarFillPlayer":         "#00FF88",
+    "hpBarFillEnemy":          "#FF4444",
+    "legPipActive":            "#F5A623",
+    "legPipInactive":          "#333333",
+    "playerNameColor":         "#00FF88",
+    "opponentNameColor":       "#FF4444",
+    "phaseTextColor":          "#4FC3F7",
+    "turnNumberColor":         "#FFFFFF",
+    "cardPlayZoneBorderColor": "#F5A623",
+    "cardPlayZoneBorderAlpha": 0.4
   },
+
   "buttons": {
     "primary": {
-      "fillColor": "#4FC3F7",
-      "strokeColor": "#4FC3F7",
-      "strokeWidth": 1,
-      "textColor": "#000000",
-      "fontSize": 14,
-      "hoverFillColor": "#7dd6ff",
-      "hoverTextColor": "#000",
-      "cornerRadius": 6,
-      "paddingX": 16,
-      "paddingY": 8
+      "fillColor": "#1A3A5C", "strokeColor": "#4FC3F7", "strokeWidth": 1,
+      "textColor": "#FFFFFF", "fontSize": 14,
+      "hoverFillColor": "#2A5A8C", "hoverTextColor": "#FFFFFF",
+      "cornerRadius": 6, "paddingX": 16, "paddingY": 8
     },
     "secondary": {
-      "fillColor": "#2A2A4A",
-      "strokeColor": "#4A4A7A",
-      "strokeWidth": 1,
-      "textColor": "#AAAAAA",
-      "fontSize": 14,
-      "hoverFillColor": "#3a3a6a",
-      "hoverTextColor": "#fff",
-      "cornerRadius": 6,
-      "paddingX": 16,
-      "paddingY": 8
+      "fillColor": "#2A2A4A", "strokeColor": "#AAAAAA", "strokeWidth": 1,
+      "textColor": "#AAAAAA", "fontSize": 14,
+      "hoverFillColor": "#3A3A6A", "hoverTextColor": "#FFFFFF",
+      "cornerRadius": 6, "paddingX": 16, "paddingY": 8
     },
     "danger": {
-      "fillColor": "#FF4444",
-      "strokeColor": "#FF4444",
-      "strokeWidth": 1,
-      "textColor": "#FFFFFF",
-      "fontSize": 14,
-      "hoverFillColor": "#ff7777",
-      "hoverTextColor": "#fff",
-      "cornerRadius": 6,
-      "paddingX": 16,
-      "paddingY": 8
+      "fillColor": "#4A1A1A", "strokeColor": "#FF4444", "strokeWidth": 1,
+      "textColor": "#FF4444", "fontSize": 14,
+      "hoverFillColor": "#6A2A2A", "hoverTextColor": "#FFFFFF",
+      "cornerRadius": 6, "paddingX": 16, "paddingY": 8
     },
     "endTurn": {
-      "fillColor": "#00FF88",
-      "strokeColor": "#00FF88",
-      "strokeWidth": 1,
-      "textColor": "#000000",
-      "fontSize": 14,
-      "hoverFillColor": "#33ffaa",
-      "hoverTextColor": "#000",
-      "cornerRadius": 6,
-      "paddingX": 16,
-      "paddingY": 8
+      "fillColor": "#0A3A1A", "strokeColor": "#00FF88", "strokeWidth": 2,
+      "textColor": "#00FF88", "fontSize": 15,
+      "hoverFillColor": "#1A5A2A", "hoverTextColor": "#FFFFFF",
+      "cornerRadius": 8, "paddingX": 20, "paddingY": 10
     },
     "pass": {
-      "fillColor": "#16213E",
-      "strokeColor": "#4FC3F7",
-      "strokeWidth": 1,
-      "textColor": "#AAAAAA",
-      "fontSize": 14,
-      "hoverFillColor": "#1e2e50",
-      "hoverTextColor": "#fff",
-      "cornerRadius": 6,
-      "paddingX": 16,
-      "paddingY": 8
+      "fillColor": "#1A1A2E", "strokeColor": "#555577", "strokeWidth": 1,
+      "textColor": "#AAAAAA", "fontSize": 13,
+      "hoverFillColor": "#2A2A4A", "hoverTextColor": "#FFFFFF",
+      "cornerRadius": 6, "paddingX": 14, "paddingY": 8
     }
   },
+
   "overlays": {
-    "dimmerColor": "#000000",
-    "dimmerAlpha": 0.8,
-    "panelColor": "#16213E",
-    "panelAlpha": 0.97,
-    "panelStroke": "#4FC3F7",
-    "panelStrokeWidth": 1,
-    "titleColor": "#FFFFFF",
-    "bodyColor": "#AAAAAA",
+    "dimmerColor": "#000000", "dimmerAlpha": 0.8,
+    "panelColor": "#16213E", "panelAlpha": 0.97,
+    "panelStroke": "#4FC3F7", "panelStrokeWidth": 1,
+    "titleColor": "#FFFFFF", "bodyColor": "#AAAAAA",
     "cornerRadius": 10
   }
 }

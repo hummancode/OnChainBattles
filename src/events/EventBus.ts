@@ -143,6 +143,8 @@ export const EV = {
   // UI selection (SelectionManager → renderers)
   SELECTION_CHANGED:   'SELECTION_CHANGED',
   HIGHLIGHTS_CHANGED:  'HIGHLIGHTS_CHANGED',
+  INPUT_BOARD_CLICK:   'INPUT_BOARD_CLICK',   // BoardRenderer → SelectionManager
+INPUT_HAND_CLICK:    'INPUT_HAND_CLICK',    // HandRenderer  → SelectionManager
   CARD_HOVERED:        'CARD_HOVERED',
   CARD_HOVER_END:      'CARD_HOVER_END',
   DETAIL_SHOW:         'DETAIL_SHOW',

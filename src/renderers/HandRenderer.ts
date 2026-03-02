@@ -48,7 +48,8 @@ export class HandRenderer {
 
     this.handContainer    = scene.add.container(0, 0);
     this.oppHandContainer = scene.add.container(0, 0);
-
+    this.handContainer.setDepth(10);
+  this.oppHandContainer.setDepth(10); 
     this.attachEventListeners();
   }
 
@@ -344,11 +345,7 @@ export class HandRenderer {
     const newSelection = wasSelected ? null : index;
     this.setSelected(newSelection);
 
-    EventBus.emit(EV.SELECTION_CHANGED, {
-      source: 'hand',
-      index: newSelection,
-      card: newSelection !== null ? this.cards[newSelection] : null,
-    });
+ EventBus.emit(EV.INPUT_HAND_CLICK, { index: newSelection });
   }
 
   // ─────────────────────────────────────────────
@@ -364,7 +361,8 @@ export class HandRenderer {
       EventBus.on(EV.CARD_PLAYED, ({ handIndex }) => {
         this.removeCard(handIndex);
         if (this.selectedIndex === handIndex) {
-          EventBus.emit(EV.SELECTION_CHANGED, { source: 'hand', index: null, card: null });
+              this.setSelected(null);
+
         }
       }),
 
@@ -373,12 +371,16 @@ export class HandRenderer {
       }),
 
       // Update selected state from SelectionManager
-      EventBus.on(EV.SELECTION_CHANGED, ({ source, index }) => {
-        if (source === 'board' || source === 'clear') {
-          // Board selection clears hand selection
-          this.setSelected(null);
-        }
-      }),
+EventBus.on(EV.INPUT_BOARD_CLICK, () => {
+  this.setSelected(null);
+}),
+EventBus.on(EV.SELECTION_CHANGED, ({ source }) => {
+  if (source === 'clear') {
+    this.setSelected(null);
+  }
+}),
+    
+    
 
       // Opponent hand count update
       EventBus.on(EV.HUD_REFRESH, (snap) => {

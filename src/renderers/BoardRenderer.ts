@@ -55,7 +55,8 @@ export class BoardRenderer {
     this.unitContainer      = scene.add.container(0, 0);
     this.overlayContainer   = scene.add.container(0, 0);
     this.coordContainer     = scene.add.container(0, 0);
-
+    this.cellContainer.setDepth(1);
+this.unitContainer.setDepth(5);  // units above cells, below HUD hand
     this.rootContainer.add([
       this.cellContainer,
       this.highlightContainer,
@@ -107,7 +108,8 @@ private mirrorRow(row: number): number {
     unit.setInteractive();
     unit.on('pointerover', () => this.onCellHover(col, row));
     unit.on('pointerout',  () => this.onCellHoverEnd(col, row));
-    unit.on('pointerdown', () => EventBus.emit(EV.SELECTION_CHANGED, { col, row, source: 'board' }));
+    unit.on('pointerdown', () => EventBus.emit(EV.INPUT_BOARD_CLICK, { col, row }));
+
 
     this.unitContainer.add(unit);
     this.unitContainers.set(key, unit);
@@ -328,7 +330,8 @@ private mirrorRow(row: number): number {
         );
         cell.on('pointerover', () => this.onCellHover(col, row));
         cell.on('pointerout',  () => this.onCellHoverEnd(col, row));
-        cell.on('pointerdown', () => EventBus.emit(EV.SELECTION_CHANGED, { col, row, source: 'board' }));
+        cell.on('pointerdown', () => EventBus.emit(EV.INPUT_BOARD_CLICK, { col, row }));
+
 
         this.cellContainer.add(cell);
         this.cellGraphics.set(this.cellKey(col, row), cell);

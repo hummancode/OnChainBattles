@@ -47,6 +47,7 @@ export interface IGameEngineAPI {
   getState(): GameStateSnapshot;
   on(handler: (event: GameEvent) => void): void;
   off(handler: (event: GameEvent) => void): void;
+  
 }
 
 // ─────────────────────────────────────────────

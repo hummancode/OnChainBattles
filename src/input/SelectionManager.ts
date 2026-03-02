@@ -304,16 +304,13 @@ export class SelectionManager {
   private attachEventListeners(): void {
     // Board cell clicks routed from BoardRenderer
     this.unsubs.push(
-      EventBus.on(EV.SELECTION_CHANGED, ({ source, col, row, index }) => {
-        if (source === 'board' && col !== undefined && row !== undefined) {
-          // Only process if SelectionManager didn't originate this event
-          // (BoardRenderer fires this; we then decide what to do)
-          this.onBoardCellClicked(col, row);
-        }
-        if (source === 'hand' && index !== undefined) {
-          this.onHandCardClicked(index);
-        }
-      }),
+    EventBus.on(EV.INPUT_BOARD_CLICK, ({ col, row }) => {
+      this.onBoardCellClicked(col, row);
+    }),
+
+    EventBus.on(EV.INPUT_HAND_CLICK, ({ index }) => {
+      this.onHandCardClicked(index);
+    }),
 
       // When engine enters AWAITING_INPUT, set mode
       EventBus.on(EV.PENDING_TARGET, () => {

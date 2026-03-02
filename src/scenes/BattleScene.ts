@@ -405,7 +405,7 @@ const refreshHUD = () => {
 };
 
 // Subscribe — refresh HUD on any event that changes displayed values
-const hudUnsubs: Array<() => void> = [];
+
 this.hudUnsubs.push(EventBus.on(EV.LEG_GAINED,      refreshHUD));
 this.hudUnsubs.push(EventBus.on(EV.LEG_SPENT,       refreshHUD));
 this.hudUnsubs.push(EventBus.on('LEG_RATE_CHANGED', refreshHUD));
@@ -416,12 +416,13 @@ this.hudUnsubs.push(EventBus.on('TURN_STARTED',     refreshHUD));
 this.hudUnsubs.push(EventBus.on(EV.CARD_PLAYED,     refreshHUD));
 this.hudUnsubs.push(EventBus.on('OPPONENT_CARD_DRAWN', refreshHUD));
     // Init renderers
-    this.boardRenderer   = new BoardRenderer(this, layout, theme);
-    this.boardRenderer.setLocalPlayer(localPlayerIndex);
-    this.hudRenderer.setLocalPlayer(localPlayerIndex);   // ← ADD
-    this.handRenderer    = new HandRenderer(this, layout, theme);
-    this.hudRenderer     = new HUDRenderer(this, layout, theme);
-    this.overlayRenderer = new OverlayRenderer(this, layout, theme);
+this.boardRenderer   = new BoardRenderer(this, layout, theme);
+this.handRenderer    = new HandRenderer(this, layout, theme);
+this.hudRenderer     = new HUDRenderer(this, layout, theme);
+this.overlayRenderer = new OverlayRenderer(this, layout, theme);
+
+this.boardRenderer.setLocalPlayer(localPlayerIndex);
+this.hudRenderer.setLocalPlayer(localPlayerIndex);
 
   
     // SelectionManager bridges col/row clicks → unitId-based engine API.
