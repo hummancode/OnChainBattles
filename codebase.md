@@ -263,6 +263,43 @@ pause
 
 ```
 
+# directory.bat
+
+```bat
+@echo off
+set "output_file=folder_structure.txt"
+
+:: Change directory to where the batch file is located
+cd /d "%~dp0"
+
+echo Generating file structure...
+
+:: Use PowerShell to walk the directory tree, skipping unwanted folders entirely
+powershell -NoProfile -Command ^
+  "$excluded = @('node_modules','.git','cache','artifacts','dist','build','coverage','typechain-types','vite');                                    " ^
+  "$root = Get-Location;                                                                                                                           " ^
+  "function Show-Tree($path, $indent) {                                                                                                            " ^
+  "  $items = Get-ChildItem -Path $path -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -notin $excluded } | Sort-Object Name;       " ^
+  "  $count = ($items | Measure-Object).Count;                                                                                                     " ^
+  "  $i = 0;                                                                                                                                       " ^
+  "  foreach ($item in $items) {                                                                                                                   " ^
+  "    $i++;                                                                                                                                       " ^
+  "    $connector = if ($i -eq $count) { '\--' } else { '+--' };                                                                                   " ^
+  "    $line = $indent + $connector + ' ' + $item.Name;                                                                                            " ^
+  "    $line;                                                                                                                                      " ^
+  "    if ($item.PSIsContainer) {                                                                                                                  " ^
+  "      $next = if ($i -eq $count) { $indent + '    ' } else { $indent + '|   ' };                                                               " ^
+  "      Show-Tree $item.FullName $next;                                                                                                           " ^
+  "    }                                                                                                                                           " ^
+  "  }                                                                                                                                             " ^
+  "}                                                                                                                                               " ^
+  "Write-Output (Split-Path $root -Leaf);                                                                                                          " ^
+  "Show-Tree $root ''                                                                                                                              " > "%output_file%"
+
+echo Structure saved to %output_file%
+pause
+```
+
 # events.txt
 
 ```txt
@@ -273,6 +310,339 @@ scene-awake An event emitted at the end of the `editorCreate()` method generated
 # Add your events like this:
 #
 # my-event My event documentation. 
+```
+
+# folder_structure.txt
+
+```txt
+OnChainBattles
++-- .aidigestignore
++-- .env
++-- .env.example
++-- .gitignore
++-- code_gen.bat
++-- codebase.md
++-- commit.bat
++-- contracts
+|   \-- Escrow.sol
++-- dev_start.bat
++-- directory.bat
++-- events.txt
++-- folder_structure.txt
++-- generate_project.bat
++-- git_push.bat
++-- hardhat.config.ts
++-- ignition
+|   \-- modules
+|       \-- Escrow.js
++-- imager.bat
++-- index.html
++-- LICENSE
++-- package.json
++-- package-lock.json
++-- phasereditor2d.config.json
++-- public
+|   +-- assets
+|   |   +-- .DS_Store
+|   |   +-- asset-pack.json
+|   |   +-- backgrounds
+|   |   |   +-- .DS_Store
+|   |   |   +-- bg_battle.png
+|   |   |   +-- bg_board.png
+|   |   |   +-- bg_lobby.png
+|   |   |   +-- bg_main_menu.png
+|   |   |   +-- bg_menu.png
+|   |   |   \-- bg_result.png
+|   |   +-- board
+|   |   |   \-- board_skin.png
+|   |   +-- cards
+|   |   |   +-- .DS_Store
+|   |   |   +-- art
+|   |   |   |   +-- .DS_Store
+|   |   |   |   +-- archer.png
+|   |   |   |   +-- assassin.png
+|   |   |   |   +-- castle.png
+|   |   |   |   +-- casus_belli.png
+|   |   |   |   +-- civil_war.png
+|   |   |   |   +-- commander.png
+|   |   |   |   +-- coup.png
+|   |   |   |   +-- disease.png
+|   |   |   |   +-- earthquake.png
+|   |   |   |   +-- foot_soldier.png
+|   |   |   |   +-- inquisitor.png
+|   |   |   |   +-- king.png
+|   |   |   |   +-- kings_guard.png
+|   |   |   |   +-- knight.png
+|   |   |   |   +-- lancer.png
+|   |   |   |   +-- messenger.png
+|   |   |   |   +-- militia.png
+|   |   |   |   +-- motherland.png
+|   |   |   |   +-- mystic.png
+|   |   |   |   +-- peasant_revolt.png
+|   |   |   |   +-- pikeman.png
+|   |   |   |   +-- priest.png
+|   |   |   |   +-- princess.png
+|   |   |   |   +-- reform.png
+|   |   |   |   +-- scout.png
+|   |   |   |   +-- scribe.png
+|   |   |   |   +-- swordsman.png
+|   |   |   |   +-- temple.png
+|   |   |   |   +-- treason.png
+|   |   |   |   +-- village.png
+|   |   |   |   \-- war_horn.png
+|   |   |   +-- card_back_pattern.png
+|   |   |   +-- card_frame_royal.png
+|   |   |   +-- card_frame_spell.png
+|   |   |   +-- card_frame_standard.png
+|   |   |   +-- card_frame_static.png
+|   |   |   \-- thumb
+|   |   |       +-- .DS_Store
+|   |   |       +-- archer_thumb.png
+|   |   |       +-- assassin_thumb.png
+|   |   |       +-- castle_thumb.png
+|   |   |       +-- casus_belli_thumb.png
+|   |   |       +-- civil_war_thumb.png
+|   |   |       +-- commander_thumb.png
+|   |   |       +-- coup_thumb.png
+|   |   |       +-- disease_thumb.png
+|   |   |       +-- earthquake_thumb.png
+|   |   |       +-- foot_soldier_thumb.png
+|   |   |       +-- inquisitor_thumb.png
+|   |   |       +-- king_thumb.png
+|   |   |       +-- knight_thumb.png
+|   |   |       +-- knights_guard_thumb.png
+|   |   |       +-- lancer_thumb.png
+|   |   |       +-- messenger_thumb.png
+|   |   |       +-- militia_thumb.png
+|   |   |       +-- motherland_thumb.png
+|   |   |       +-- mystic_thumb.png
+|   |   |       +-- peasant_revolt_thumb.png
+|   |   |       +-- pikeman_thumb.png
+|   |   |       +-- priest_thumb.png
+|   |   |       +-- princess_thumb.png
+|   |   |       +-- reform_thumb.png
+|   |   |       +-- scout_thumb.png
+|   |   |       +-- scribe_thumb.png
+|   |   |       +-- swordsman_thumb.png
+|   |   |       +-- temple_thumb.png
+|   |   |       +-- treason_thumb.png
+|   |   |       +-- village_thumb.png
+|   |   |       \-- war_horn_thumb.png
+|   |   +-- FufuSuperDino.png
+|   |   +-- fx
+|   |   |   +-- marker_attack.png
+|   |   |   +-- marker_aura.png
+|   |   |   +-- marker_danger.png
+|   |   |   +-- marker_move.png
+|   |   |   \-- marker_selected.png
+|   |   +-- guapen.png
+|   |   +-- icons
+|   |   |   +-- icon_atk.png
+|   |   |   +-- icon_cavalry.png
+|   |   |   +-- icon_clock.png
+|   |   |   +-- icon_def.png
+|   |   |   +-- icon_leg.png
+|   |   |   +-- icon_move.png
+|   |   |   +-- icon_ranged.png
+|   |   |   +-- icon_type_royal.png
+|   |   |   +-- icon_type_spell.png
+|   |   |   +-- icon_type_standard.png
+|   |   |   \-- icon_type_static.png
+|   |   +-- preload-asset-pack.json
+|   |   \-- ui
+|   |       \-- logo.png
+|   +-- assetsy
+|   |   +-- asset-pack.json
+|   |   +-- backgrounds
+|   |   |   +-- bg_battle.png
+|   |   |   +-- bg_lobby.png
+|   |   |   +-- bg_main_menu.png
+|   |   |   \-- bg_result.png
+|   |   +-- board
+|   |   |   \-- board_skin.png
+|   |   +-- cards
+|   |   |   +-- art
+|   |   |   |   +-- archer.png
+|   |   |   |   +-- assassin.png
+|   |   |   |   +-- castle.png
+|   |   |   |   +-- casus_belli.png
+|   |   |   |   +-- civil_war.png
+|   |   |   |   +-- commander.png
+|   |   |   |   +-- coup.png
+|   |   |   |   +-- disease.png
+|   |   |   |   +-- earthquake.png
+|   |   |   |   +-- foot_soldier.png
+|   |   |   |   +-- inquisitor.png
+|   |   |   |   +-- king.png
+|   |   |   |   +-- knight.png
+|   |   |   |   +-- knights_guard.png
+|   |   |   |   +-- lancer.png
+|   |   |   |   +-- messenger.png
+|   |   |   |   +-- militia.png
+|   |   |   |   +-- motherland.png
+|   |   |   |   +-- mystic.png
+|   |   |   |   +-- peasant_revolt.png
+|   |   |   |   +-- pikeman.png
+|   |   |   |   +-- priest.png
+|   |   |   |   +-- princess.png
+|   |   |   |   +-- reform.png
+|   |   |   |   +-- scout.png
+|   |   |   |   +-- scribe.png
+|   |   |   |   +-- swordsman.png
+|   |   |   |   +-- temple.png
+|   |   |   |   +-- treason.png
+|   |   |   |   +-- village.png
+|   |   |   |   \-- war_horn.png
+|   |   |   +-- card_back_pattern.png
+|   |   |   +-- card_frame_royal.png
+|   |   |   +-- card_frame_spell.png
+|   |   |   +-- card_frame_standard.png
+|   |   |   +-- card_frame_static.png
+|   |   |   \-- thumb
+|   |   |       +-- archer_thumb.png
+|   |   |       +-- assassin_thumb.png
+|   |   |       +-- castle_thumb.png
+|   |   |       +-- casus_belli_thumb.png
+|   |   |       +-- civil_war_thumb.png
+|   |   |       +-- commander_thumb.png
+|   |   |       +-- coup_thumb.png
+|   |   |       +-- disease_thumb.png
+|   |   |       +-- earthquake_thumb.png
+|   |   |       +-- foot_soldier_thumb.png
+|   |   |       +-- inquisitor_thumb.png
+|   |   |       +-- king_thumb.png
+|   |   |       +-- knight_thumb.png
+|   |   |       +-- knights_guard_thumb.png
+|   |   |       +-- lancer_thumb.png
+|   |   |       +-- messenger_thumb.png
+|   |   |       +-- militia_thumb.png
+|   |   |       +-- motherland_thumb.png
+|   |   |       +-- mystic_thumb.png
+|   |   |       +-- peasant_revolt_thumb.png
+|   |   |       +-- pikeman_thumb.png
+|   |   |       +-- priest_thumb.png
+|   |   |       +-- princess_thumb.png
+|   |   |       +-- reform_thumb.png
+|   |   |       +-- scout_thumb.png
+|   |   |       +-- scribe_thumb.png
+|   |   |       +-- swordsman_thumb.png
+|   |   |       +-- temple_thumb.png
+|   |   |       +-- treason_thumb.png
+|   |   |       +-- village_thumb.png
+|   |   |       \-- war_horn_thumb.png
+|   |   +-- FufuSuperDino.png
+|   |   +-- fx
+|   |   |   +-- marker_attack.png
+|   |   |   +-- marker_aura.png
+|   |   |   +-- marker_danger.png
+|   |   |   +-- marker_move.png
+|   |   |   \-- marker_selected.png
+|   |   +-- guapen.png
+|   |   +-- icons
+|   |   |   +-- icon_atk.png
+|   |   |   +-- icon_cavalry.png
+|   |   |   +-- icon_clock.png
+|   |   |   +-- icon_def.png
+|   |   |   +-- icon_leg.png
+|   |   |   +-- icon_move.png
+|   |   |   +-- icon_ranged.png
+|   |   |   +-- icon_type_royal.png
+|   |   |   +-- icon_type_spell.png
+|   |   |   +-- icon_type_standard.png
+|   |   |   \-- icon_type_static.png
+|   |   +-- preload-asset-pack.json
+|   |   \-- ui
+|   |       \-- logo.png
+|   +-- deck.config.json
+|   +-- favicon.png
+|   +-- layouts
+|   |   +-- BattleScene.layout.json
+|   |   +-- MainMenuScene.layout.json
+|   |   \-- ResultScene.layout.json
+|   +-- publicroot
+|   +-- style.css
+|   \-- themes
+|       +-- BattleScene.theme.json
+|       +-- MainMenuScene.theme.json
+|       \-- ResultScene.theme.json
++-- README.md
++-- scripts
+|   +-- deploy.mjs
+|   \-- send-op-tx.ts
++-- scripts_generate_placeholder_pngs.py
++-- server
+|   \-- index.js
++-- src
+|   +-- code_gen.bat
+|   +-- codebase.md
+|   +-- config
+|   |   +-- DeckLoader.ts
+|   |   +-- LayoutLoader.ts
+|   |   \-- ThemeLoader.ts
+|   +-- data
+|   |   \-- MatchState.ts
+|   +-- events
+|   |   \-- EventBus.ts
+|   +-- game
+|   |   +-- AbilityResolver.ts
+|   |   +-- AuraSystem.ts
+|   |   +-- Board.ts
+|   |   +-- CombatResolver.ts
+|   |   +-- data
+|   |   |   \-- CardDefinitions.ts
+|   |   +-- GameEngine.ts
+|   |   +-- GameModifiers.ts
+|   |   +-- MovementRules.ts
+|   |   +-- PlayerState.ts
+|   |   \-- types
+|   |       +-- AbilityTypes.ts
+|   |       +-- CardTypes.ts
+|   |       +-- EventTypes.ts
+|   |       +-- GameTypes.ts
+|   |       \-- UITypes.ts
+|   +-- GameState.ts
+|   +-- index.html
+|   +-- input
+|   |   \-- SelectionManager.ts
+|   +-- main.ts
+|   +-- network
+|   |   \-- SocketManager.ts
+|   +-- renderers
+|   |   +-- BoardRenderer.ts
+|   |   +-- CardRenderer.ts
+|   |   +-- HandRenderer.ts
+|   |   +-- HUDRenderer.ts
+|   |   \-- OverlayRenderer.ts
+|   +-- scenes
+|   |   +-- BattleScene.ts
+|   |   +-- MainMenuScene.ts
+|   |   +-- PreloadScene.ts
+|   |   +-- ResultScene.ts
+|   |   \-- RoomScene.ts
+|   +-- types
+|   |   \-- ethereum.d.ts
+|   +-- ui
+|   |   +-- DOMInputManager.ts
+|   |   +-- MenuButton.ts
+|   |   +-- ShareHelper.ts
+|   |   \-- ToastNotification.ts
+|   +-- utils
+|   |   \-- PhaserUtils.ts
+|   +-- vite-env.d.ts
+|   +-- wallet
+|   \-- web3
+|       +-- EscrowManager.ts
+|       \-- WalletManager.ts
++-- test
+|   \-- Counter.ts
++-- tools
+|   \-- layout-editor
++-- tsconfig.hardhat.json
++-- tsconfig.json
++-- types
+|   \-- process.env.ts
+\-- vite.config.ts
+
 ```
 
 # generate_project.bat
@@ -1266,7 +1636,673 @@ endlocal
 }
 ```
 
-# public\assets\preload-asset-pack.json
+# public\_originals\assets\backgrounds\bg_menu.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\backgrounds\bg_result.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\archer.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\assassin.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\castle.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\casus_belli.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\civil_war.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\commander.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\coup.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\disease.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\earthquake.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\foot_soldier.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\inquisitor.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\king.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\kings_guard.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\knight.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\lancer.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\messenger.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\militia.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\motherland.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\mystic.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\peasant_revolt.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\pikeman.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\priest.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\princess.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\reform.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\scout.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\scribe.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\swordsman.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\temple.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\treason.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\village.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\art\war_horn.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\card_back_pattern.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\card_frame_royal.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\card_frame_spell.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\card_frame_standard.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\card_frame_static.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\archer (1).png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\assassin_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\castle_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\casus_belli_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\commander_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\disease_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\foot_soldier_thumb-2.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\inquisitor_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\king_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\kings_guard_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\knight_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\lancer_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\messenger_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\mystic_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\pikeman_thumb-2.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\priest_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\princess_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\scout_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\scribe_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\swordsman_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\temple_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\cards\thumb\village_thumb.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\icons\icon_atk.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\icons\icon_cavalry.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\icons\icon_clock.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\icons\icon_def.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\icons\icon_leg.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\icons\icon_move.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\icons\icon_ranged.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\icons\icon_type_royal.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\icons\icon_type_spell.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\icons\icon_type_standard.png
+
+This is a binary file of the type: Image
+
+# public\_originals\assets\icons\icon_type_static.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\asset-pack.json
+
+```json
+{
+    "section1": {
+        "files": [
+            {
+                "url": "assets/FufuSuperDino.png",
+                "type": "image",
+                "key": "FufuSuperDino"
+            }
+        ]
+    },
+    "meta": {
+        "app": "Phaser Editor 2D - Asset Pack Editor",
+        "contentType": "phasereditor2d.pack.core.AssetContentType",
+        "url": "https://phasereditor2d.com",
+        "version": 2
+    }
+}
+```
+
+# public\assetsy\backgrounds\bg_battle.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\backgrounds\bg_lobby.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\backgrounds\bg_main_menu.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\backgrounds\bg_result.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\board\board_skin.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\archer.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\assassin.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\castle.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\casus_belli.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\civil_war.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\commander.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\coup.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\disease.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\earthquake.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\foot_soldier.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\inquisitor.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\king.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\knight.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\knights_guard.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\lancer.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\messenger.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\militia.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\motherland.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\mystic.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\peasant_revolt.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\pikeman.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\priest.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\princess.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\reform.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\scout.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\scribe.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\swordsman.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\temple.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\treason.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\village.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\art\war_horn.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\card_back_pattern.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\card_frame_royal.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\card_frame_spell.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\card_frame_standard.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\card_frame_static.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\archer_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\assassin_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\castle_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\casus_belli_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\civil_war_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\commander_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\coup_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\disease_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\earthquake_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\foot_soldier_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\inquisitor_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\king_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\knight_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\knights_guard_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\lancer_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\messenger_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\militia_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\motherland_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\mystic_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\peasant_revolt_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\pikeman_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\priest_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\princess_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\reform_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\scout_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\scribe_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\swordsman_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\temple_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\treason_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\village_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\cards\thumb\war_horn_thumb.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\FufuSuperDino.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\fx\marker_attack.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\fx\marker_aura.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\fx\marker_danger.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\fx\marker_move.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\fx\marker_selected.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\guapen.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\icons\icon_atk.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\icons\icon_cavalry.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\icons\icon_clock.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\icons\icon_def.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\icons\icon_leg.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\icons\icon_move.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\icons\icon_ranged.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\icons\icon_type_royal.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\icons\icon_type_spell.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\icons\icon_type_standard.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\icons\icon_type_static.png
+
+This is a binary file of the type: Image
+
+# public\assetsy\preload-asset-pack.json
 
 ```json
 {
@@ -1286,6 +2322,37 @@ endlocal
         "version": 2,
         "showAllFilesInBlocks": false
     }
+}
+```
+
+# public\assetsy\ui\logo.png
+
+This is a binary file of the type: Image
+
+# public\deck.config.json
+
+```json
+{
+  "_comment": "Edit card IDs here to change the deck. Must be exactly 31 valid card IDs. King is pre-placed and must NOT be included.",
+  "deckIds": [
+    "foot_soldier", "foot_soldier", "foot_soldier",
+    "pikeman",      "pikeman",
+    "archer",       "archer",
+    "assassin",     "assassin",
+    "militia",      "militia",
+    "scout",        "scout",
+    "lancer",       "lancer",
+    "messenger",    "messenger",
+    "mystic",
+    "swordsman",    "swordsman",
+    "priest",       "priest",
+    "inquisitor",   "inquisitor",
+    "knight",       "knight",
+    "scribe",       "scribe",
+    "princess",
+    "commander",
+    "knights_guard"
+  ]
 }
 ```
 
@@ -1347,7 +2414,7 @@ This is a binary file of the type: Image
       "cardHeight": 95,
       "spacing": 10,
       "maxVisible": 10,
-      "fanAngle": 3,
+      "fanAngle": 0,
       "selectedScale": 1.15
     }
   },
@@ -1377,7 +2444,7 @@ This is a binary file of the type: Image
       "cardHeight": 95,
       "spacing": 10,
       "maxVisible": 10,
-      "fanAngle": 0,
+      "fanAngle": 4,
       "selectedScale": 1
     }
   },
@@ -2382,7 +3449,6 @@ body {
     justify-content: center;
     align-items: center;
 }
-
 ```
 
 # public\themes\BattleScene.theme.json
@@ -2391,221 +3457,268 @@ body {
 {
   "schemaVersion": "2.0",
   "scene": "BattleScene",
+
   "colors": {
-    "BG_DEEP": "#1A1A2E",
-    "BG_MID": "#16213E",
-    "BG_BOARD": "#0F3460",
-    "ACCENT_GOLD": "#F5A623",
-    "ACCENT_GREEN": "#00FF88",
-    "ACCENT_RED": "#FF4444",
-    "ACCENT_BLUE": "#4FC3F7",
-    "TEXT_PRIMARY": "#FFFFFF",
+    "BG_DEEP":        "#1A1A2E",
+    "BG_MID":         "#16213E",
+    "BG_BOARD":       "#0F3460",
+    "ACCENT_GOLD":    "#F5A623",
+    "ACCENT_GREEN":   "#00FF88",
+    "ACCENT_RED":     "#FF4444",
+    "ACCENT_BLUE":    "#4FC3F7",
+    "TEXT_PRIMARY":   "#FFFFFF",
     "TEXT_SECONDARY": "#AAAAAA",
-    "CARD_STANDARD": "#2A2A4A",
-    "CARD_ROYAL": "#3D2B1F",
-    "CARD_STATIC": "#1B3A2A",
-    "CARD_SPELL": "#2A1B3D",
-    "OVERLAY_BLACK": "#000000"
+    "CARD_STANDARD":  "#2A2A4A",
+    "CARD_ROYAL":     "#3D2B1F",
+    "CARD_STATIC":    "#1B3A2A",
+    "CARD_SPELL":     "#2A1B3D",
+    "OVERLAY_BLACK":  "#000000"
   },
+
   "fonts": {
-    "title": {
-      "family": "Rajdhani",
-      "size": 32,
-      "color": "#FFFFFF"
-    },
-    "heading": {
-      "family": "Exo 2",
-      "size": 18,
-      "color": "#FFFFFF"
-    },
-    "body": {
-      "family": "Exo 2",
-      "size": 14,
-      "color": "#FFFFFF"
-    },
-    "small": {
-      "family": "Exo 2",
-      "size": 11,
-      "color": "#AAAAAA"
-    },
-    "cardName": {
-      "family": "Exo 2",
-      "size": 12,
-      "color": "#FFFFFF"
-    },
-    "cardStat": {
-      "family": "Share Tech Mono",
-      "size": 12,
-      "color": "#FFFFFF"
-    },
-    "cardAbility": {
-      "family": "Exo 2",
-      "size": 11,
-      "color": "#AAAAAA"
-    },
-    "coordLabel": {
-      "family": "Share Tech Mono",
-      "size": 11,
-      "color": "#AAAAAA"
-    }
+    "title":       { "family": "Arial", "size": 32, "color": "#FFFFFF" },
+    "heading":     { "family": "Arial", "size": 18, "color": "#FFFFFF" },
+    "body":        { "family": "Arial", "size": 14, "color": "#FFFFFF" },
+    "small":       { "family": "Arial", "size": 11, "color": "#AAAAAA" },
+    "cardName":    { "family": "Arial", "size": 12, "color": "#FFFFFF" },
+    "cardStat":    { "family": "Arial", "size": 12, "color": "#FFFFFF" },
+    "cardAbility": { "family": "Arial", "size": 11, "color": "#AAAAAA" },
+    "coordLabel":  { "family": "Arial", "size": 11, "color": "#AAAAAA" }
   },
+
+  "assets": {
+    "bg_main_menu":        "backgrounds/bg_main_menu.png",
+    "bg_battle":           "backgrounds/bg_battle.png",
+    "bg_result":           "backgrounds/bg_result.png",
+
+    "board_skin":          "board/board_skin.png",
+
+    "card_frame_standard": "cards/card_frame_standard.png",
+    "card_frame_royal":    "cards/card_frame_royal.png",
+    "card_frame_static":   "cards/card_frame_static.png",
+    "card_frame_spell":    "cards/card_frame_spell.png",
+    "card_back":           "cards/card_back_pattern.png",
+
+    "icon_atk":            "icons/icon_atk.png",
+    "icon_def":            "icons/icon_def.png",
+    "icon_leg":            "icons/icon_leg.png",
+    "icon_move":           "icons/icon_move.png",
+    "icon_cavalry":        "icons/icon_cavalry.png",
+    "icon_clock":          "icons/icon_clock.png",
+    "icon_ranged":         "icons/icon_ranged.png",
+
+    "icon_type_standard":  "icons/icon_type_standard.png",
+    "icon_type_royal":     "icons/icon_type_royal.png",
+    "icon_type_static":    "icons/icon_type_static.png",
+    "icon_type_spell":     "icons/icon_type_spell.png",
+
+    "marker_move":         "fx/marker_move.png",
+    "marker_attack":       "fx/marker_attack.png",
+    "marker_aura":         "fx/marker_aura.png",
+    "marker_selected":     "fx/marker_selected.png",
+    "marker_danger":       "fx/marker_danger.png",
+
+    "logo":                "ui/logo.png",
+
+    "art_archer":          "cards/art/archer.png",
+    "art_assassin":        "cards/art/assassin.png",
+    "art_castle":          "cards/art/castle.png",
+    "art_casus_belli":     "cards/art/casus_belli.png",
+    "art_civil_war":       "cards/art/civil_war.png",
+    "art_commander":       "cards/art/commander.png",
+    "art_coup":            "cards/art/coup.png",
+    "art_disease":         "cards/art/disease.png",
+    "art_earthquake":      "cards/art/earthquake.png",
+    "art_foot_soldier":    "cards/art/foot_soldier.png",
+    "art_inquisitor":      "cards/art/inquisitor.png",
+    "art_king":            "cards/art/king.png",
+    "art_knight":          "cards/art/knight.png",
+    "art_knights_guard":   "cards/art/knights_guard.png",
+    "art_lancer":          "cards/art/lancer.png",
+    "art_messenger":       "cards/art/messenger.png",
+    "art_militia":         "cards/art/militia.png",
+    "art_motherland":      "cards/art/motherland.png",
+    "art_mystic":          "cards/art/mystic.png",
+    "art_peasant_revolt":  "cards/art/peasant_revolt.png",
+    "art_pikeman":         "cards/art/pikeman.png",
+    "art_priest":          "cards/art/priest.png",
+    "art_princess":        "cards/art/princess.png",
+    "art_reform":          "cards/art/reform.png",
+    "art_scout":           "cards/art/scout.png",
+    "art_scribe":          "cards/art/scribe.png",
+    "art_swordsman":       "cards/art/swordsman.png",
+    "art_temple":          "cards/art/temple.png",
+    "art_treason":         "cards/art/treason.png",
+    "art_village":         "cards/art/village.png",
+    "art_war_horn":        "cards/art/war_horn.png",
+
+    "thumb_archer":        "cards/thumb/archer_thumb.png",
+    "thumb_assassin":      "cards/thumb/assassin_thumb.png",
+    "thumb_castle":        "cards/thumb/castle_thumb.png",
+    "thumb_casus_belli":   "cards/thumb/casus_belli_thumb.png",
+    "thumb_civil_war":     "cards/thumb/civil_war_thumb.png",
+    "thumb_commander":     "cards/thumb/commander_thumb.png",
+    "thumb_coup":          "cards/thumb/coup_thumb.png",
+    "thumb_disease":       "cards/thumb/disease_thumb.png",
+    "thumb_earthquake":    "cards/thumb/earthquake_thumb.png",
+    "thumb_foot_soldier":  "cards/thumb/foot_soldier_thumb.png",
+    "thumb_inquisitor":    "cards/thumb/inquisitor_thumb.png",
+    "thumb_king":          "cards/thumb/king_thumb.png",
+    "thumb_knight":        "cards/thumb/knight_thumb.png",
+    "thumb_knights_guard": "cards/thumb/knights_guard_thumb.png",
+    "thumb_lancer":        "cards/thumb/lancer_thumb.png",
+    "thumb_messenger":     "cards/thumb/messenger_thumb.png",
+    "thumb_militia":       "cards/thumb/militia_thumb.png",
+    "thumb_motherland":    "cards/thumb/motherland_thumb.png",
+    "thumb_mystic":        "cards/thumb/mystic_thumb.png",
+    "thumb_peasant_revolt":"cards/thumb/peasant_revolt_thumb.png",
+    "thumb_pikeman":       "cards/thumb/pikeman_thumb.png",
+    "thumb_priest":        "cards/thumb/priest_thumb.png",
+    "thumb_princess":      "cards/thumb/princess_thumb.png",
+    "thumb_reform":        "cards/thumb/reform_thumb.png",
+    "thumb_scout":         "cards/thumb/scout_thumb.png",
+    "thumb_scribe":        "cards/thumb/scribe_thumb.png",
+    "thumb_swordsman":     "cards/thumb/swordsman_thumb.png",
+    "thumb_temple":        "cards/thumb/temple_thumb.png",
+    "thumb_treason":       "cards/thumb/treason_thumb.png",
+    "thumb_village":       "cards/thumb/village_thumb.png",
+    "thumb_war_horn":      "cards/thumb/war_horn_thumb.png"
+  },
+
   "board": {
-    "cellEvenFill": "#0F3460",
-    "cellOddFill": "#0D2B4E",
-    "gridLineColor": "#1A3A6A",
-    "playerHalfTint": "#00FF8814",
-    "enemyHalfTint": "#FF444414",
-    "coordColor": "#AAAAAA",
-    "cellHover": "#FFFFFF1F",
-    "cellSelected": "#00FF88",
-    "cellValidMove": "#00FF8833",
-    "cellValidAtk": "#FF444433",
-    "cellAura": "#4FC3F71A",
-    "unitBandPlayer": "#00FF88",
-    "unitBandEnemy": "#FF4444",
-    "unitBandHeight": 8,
-    "hpBarFull": "#00FF88",
-    "hpBarMid": "#F5A623",
-    "hpBarLow": "#FF4444",
-    "hpBarBackground": "#333333"
+    "cellEvenFill":     "#0F3460",
+    "cellOddFill":      "#0C2D55",
+    "gridLineColor":    "#1A4A80",
+    "playerHalfTint":   "#00FF8814",
+    "enemyHalfTint":    "#FF444414",
+    "coordColor":       "#AAAAAA",
+    "cellHover":        "#4FC3F733",
+    "cellSelected":     "#F5A62366",
+    "cellValidMove":    "#00FF8833",
+    "cellValidAtk":     "#FF444433",
+    "cellAura":         "#4FC3F722",
+    "unitBandPlayer":   "#00FF88",
+    "unitBandEnemy":    "#FF4444",
+    "unitBandHeight":   4,
+    "useBoardSkinTexture": true,
+    "cardPlayZoneBorderColor": "#F5A623",
+    "cardPlayZoneBorderAlpha": 0.4
   },
+
   "cards": {
     "STANDARD": {
-      "bodyColor": "#2A2A4A",
-      "bandColor": "#2A2A4A",
-      "frameAsset": "card_frame_standard",
-      "legPipColor": "#4FC3F7",
-      "borderColor": "#4A4A8A",
-      "borderWidth": 2,
-      "glowColor": "",
-      "glowSize": 0
+      "frameAsset":  "card_frame_standard",
+      "tintColor":   "#2A2A4A",
+      "nameBarColor":"#1A1A3A"
     },
     "ROYAL": {
-      "bodyColor": "#3D2B1F",
-      "bandColor": "#F5A623",
-      "frameAsset": "card_frame_royal",
-      "legPipColor": "#F5A623",
-      "borderColor": "#8A6A2A",
-      "borderWidth": 2,
-      "glowColor": "#F5A623",
-      "glowSize": 4
+      "frameAsset":  "card_frame_royal",
+      "tintColor":   "#3D2B1F",
+      "nameBarColor":"#2A1A0A"
     },
     "STATIC": {
-      "bodyColor": "#1B3A2A",
-      "bandColor": "#1B3A2A",
-      "frameAsset": "card_frame_static",
-      "legPipColor": "#4FC3F7",
-      "borderColor": "#2A5A3A",
-      "borderWidth": 2,
-      "glowColor": "",
-      "glowSize": 0
+      "frameAsset":  "card_frame_static",
+      "tintColor":   "#1B3A2A",
+      "nameBarColor":"#0A2A1A"
     },
     "SPELL": {
-      "bodyColor": "#2A1B3D",
-      "bandColor": "#9B59B6",
-      "frameAsset": "card_frame_spell",
-      "legPipColor": "#4FC3F7",
-      "borderColor": "#5A2A8A",
-      "borderWidth": 2,
-      "glowColor": "#a855f7",
-      "glowSize": 4
-    },
-    "atkBadgeColor": "#FF4444",
-    "defBadgeColor": "#4FC3F7",
-    "nameBarBg": "#1A1A2EB3",
-    "nameColor": "#FFFFFF",
-    "abilityTextColor": "#AAAAAA",
-    "exhaustedAlpha": 0.4,
-    "selectedGlowColor": "#00FF88",
-    "selectedGlowSize": 6
-  },
-  "hud": {
-    "panelBg": "#16213E",
-    "panelAlpha": 0.97,
-    "playerNameColor": "#00FF88",
-    "enemyNameColor": "#FF4444",
-    "legColor": "#F5A623",
-    "legRateColor": "#AAAAAA",
-    "hpBarFull": "#00FF88",
-    "hpBarMid": "#F5A623",
-    "hpBarLow": "#FF4444",
-    "hpBarBg": "#333333",
-    "phaseLabelColor": "#F5A623",
-    "cardPlayZoneBorderColor": "#4FC3F7",
-    "cardPlayZoneBorderAlpha": 0.6
-  },
-  "buttons": {
-    "primary": {
-      "fillColor": "#4FC3F7",
-      "strokeColor": "#4FC3F7",
-      "strokeWidth": 1,
-      "textColor": "#000000",
-      "fontSize": 14,
-      "hoverFillColor": "#7dd6ff",
-      "hoverTextColor": "#000",
-      "cornerRadius": 6,
-      "paddingX": 16,
-      "paddingY": 8
-    },
-    "secondary": {
-      "fillColor": "#2A2A4A",
-      "strokeColor": "#4A4A7A",
-      "strokeWidth": 1,
-      "textColor": "#AAAAAA",
-      "fontSize": 14,
-      "hoverFillColor": "#3a3a6a",
-      "hoverTextColor": "#fff",
-      "cornerRadius": 6,
-      "paddingX": 16,
-      "paddingY": 8
-    },
-    "danger": {
-      "fillColor": "#FF4444",
-      "strokeColor": "#FF4444",
-      "strokeWidth": 1,
-      "textColor": "#FFFFFF",
-      "fontSize": 14,
-      "hoverFillColor": "#ff7777",
-      "hoverTextColor": "#fff",
-      "cornerRadius": 6,
-      "paddingX": 16,
-      "paddingY": 8
-    },
-    "endTurn": {
-      "fillColor": "#00FF88",
-      "strokeColor": "#00FF88",
-      "strokeWidth": 1,
-      "textColor": "#000000",
-      "fontSize": 14,
-      "hoverFillColor": "#33ffaa",
-      "hoverTextColor": "#000",
-      "cornerRadius": 6,
-      "paddingX": 16,
-      "paddingY": 8
-    },
-    "pass": {
-      "fillColor": "#16213E",
-      "strokeColor": "#4FC3F7",
-      "strokeWidth": 1,
-      "textColor": "#AAAAAA",
-      "fontSize": 14,
-      "hoverFillColor": "#1e2e50",
-      "hoverTextColor": "#fff",
-      "cornerRadius": 6,
-      "paddingX": 16,
-      "paddingY": 8
+      "frameAsset":  "card_frame_spell",
+      "tintColor":   "#2A1B3D",
+      "nameBarColor":"#1A0A2A"
     }
   },
+
+  "hud": {
+    "panelColor":           "#16213E",
+    "panelAlpha":           0.92,
+    "panelStroke":          "#4FC3F7",
+    "panelStrokeWidth":     1,
+    "hpBarBg":              "#333333",
+    "hpBarFillPlayer":      "#00FF88",
+    "hpBarFillEnemy":       "#FF4444",
+    "legPipActive":         "#F5A623",
+    "legPipInactive":       "#333333",
+    "playerNameColor":      "#00FF88",
+    "opponentNameColor":    "#FF4444",
+    "phaseTextColor":       "#4FC3F7",
+    "turnNumberColor":      "#FFFFFF",
+    "cardPlayZoneBorderColor": "#F5A623",
+    "cardPlayZoneBorderAlpha": 0.4
+  },
+
+  "buttons": {
+    "primary": {
+      "fillColor":      "#1A3A5C",
+      "strokeColor":    "#4FC3F7",
+      "strokeWidth":    1,
+      "textColor":      "#FFFFFF",
+      "fontSize":       14,
+      "hoverFillColor": "#2A5A8C",
+      "hoverTextColor": "#FFFFFF",
+      "cornerRadius":   6,
+      "paddingX":       16,
+      "paddingY":       8
+    },
+    "secondary": {
+      "fillColor":      "#2A2A4A",
+      "strokeColor":    "#AAAAAA",
+      "strokeWidth":    1,
+      "textColor":      "#AAAAAA",
+      "fontSize":       14,
+      "hoverFillColor": "#3A3A6A",
+      "hoverTextColor": "#FFFFFF",
+      "cornerRadius":   6,
+      "paddingX":       16,
+      "paddingY":       8
+    },
+    "danger": {
+      "fillColor":      "#4A1A1A",
+      "strokeColor":    "#FF4444",
+      "strokeWidth":    1,
+      "textColor":      "#FF4444",
+      "fontSize":       14,
+      "hoverFillColor": "#6A2A2A",
+      "hoverTextColor": "#FFFFFF",
+      "cornerRadius":   6,
+      "paddingX":       16,
+      "paddingY":       8
+    },
+    "endTurn": {
+      "fillColor":      "#0A3A1A",
+      "strokeColor":    "#00FF88",
+      "strokeWidth":    2,
+      "textColor":      "#00FF88",
+      "fontSize":       15,
+      "hoverFillColor": "#1A5A2A",
+      "hoverTextColor": "#FFFFFF",
+      "cornerRadius":   8,
+      "paddingX":       20,
+      "paddingY":       10
+    },
+    "pass": {
+      "fillColor":      "#1A1A2E",
+      "strokeColor":    "#555577",
+      "strokeWidth":    1,
+      "textColor":      "#AAAAAA",
+      "fontSize":       13,
+      "hoverFillColor": "#2A2A4A",
+      "hoverTextColor": "#FFFFFF",
+      "cornerRadius":   6,
+      "paddingX":       14,
+      "paddingY":       8
+    }
+  },
+
   "overlays": {
-    "dimmerColor": "#000000",
-    "dimmerAlpha": 0.8,
-    "panelColor": "#16213E",
-    "panelAlpha": 0.97,
-    "panelStroke": "#4FC3F7",
+    "dimmerColor":      "#000000",
+    "dimmerAlpha":      0.8,
+    "panelColor":       "#16213E",
+    "panelAlpha":       0.97,
+    "panelStroke":      "#4FC3F7",
     "panelStrokeWidth": 1,
-    "titleColor": "#FFFFFF",
-    "bodyColor": "#AAAAAA",
-    "cornerRadius": 10
+    "titleColor":       "#FFFFFF",
+    "bodyColor":        "#AAAAAA",
+    "cornerRadius":     10
   }
 }
 ```
@@ -2616,220 +3729,147 @@ body {
 {
   "schemaVersion": "2.0",
   "scene": "MainMenuScene",
+
   "colors": {
-    "BG_DEEP": "#1A1A2E",
-    "BG_MID": "#16213E",
-    "BG_BOARD": "#0F3460",
-    "ACCENT_GOLD": "#F5A623",
-    "ACCENT_GREEN": "#00FF88",
-    "ACCENT_RED": "#FF4444",
-    "ACCENT_BLUE": "#4FC3F7",
-    "TEXT_PRIMARY": "#FFFFFF",
+    "BG_DEEP":        "#1A1A2E",
+    "BG_MID":         "#16213E",
+    "BG_BOARD":       "#0F3460",
+    "ACCENT_GOLD":    "#F5A623",
+    "ACCENT_GREEN":   "#00FF88",
+    "ACCENT_RED":     "#FF4444",
+    "ACCENT_BLUE":    "#4FC3F7",
+    "TEXT_PRIMARY":   "#FFFFFF",
     "TEXT_SECONDARY": "#AAAAAA",
-    "CARD_STANDARD": "#2A2A4A",
-    "CARD_ROYAL": "#3D2B1F",
-    "CARD_STATIC": "#1B3A2A",
-    "CARD_SPELL": "#2A1B3D",
-    "OVERLAY_BLACK": "#000000"
+    "CARD_STANDARD":  "#2A2A4A",
+    "CARD_ROYAL":     "#3D2B1F",
+    "CARD_STATIC":    "#1B3A2A",
+    "CARD_SPELL":     "#2A1B3D",
+    "OVERLAY_BLACK":  "#000000"
   },
+
   "fonts": {
-    "title": {
-      "family": "Rajdhani",
-      "size": 32,
-      "color": "#FFFFFF"
-    },
-    "heading": {
-      "family": "Exo 2",
-      "size": 18,
-      "color": "#FFFFFF"
-    },
-    "body": {
-      "family": "Exo 2",
-      "size": 14,
-      "color": "#FFFFFF"
-    },
-    "small": {
-      "family": "Exo 2",
-      "size": 11,
-      "color": "#AAAAAA"
-    },
-    "cardName": {
-      "family": "Exo 2",
-      "size": 12,
-      "color": "#FFFFFF"
-    },
-    "cardStat": {
-      "family": "Share Tech Mono",
-      "size": 12,
-      "color": "#FFFFFF"
-    },
-    "cardAbility": {
-      "family": "Exo 2",
-      "size": 11,
-      "color": "#AAAAAA"
-    },
-    "coordLabel": {
-      "family": "Share Tech Mono",
-      "size": 11,
-      "color": "#AAAAAA"
-    }
+    "title":       { "family": "Arial", "size": 32, "color": "#FFFFFF" },
+    "heading":     { "family": "Arial", "size": 18, "color": "#FFFFFF" },
+    "body":        { "family": "Arial", "size": 14, "color": "#FFFFFF" },
+    "small":       { "family": "Arial", "size": 11, "color": "#AAAAAA" },
+    "cardName":    { "family": "Arial", "size": 12, "color": "#FFFFFF" },
+    "cardStat":    { "family": "Arial", "size": 12, "color": "#FFFFFF" },
+    "cardAbility": { "family": "Arial", "size": 11, "color": "#AAAAAA" },
+    "coordLabel":  { "family": "Arial", "size": 11, "color": "#AAAAAA" }
   },
+
+  "assets": {
+    "bg_main_menu":        "backgrounds/bg_main_menu.png",
+    "bg_battle":           "backgrounds/bg_battle.png",
+    "bg_result":           "backgrounds/bg_result.png",
+    "board_skin":          "board/board_skin.png",
+    "card_frame_standard": "cards/card_frame_standard.png",
+    "card_frame_royal":    "cards/card_frame_royal.png",
+    "card_frame_static":   "cards/card_frame_static.png",
+    "card_frame_spell":    "cards/card_frame_spell.png",
+    "card_back":           "cards/card_back_pattern.png",
+    "icon_atk":            "icons/icon_atk.png",
+    "icon_def":            "icons/icon_def.png",
+    "icon_leg":            "icons/icon_leg.png",
+    "icon_move":           "icons/icon_move.png",
+    "icon_cavalry":        "icons/icon_cavalry.png",
+    "icon_clock":          "icons/icon_clock.png",
+    "icon_ranged":         "icons/icon_ranged.png",
+    "icon_type_standard":  "icons/icon_type_standard.png",
+    "icon_type_royal":     "icons/icon_type_royal.png",
+    "icon_type_static":    "icons/icon_type_static.png",
+    "icon_type_spell":     "icons/icon_type_spell.png",
+    "marker_move":         "fx/marker_move.png",
+    "marker_attack":       "fx/marker_attack.png",
+    "marker_aura":         "fx/marker_aura.png",
+    "marker_selected":     "fx/marker_selected.png",
+    "marker_danger":       "fx/marker_danger.png",
+    "logo":                "ui/logo.png"
+  },
+
   "board": {
-    "cellEvenFill": "#0F3460",
-    "cellOddFill": "#0D2B4E",
-    "gridLineColor": "#1A3A6A",
-    "playerHalfTint": "#00FF8814",
-    "enemyHalfTint": "#FF444414",
-    "coordColor": "#AAAAAA",
-    "cellHover": "#FFFFFF1F",
-    "cellSelected": "#00FF88",
-    "cellValidMove": "#00FF8833",
-    "cellValidAtk": "#FF444433",
-    "cellAura": "#4FC3F71A",
-    "unitBandPlayer": "#00FF88",
-    "unitBandEnemy": "#FF4444",
-    "unitBandHeight": 8,
-    "hpBarFull": "#00FF88",
-    "hpBarMid": "#F5A623",
-    "hpBarLow": "#FF4444",
-    "hpBarBackground": "#333333"
+    "cellEvenFill":     "#0F3460",
+    "cellOddFill":      "#0C2D55",
+    "gridLineColor":    "#1A4A80",
+    "playerHalfTint":   "#00FF8814",
+    "enemyHalfTint":    "#FF444414",
+    "coordColor":       "#AAAAAA",
+    "cellHover":        "#4FC3F733",
+    "cellSelected":     "#F5A62366",
+    "cellValidMove":    "#00FF8833",
+    "cellValidAtk":     "#FF444433",
+    "cellAura":         "#4FC3F722",
+    "unitBandPlayer":   "#00FF88",
+    "unitBandEnemy":    "#FF4444",
+    "unitBandHeight":   4,
+    "useBoardSkinTexture": true,
+    "cardPlayZoneBorderColor": "#F5A623",
+    "cardPlayZoneBorderAlpha": 0.4
   },
+
   "cards": {
-    "STANDARD": {
-      "bodyColor": "#2A2A4A",
-      "bandColor": "#2A2A4A",
-      "frameAsset": "card_frame_standard",
-      "legPipColor": "#4FC3F7",
-      "borderColor": "#4A4A8A",
-      "borderWidth": 2,
-      "glowColor": "",
-      "glowSize": 0
-    },
-    "ROYAL": {
-      "bodyColor": "#3D2B1F",
-      "bandColor": "#F5A623",
-      "frameAsset": "card_frame_royal",
-      "legPipColor": "#F5A623",
-      "borderColor": "#8A6A2A",
-      "borderWidth": 2,
-      "glowColor": "#F5A623",
-      "glowSize": 4
-    },
-    "STATIC": {
-      "bodyColor": "#1B3A2A",
-      "bandColor": "#1B3A2A",
-      "frameAsset": "card_frame_static",
-      "legPipColor": "#4FC3F7",
-      "borderColor": "#2A5A3A",
-      "borderWidth": 2,
-      "glowColor": "",
-      "glowSize": 0
-    },
-    "SPELL": {
-      "bodyColor": "#2A1B3D",
-      "bandColor": "#9B59B6",
-      "frameAsset": "card_frame_spell",
-      "legPipColor": "#4FC3F7",
-      "borderColor": "#5A2A8A",
-      "borderWidth": 2,
-      "glowColor": "#a855f7",
-      "glowSize": 4
-    },
-    "atkBadgeColor": "#FF4444",
-    "defBadgeColor": "#4FC3F7",
-    "nameBarBg": "#1A1A2EB3",
-    "nameColor": "#FFFFFF",
-    "abilityTextColor": "#AAAAAA",
-    "exhaustedAlpha": 0.4,
-    "selectedGlowColor": "#00FF88",
-    "selectedGlowSize": 6
+    "STANDARD": { "frameAsset": "card_frame_standard", "tintColor": "#2A2A4A", "nameBarColor": "#1A1A3A" },
+    "ROYAL":    { "frameAsset": "card_frame_royal",    "tintColor": "#3D2B1F", "nameBarColor": "#2A1A0A" },
+    "STATIC":   { "frameAsset": "card_frame_static",   "tintColor": "#1B3A2A", "nameBarColor": "#0A2A1A" },
+    "SPELL":    { "frameAsset": "card_frame_spell",    "tintColor": "#2A1B3D", "nameBarColor": "#1A0A2A" }
   },
+
   "hud": {
-    "panelBg": "#16213E",
-    "panelAlpha": 0.97,
-    "playerNameColor": "#00FF88",
-    "enemyNameColor": "#FF4444",
-    "legColor": "#F5A623",
-    "legRateColor": "#AAAAAA",
-    "hpBarFull": "#00FF88",
-    "hpBarMid": "#F5A623",
-    "hpBarLow": "#FF4444",
-    "hpBarBg": "#333333",
-    "phaseLabelColor": "#F5A623",
-    "cardPlayZoneBorderColor": "#4FC3F7",
-    "cardPlayZoneBorderAlpha": 0.6
+    "panelColor":              "#16213E",
+    "panelAlpha":              0.92,
+    "panelStroke":             "#4FC3F7",
+    "panelStrokeWidth":        1,
+    "hpBarBg":                 "#333333",
+    "hpBarFillPlayer":         "#00FF88",
+    "hpBarFillEnemy":          "#FF4444",
+    "legPipActive":            "#F5A623",
+    "legPipInactive":          "#333333",
+    "playerNameColor":         "#00FF88",
+    "opponentNameColor":       "#FF4444",
+    "phaseTextColor":          "#4FC3F7",
+    "turnNumberColor":         "#FFFFFF",
+    "cardPlayZoneBorderColor": "#F5A623",
+    "cardPlayZoneBorderAlpha": 0.4
   },
+
   "buttons": {
     "primary": {
-      "fillColor": "#4FC3F7",
-      "strokeColor": "#4FC3F7",
-      "strokeWidth": 1,
-      "textColor": "#000000",
-      "fontSize": 14,
-      "hoverFillColor": "#7dd6ff",
-      "hoverTextColor": "#000",
-      "cornerRadius": 6,
-      "paddingX": 16,
-      "paddingY": 8
+      "fillColor": "#1A3A5C", "strokeColor": "#4FC3F7", "strokeWidth": 1,
+      "textColor": "#FFFFFF", "fontSize": 14,
+      "hoverFillColor": "#2A5A8C", "hoverTextColor": "#FFFFFF",
+      "cornerRadius": 6, "paddingX": 16, "paddingY": 8
     },
     "secondary": {
-      "fillColor": "#2A2A4A",
-      "strokeColor": "#4A4A7A",
-      "strokeWidth": 1,
-      "textColor": "#AAAAAA",
-      "fontSize": 14,
-      "hoverFillColor": "#3a3a6a",
-      "hoverTextColor": "#fff",
-      "cornerRadius": 6,
-      "paddingX": 16,
-      "paddingY": 8
+      "fillColor": "#2A2A4A", "strokeColor": "#AAAAAA", "strokeWidth": 1,
+      "textColor": "#AAAAAA", "fontSize": 14,
+      "hoverFillColor": "#3A3A6A", "hoverTextColor": "#FFFFFF",
+      "cornerRadius": 6, "paddingX": 16, "paddingY": 8
     },
     "danger": {
-      "fillColor": "#FF4444",
-      "strokeColor": "#FF4444",
-      "strokeWidth": 1,
-      "textColor": "#FFFFFF",
-      "fontSize": 14,
-      "hoverFillColor": "#ff7777",
-      "hoverTextColor": "#fff",
-      "cornerRadius": 6,
-      "paddingX": 16,
-      "paddingY": 8
+      "fillColor": "#4A1A1A", "strokeColor": "#FF4444", "strokeWidth": 1,
+      "textColor": "#FF4444", "fontSize": 14,
+      "hoverFillColor": "#6A2A2A", "hoverTextColor": "#FFFFFF",
+      "cornerRadius": 6, "paddingX": 16, "paddingY": 8
     },
     "endTurn": {
-      "fillColor": "#00FF88",
-      "strokeColor": "#00FF88",
-      "strokeWidth": 1,
-      "textColor": "#000000",
-      "fontSize": 14,
-      "hoverFillColor": "#33ffaa",
-      "hoverTextColor": "#000",
-      "cornerRadius": 6,
-      "paddingX": 16,
-      "paddingY": 8
+      "fillColor": "#0A3A1A", "strokeColor": "#00FF88", "strokeWidth": 2,
+      "textColor": "#00FF88", "fontSize": 15,
+      "hoverFillColor": "#1A5A2A", "hoverTextColor": "#FFFFFF",
+      "cornerRadius": 8, "paddingX": 20, "paddingY": 10
     },
     "pass": {
-      "fillColor": "#16213E",
-      "strokeColor": "#4FC3F7",
-      "strokeWidth": 1,
-      "textColor": "#AAAAAA",
-      "fontSize": 14,
-      "hoverFillColor": "#1e2e50",
-      "hoverTextColor": "#fff",
-      "cornerRadius": 6,
-      "paddingX": 16,
-      "paddingY": 8
+      "fillColor": "#1A1A2E", "strokeColor": "#555577", "strokeWidth": 1,
+      "textColor": "#AAAAAA", "fontSize": 13,
+      "hoverFillColor": "#2A2A4A", "hoverTextColor": "#FFFFFF",
+      "cornerRadius": 6, "paddingX": 14, "paddingY": 8
     }
   },
+
   "overlays": {
-    "dimmerColor": "#000000",
-    "dimmerAlpha": 0.8,
-    "panelColor": "#16213E",
-    "panelAlpha": 0.97,
-    "panelStroke": "#4FC3F7",
-    "panelStrokeWidth": 1,
-    "titleColor": "#FFFFFF",
-    "bodyColor": "#AAAAAA",
+    "dimmerColor": "#000000", "dimmerAlpha": 0.8,
+    "panelColor": "#16213E", "panelAlpha": 0.97,
+    "panelStroke": "#4FC3F7", "panelStrokeWidth": 1,
+    "titleColor": "#FFFFFF", "bodyColor": "#AAAAAA",
     "cornerRadius": 10
   }
 }
@@ -3120,6 +4160,177 @@ After setting the variable, you can run the deployment with the Sepolia network:
 \`\`\`shell
 npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
 \`\`\`
+
+```
+
+# resize_assets.py
+
+```py
+"""
+resize_assets.py — Batch resize OnChainBattles art to spec dimensions.
+
+Uses Pillow's LANCZOS resampling (highest quality downscale).
+Creates a backup of originals in _originals/ before overwriting.
+
+USAGE:
+    python resize_assets.py                    # dry run (shows what would change)
+    python resize_assets.py --apply            # actually resize files
+    python resize_assets.py --apply --no-backup # skip backup (saves disk space)
+
+Run from project root:  D:\OnChainBattles>
+"""
+
+import os
+import sys
+import shutil
+from pathlib import Path
+
+try:
+    from PIL import Image
+except ImportError:
+    print("Pillow not installed. Run:  pip install Pillow")
+    sys.exit(1)
+
+# ─── Target dimensions from OCB_Master_Artwork_List ─────────────
+# Format:  directory_glob → (width, height)
+# Images already at target size are skipped.
+
+RESIZE_RULES = {
+    # Card art — exact display size in hand (140 wide × 90 art area)
+    "public/assets/cards/art/*.png": (140, 90),
+
+    # Card thumbnails — exact board unit size (100×100)
+    "public/assets/cards/thumb/*.png": (100, 100),
+
+    # Card frames — exact card size in hand (140×200)
+    "public/assets/cards/card_frame_*.png": (140, 200),
+    "public/assets/cards/card_back_pattern.png": (140, 200),
+
+    # Everything else stays the same
+    "public/assets/backgrounds/bg_main_menu.png": (1280, 720),
+    "public/assets/backgrounds/bg_battle.png":    (1280, 720),
+    "public/assets/backgrounds/bg_result.png":    (1280, 720),
+    "public/assets/backgrounds/bg_lobby.png":     (1280, 720),
+    "public/assets/backgrounds/bg_menu.png":      (1280, 720),
+    "public/assets/backgrounds/bg_board.png": (720, 720),
+    "public/assets/board/board_skin.png": (720, 720),
+    "public/assets/icons/*.png": (64, 64),
+    "public/assets/fx/*.png": (120, 120),
+    "public/assets/ui/logo.png": (300, 80),
+}
+
+
+# ─── Helpers ────────────────────────────────────────────────────
+
+def find_files(glob_pattern: str, project_root: Path) -> list[Path]:
+    """Resolve a glob pattern relative to project root."""
+    parts = glob_pattern.replace("/", os.sep)
+    return sorted(project_root.glob(parts))
+
+
+def resize_image(src: Path, target_w: int, target_h: int, dry_run: bool, backup_dir: Path | None):
+    """Resize a single image if it doesn't match target dimensions."""
+    try:
+        img = Image.open(src)
+    except Exception as e:
+        print(f"  SKIP  {src.name} — can't open: {e}")
+        return "skip"
+
+    cur_w, cur_h = img.size
+
+    # Already correct size
+    if cur_w == target_w and cur_h == target_h:
+        return "ok"
+
+    ratio_tag = f"{cur_w}×{cur_h} → {target_w}×{target_h}"
+
+    if dry_run:
+        print(f"  WOULD RESIZE  {src.name}  ({ratio_tag})")
+        return "would"
+
+    # Backup original
+    if backup_dir:
+        rel = src.relative_to(src.parents[len(src.parts) - 2])
+        backup_path = backup_dir / src.relative_to(backup_dir.parent.parent / "public")
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        if not backup_path.exists():
+            shutil.copy2(src, backup_path)
+
+    # Resize with LANCZOS (best quality for downscaling)
+    # Preserve alpha channel
+    resized = img.resize((target_w, target_h), Image.LANCZOS)
+    resized.save(src, "PNG", optimize=True)
+
+    print(f"  RESIZED  {src.name}  ({ratio_tag})")
+    return "resized"
+
+
+# ─── Main ───────────────────────────────────────────────────────
+
+def main():
+    apply = "--apply" in sys.argv
+    no_backup = "--no-backup" in sys.argv
+
+    # Find project root (script should be in project root)
+    project_root = Path.cwd()
+
+    # Verify we're in the right place
+    if not (project_root / "public" / "assets").is_dir():
+        # Try script's own directory
+        project_root = Path(__file__).parent
+        if not (project_root / "public" / "assets").is_dir():
+            print("ERROR: Run this script from the OnChainBattles project root.")
+            print("       e.g.:  cd D:\\OnChainBattles && python resize_assets.py")
+            sys.exit(1)
+
+    backup_dir = None
+    if apply and not no_backup:
+        backup_dir = project_root / "public" / "_originals"
+        backup_dir.mkdir(exist_ok=True)
+        print(f"Backing up originals to: {backup_dir}\n")
+
+    if not apply:
+        print("=" * 60)
+        print("DRY RUN — no files will be changed.")
+        print("Add --apply to actually resize files.")
+        print("=" * 60)
+        print()
+
+    stats = {"ok": 0, "resized": 0, "would": 0, "skip": 0, "missing": 0}
+
+    for glob_pattern, (tw, th) in RESIZE_RULES.items():
+        files = find_files(glob_pattern, project_root)
+
+        if not files:
+            # Single file pattern that doesn't exist
+            if "*" not in glob_pattern:
+                print(f"  MISSING  {glob_pattern}")
+                stats["missing"] += 1
+            continue
+
+        print(f"\n[{glob_pattern}]  target: {tw}×{th}  ({len(files)} files)")
+
+        for f in files:
+            # Skip .DS_Store and non-PNG
+            if f.suffix.lower() != ".png":
+                continue
+            result = resize_image(f, tw, th, dry_run=not apply, backup_dir=backup_dir)
+            stats[result] += 1
+
+    # Summary
+    print("\n" + "=" * 60)
+    if apply:
+        print(f"DONE.  Resized: {stats['resized']}  |  Already correct: {stats['ok']}  |  Skipped: {stats['skip']}  |  Missing: {stats['missing']}")
+        if backup_dir and backup_dir.exists():
+            print(f"\nOriginals saved in: {backup_dir}")
+            print("Delete _originals/ when you're happy with the results.")
+    else:
+        print(f"DRY RUN.  Would resize: {stats['would']}  |  Already correct: {stats['ok']}  |  Missing: {stats['missing']}")
+        print("\nRun with --apply to execute.")
+
+
+if __name__ == "__main__":
+    main()
 
 ```
 
@@ -3419,7 +4630,23 @@ async function refundTie(roomCode) {
 const rooms = {};
 
 io.on('connection', (socket) => {
+socket.on('game_over', async ({ roomCode, winnerIndex }) => {
+  const room = rooms[roomCode];
+  if (!room || room.settled) return;   // prevent double-settle
+  room.settled = true;
 
+  const winner = room.players[winnerIndex];
+  if (!winner?.wallet) {
+    console.log(`[Server] game_over in ${roomCode} but winner has no wallet (free mode)`);
+    return;
+  }
+
+  console.log(`[Server] game_over: ${winner.name} wins room ${roomCode}`);
+  const result = await payoutWinner(roomCode, winner.wallet);
+
+  // Notify both clients
+  io.to(roomCode).emit('payout_result', result);
+});
   // Game action relay — forward to opponent only
 socket.on('game_action', ({ roomCode, action }) => {
     socket.to(roomCode).emit('opponent_action', action);
@@ -3555,6 +4782,90 @@ socket.on('game_action', ({ roomCode, action }) => {
 server.listen(3001, () => {
   console.log('[Server] Socket.io running on port 3001');
 });
+```
+
+# src\config\DeckLoader.ts
+
+```ts
+// ============================================================
+// DeckLoader.ts
+// Fetches deck card IDs from /public/deck.config.json at runtime.
+// Developer edits the JSON file to change the deck — no code changes needed.
+// Falls back to UNITS_ONLY_DECK_IDS if the file is missing or invalid.
+// ============================================================
+
+import { UNITS_ONLY_DECK_IDS, getCard } from '../game/data/CardDefinitions';
+
+class DeckLoaderClass {
+  private deckIds: string[] | null = null;
+  private readonly CONFIG_PATH = '/deck.config.json';
+
+  /**
+   * Load deck from /public/deck.config.json.
+   * Call once during PreloadScene. Result is cached.
+   * Safe to call multiple times — returns cache after first load.
+   */
+  async load(): Promise<string[]> {
+    if (this.deckIds !== null) return this.deckIds;
+
+    try {
+      const res = await fetch(this.CONFIG_PATH);
+      if (!res.ok) {
+        console.warn('[DeckLoader] deck.config.json not found — using built-in deck');
+        return this.useFallback();
+      }
+
+      const json = await res.json();
+
+      if (!Array.isArray(json.deckIds)) {
+        console.error('[DeckLoader] deck.config.json missing "deckIds" array — using built-in deck');
+        return this.useFallback();
+      }
+
+      const ids: string[] = json.deckIds;
+
+      // Validate every card ID exists in CardDefinitions
+      const invalid = ids.filter(id => {
+        try { getCard(id); return false; }
+        catch { return true; }
+      });
+
+      if (invalid.length > 0) {
+        console.error(`[DeckLoader] Unknown card IDs in deck.config.json: ${invalid.join(', ')} — using built-in deck`);
+        return this.useFallback();
+      }
+
+      if (ids.length !== 31) {
+        console.warn(`[DeckLoader] deck.config.json has ${ids.length} cards, expected 31. Loading anyway.`);
+      }
+
+      console.log(`[DeckLoader] Loaded ${ids.length} cards from deck.config.json`);
+      this.deckIds = ids;
+      return this.deckIds;
+
+    } catch (err) {
+      console.warn('[DeckLoader] Failed to fetch deck.config.json — using built-in deck', err);
+      return this.useFallback();
+    }
+  }
+
+  /** Synchronous get — only works after load() has been called. Returns fallback if not yet loaded. */
+  get(): string[] {
+    return this.deckIds ?? UNITS_ONLY_DECK_IDS;
+  }
+
+  /** Clear cache — forces re-fetch on next load() call. */
+  invalidate(): void {
+    this.deckIds = null;
+  }
+
+  private useFallback(): string[] {
+    this.deckIds = [...UNITS_ONLY_DECK_IDS];
+    return this.deckIds;
+  }
+}
+
+export const DeckLoader = new DeckLoaderClass();
 ```
 
 # src\config\LayoutLoader.ts
@@ -4386,6 +5697,8 @@ export const EV = {
   // UI selection (SelectionManager → renderers)
   SELECTION_CHANGED:   'SELECTION_CHANGED',
   HIGHLIGHTS_CHANGED:  'HIGHLIGHTS_CHANGED',
+  INPUT_BOARD_CLICK:   'INPUT_BOARD_CLICK',   // BoardRenderer → SelectionManager
+INPUT_HAND_CLICK:    'INPUT_HAND_CLICK',    // HandRenderer  → SelectionManager
   CARD_HOVERED:        'CARD_HOVERED',
   CARD_HOVER_END:      'CARD_HOVER_END',
   DETAIL_SHOW:         'DETAIL_SHOW',
@@ -6245,53 +7558,41 @@ export function getCard(id: string): CardDefinition {
 // Both players use identical deck, independently shuffled.
 // ─────────────────────────────────────────────
 
-export const DEMO_DECK_IDS: string[] = [
-  // Standard units — 3 copies
-  'foot_soldier', 'foot_soldier', 'foot_soldier',
-  // Standard units — 2 copies
-  'pikeman', 'pikeman',
-  'archer', 'archer',
-  'assassin', 'assassin',
-  'militia', 'militia',
-  'scout', 'scout',
-  'lancer', 'lancer',
-  'messenger', 'messenger',
-  // Standard units — 1 copy
-  'mystic',
-  // Royal units — 2 copies
-  'swordsman', 'swordsman',
-  'priest', 'priest',
-  'inquisitor', 'inquisitor',
-  'knight', 'knight',
-  'scribe', 'scribe',
-  // Royal units — 1 copy
-  'princess',
-  'commander',
-  'knights_guard',
-  // Structures — 2 copies
-  'temple', 'temple',
-  'village', 'village',
-  // Structures — 1 copy
-  'castle',
-  // Spells — 2 copies
-  'disease', 'disease',
-  'reform', 'reform',
-  'war_horn', 'war_horn',
-  'treason', 'treason',
-  // Spells — 1 copy
-  'casus_belli',
-  'civil_war',
-  'earthquake',
-  'motherland',
-  'coup',
-  'peasant_revolt',
+// ─────────────────────────────────────────────
+// UNITS-ONLY DECK — 31 cards (King pre-placed, not included)
+// No spells or structures. Focused on unit combat for MVP playtesting.
+// Both players use identical pool, each gets an independently shuffled copy.
+// ─────────────────────────────────────────────
+
+export const UNITS_ONLY_DECK_IDS: string[] = [
+  // Standard units
+  'foot_soldier', 'foot_soldier', 'foot_soldier',  // 3 copies — cheap backbone
+  'pikeman',      'pikeman',                        // 2 — anti-cavalry
+  'archer',       'archer',                         // 2 — ranged
+  'assassin',     'assassin',                       // 2 — fast striker
+  'militia',      'militia',                        // 2 — expendable
+  'scout',        'scout',                          // 2 — board info
+  'lancer',       'lancer',                         // 2 — cavalry charge
+  'messenger',    'messenger',                      // 2 — utility
+  'mystic',                                         // 1 — revive wildcard
+  // Royal units
+  'swordsman',    'swordsman',                      // 2 — reliable fighter
+  'priest',       'priest',                         // 2 — healer
+  'inquisitor',   'inquisitor',                     // 2 — LEG drain threat
+  'knight',       'knight',                         // 2 — heavy cavalry
+  'scribe',       'scribe',                         // 2 — deck utility
+  'princess',                                       // 1 — CROWN boost
+  'commander',                                      // 1 — aura leader
+  'knights_guard',                                  // 1 — defensive elite
 ];
 
-// Sanity check — 31 cards
-if (DEMO_DECK_IDS.length !== 31) {
-  console.error(`[CardDefinitions] DEMO_DECK_IDS has ${DEMO_DECK_IDS.length} entries, expected 31`);
+// Sanity check — must be exactly 31
+if (UNITS_ONLY_DECK_IDS.length !== 31) {
+  console.error(`[CardDefinitions] UNITS_ONLY_DECK_IDS has ${UNITS_ONLY_DECK_IDS.length} entries, expected 31`);
 }
 
+// Keep old name as alias so nothing else breaks during transition
+export const DEMO_DECK_IDS = UNITS_ONLY_DECK_IDS;
 ```
 
 # src\game\GameEngine.ts
@@ -6318,13 +7619,14 @@ import {
   applyDamage, applyFullHeal, applyAutoHeal, applyReform, applyEarthquakeDamage,
 } from './CombatResolver';
 import { getValidMoves, getValidAttacks, getValidDeploySquares, isMoveValid, isAttackValid, isLancerForwardMove } from './MovementRules';
-import { getCard, DEMO_DECK_IDS } from './data/CardDefinitions';
+import { DeckLoader } from '../config/DeckLoader'; 
 import { Player, TurnPhase, EngineStatus } from './types/GameTypes';
 import type { Unit, Position, GameStateSnapshot } from './types/GameTypes';
 import type { GameEvent, EvGameOver } from './types/EventTypes';
 import type { PendingInteraction } from './types/AbilityTypes';
 import { Allegiance, CardClass, CardFlag, SubType } from './types/CardTypes';
-
+import { UNITS_ONLY_DECK_IDS, getCard } from './data/CardDefinitions';
+//import { getCard, DEMO_DECK_IDS } from './data/CardDefinitions';
 // ─────────────────────────────────────────────
 // PUBLIC API INTERFACE (consumed by SelectionManager)
 // ─────────────────────────────────────────────
@@ -6346,6 +7648,7 @@ export interface IGameEngineAPI {
   getState(): GameStateSnapshot;
   on(handler: (event: GameEvent) => void): void;
   off(handler: (event: GameEvent) => void): void;
+  
 }
 
 // ─────────────────────────────────────────────
@@ -6393,26 +7696,21 @@ export class GameEngine implements IGameEngineAPI {
   }
 
   /** Start a new game. Deals opening hands and pre-places Kings. */
-  startGame(): void {
-    // Load decks
-    this.players[Player.P1].loadDeck([...DEMO_DECK_IDS]);
-    this.players[Player.P2].loadDeck([...DEMO_DECK_IDS]);
+startGame(): void {
+  const deck = DeckLoader.get();  // reads cached result from PreloadScene load
 
-    // Pre-place Kings
-    this.prePlaceKing(Player.P1);
-    this.prePlaceKing(Player.P2);
+this.players[Player.P1].loadDeck([...deck], Player.P1);  // uses seed + 0
+this.players[Player.P2].loadDeck([...deck], Player.P2);  // uses seed + 1
 
-    // Draw opening hands (4 cards each)
-    this.drawOpeningHand(Player.P1);
-    this.drawOpeningHand(Player.P2);
-
-    // Recalculate modifiers (Kings on board)
-    this.auras.recalculateModifiers(this.board, this.mods);
-
-    // Start turn 1 for P1
-    this.status = EngineStatus.IDLE;
-    this.startTurn();
-  }
+  // rest unchanged...
+  this.prePlaceKing(Player.P1);
+  this.prePlaceKing(Player.P2);
+  this.drawOpeningHand(Player.P1);
+  this.drawOpeningHand(Player.P2);
+  this.auras.recalculateModifiers(this.board, this.mods);
+  this.status = EngineStatus.IDLE;
+  this.startTurn();
+}
 
   // ─────────────────────────────────────────────
   // PUBLIC API — QUERIES (no state change)
@@ -6756,6 +8054,14 @@ export class GameEngine implements IGameEngineAPI {
     this.advancePhase(TurnPhase.LEG);
     const ap = this.activePlayer;
     const mod = this.mods[ap];
+  // ── CROWN grows +1 each turn ──────────────────────────────
+  // legRateBase starts at 1 (Turn 1), becomes 2 on Turn 2, etc.
+  // Cap it so late game doesn't spiral — adjust cap to taste.
+  const CROWN_CAP = 10;
+  if (mod.legRateBase < CROWN_CAP) {
+    mod.legRateBase += 1;
+  }
+  // ─────────────────────────────────────────────────────────
 
     // 1. Gain LEG
     const gained = mod.gainLEG();
@@ -6905,8 +8211,10 @@ export class GameEngine implements IGameEngineAPI {
     // On-kill ability: Inquisitor LEG drain
     const killedTarget = events.find(e => e.type === 'UNIT_DIED');
     if (killedTarget && killedTarget.type === 'UNIT_DIED') {
-      const killEvents = resolveOnKill(attacker, killedTarget.cardId, this.board, this.players, this.mods);
-      this.applyEvents(killEvents);
+      // AFTER:
+      const killEvents = resolveOnKill(attacker, defender, this.board, this.players, this.mods);
+      // AFTER:
+this.applyEvents(killEvents.events);
     }
 
     // King death = game over
@@ -7254,18 +8562,21 @@ function opponent(player: Player): Player {
 // Per-player LEG economy and timed effect management.
 // Pure TypeScript — no Phaser, no EventBus.
 // GameEngine owns two instances: [P1, P2].
+//
+// CROWN = CROWN determines both LEG gained AND LEG cap each turn.
+// LEG pool can never exceed current CROWN value (unless Motherland overflow).
+// This keeps the economy tight: turn 3 → CROWN 3, cap 3. No hoarding.
 // ============================================================
 
 import type { GameModifiers as IGameModifiers, TimedEffect } from './types/GameTypes';
 import { Player } from './types/GameTypes';
 
-const LEG_CAP = 10;
 const LEG_RATE_MIN = 1;
 
 export class GameModifiers {
   readonly player: Player;
 
-  legRateBase: number   = 1;   // King always 1
+  legRateBase: number   = 0;   // Grows +1 each turn via GameEngine.runLEGPhase
   legRateBonus: number  = 0;   // Princess +1 per copy on board
   legRatePenalty: number = 0;  // Permanent drains (Casus Belli, Mystic, Inquisitor, Revolt)
   legRateFrozen: boolean = false; // Civil War
@@ -7274,7 +8585,7 @@ export class GameModifiers {
   royalCostPenalty: number  = 0; // Peasant Revolt +2 (no floor)
 
   legPool: number = 0;
-  legOverflow: boolean = false;  // Motherland: allow >10 for this turn only
+  legOverflow: boolean = false;  // Motherland: allow exceeding CROWN cap for this turn only
 
   timedEffects: TimedEffect[] = [];
 
@@ -7286,10 +8597,23 @@ export class GameModifiers {
   // COMPUTED RATES
   // ─────────────────────────────────────────────
 
-  /** Effective LEG gained per turn. Minimum 1 unless frozen by Civil War. */
+  /** Effective LEG gained per turn (= CROWN). Minimum 1 unless frozen by Civil War. */
   getEffectiveLEGRate(): number {
     if (this.legRateFrozen) return 0;
     return Math.max(LEG_RATE_MIN, this.legRateBase + this.legRateBonus - this.legRatePenalty);
+  }
+
+  /**
+   * Dynamic LEG pool cap = current CROWN value.
+   * Pool can never exceed this unless Motherland overflow is active.
+   * When Civil War freezes CROWN to 0, cap is still based on the
+   * unfrozen rate so existing LEG isn't wiped — only gain is blocked.
+   */
+  getLEGCap(): number {
+    if (this.legOverflow) return Infinity;
+    // Use the unfrozen rate for cap so Civil War doesn't destroy existing pool
+    const unfrozenRate = Math.max(LEG_RATE_MIN, this.legRateBase + this.legRateBonus - this.legRatePenalty);
+    return unfrozenRate;
   }
 
   /** Effective cost for a card. Royal cards get discount applied, floor 0. */
@@ -7302,10 +8626,15 @@ export class GameModifiers {
   // LEG POOL OPERATIONS
   // ─────────────────────────────────────────────
 
-  /** Apply LEG gain at start of LEG phase. Returns amount actually gained. */
+  /**
+   * Apply LEG gain at start of LEG phase. Returns amount actually gained.
+   * Cap = CROWN (effective rate), so pool tops out at CROWN value.
+   * Example: CROWN 5, pool was 2 → gain 5 → pool = min(7, 5) = 5.
+   * Effectively you always refill to CROWN each turn.
+   */
   gainLEG(): number {
     const rate = this.getEffectiveLEGRate();
-    const cap = this.legOverflow ? Infinity : LEG_CAP;
+    const cap = this.getLEGCap();
     const before = this.legPool;
     this.legPool = Math.min(this.legPool + rate, cap);
     return this.legPool - before;
@@ -7318,9 +8647,9 @@ export class GameModifiers {
     return true;
   }
 
-  /** Forcibly add LEG (steal, bonus effects). Does not exceed cap unless overflow. */
+  /** Forcibly add LEG (steal, bonus effects). Does not exceed CROWN cap unless overflow. */
   addLEG(amount: number): void {
-    const cap = this.legOverflow ? Infinity : LEG_CAP;
+    const cap = this.getLEGCap();
     this.legPool = Math.min(this.legPool + amount, cap);
   }
 
@@ -7341,6 +8670,8 @@ export class GameModifiers {
   /** Add permanent LEG rate penalty. Minimum effective rate always enforced. */
   addLEGRatePenalty(amount: number): void {
     this.legRatePenalty += amount;
+    // Clamp pool to new (lower) cap immediately
+    this.clampPool();
   }
 
   /** Recalculate Royal discount based on structures/units on board. */
@@ -7350,7 +8681,12 @@ export class GameModifiers {
 
   /** Set bonus LEG rate from Princess count on board. */
   setLEGRateBonus(princessCount: number): void {
+    const oldBonus = this.legRateBonus;
     this.legRateBonus = princessCount;
+    // If Princess died and bonus dropped, cap may have lowered — clamp pool
+    if (princessCount < oldBonus) {
+      this.clampPool();
+    }
   }
 
   // ─────────────────────────────────────────────
@@ -7394,9 +8730,28 @@ export class GameModifiers {
     this.timedEffects = this.timedEffects.filter(e => e.type !== type);
   }
 
-  /** Clear the one-turn overflow flag. Called at END phase. */
+  /**
+   * Clear the one-turn overflow flag. Called at END phase.
+   * After clearing, clamp pool back to CROWN cap.
+   */
   clearOverflow(): void {
     this.legOverflow = false;
+    this.clampPool();
+  }
+
+  // ─────────────────────────────────────────────
+  // INTERNAL HELPERS
+  // ─────────────────────────────────────────────
+
+  /**
+   * Clamp legPool to current cap.
+   * Called whenever cap might have decreased (penalty added, Princess died, overflow cleared).
+   */
+  private clampPool(): void {
+    const cap = this.getLEGCap();
+    if (this.legPool > cap) {
+      this.legPool = cap;
+    }
   }
 
   // ─────────────────────────────────────────────
@@ -7416,7 +8771,6 @@ export class GameModifiers {
     };
   }
 }
-
 ```
 
 # src\game\MovementRules.ts
@@ -7808,13 +9162,26 @@ export class PlayerState {
   // ─────────────────────────────────────────────
 
   /** Load and shuffle a deck from an array of card IDs. */
-  loadDeck(cardIds: string[]): void {
-    this.deck = [...cardIds];
-    this.shuffle(this.deck);
-    this.hand    = [];
-    this.discard = [];
-    this.graveyard = [];
+/** Load and shuffle a deck from an array of card IDs. */
+loadDeck(cardIds: string[], playerIndex: number = 0): void {
+  this.deck = [...cardIds];
+  
+  // Temporarily offset the seed so P1 and P2 get different shuffles.
+  // reshuffleDiscard() calls shuffle() normally and is unaffected.
+  const gs = GameState as any;
+  const originalSeed = gs.gameSeed;
+  if (originalSeed && originalSeed > 0) {
+    gs.gameSeed = originalSeed + playerIndex;
   }
+  
+  this.shuffle(this.deck);          // existing shuffle — unchanged
+  
+  gs.gameSeed = originalSeed;       // restore immediately after
+  
+  this.hand      = [];
+  this.discard   = [];
+  this.graveyard = [];
+}
 
   // ─────────────────────────────────────────────
   // DRAW
@@ -9172,7 +10539,7 @@ export interface HUDSnapshot {
   opponentKingHP: number;
   opponentKingMaxHP: number;
   playerLEG: number;
-  playerLEGRate: number;
+  playerCrown: number;  
   opponentLEGCount: number;   // number of cards (hidden)
   currentPhase: string;
   turnNumber: number;
@@ -9687,16 +11054,13 @@ export class SelectionManager {
   private attachEventListeners(): void {
     // Board cell clicks routed from BoardRenderer
     this.unsubs.push(
-      EventBus.on(EV.SELECTION_CHANGED, ({ source, col, row, index }) => {
-        if (source === 'board' && col !== undefined && row !== undefined) {
-          // Only process if SelectionManager didn't originate this event
-          // (BoardRenderer fires this; we then decide what to do)
-          this.onBoardCellClicked(col, row);
-        }
-        if (source === 'hand' && index !== undefined) {
-          this.onHandCardClicked(index);
-        }
-      }),
+    EventBus.on(EV.INPUT_BOARD_CLICK, ({ col, row }) => {
+      this.onBoardCellClicked(col, row);
+    }),
+
+    EventBus.on(EV.INPUT_HAND_CLICK, ({ index }) => {
+      this.onHandCardClicked(index);
+    }),
 
       // When engine enters AWAITING_INPUT, set mode
       EventBus.on(EV.PENDING_TARGET, () => {
@@ -9729,13 +11093,8 @@ export class SelectionManager {
 # src\main.ts
 
 ```ts
-// main.ts — Phaser game bootstrap
-// STEP 3 PATCH: Added PreLoadScene as first scene.
-// PreLoadScene loads all assets, then transitions to MainMenuScene.
-// All other scenes now have textures available when they start.
-
 import Phaser from 'phaser';
-import PreLoadScene    from './scenes/PreloadScene';   // ← ADDED
+import PreLoadScene    from './scenes/PreloadScene';
 import MainMenuScene   from './scenes/MainMenuScene';
 import RoomScene       from './scenes/RoomScene';
 import BattleScene     from './scenes/BattleScene';
@@ -9746,8 +11105,16 @@ const config: Phaser.Types.Core.GameConfig = {
     width: 1280,
     height: 720,
     backgroundColor: '#1A1A2E',
+    parent: 'game-container',
+
+    roundPixels: true,
+    antialias: true,
+
+    dom: {
+        createContainer: true,
+    },
     scene: [
-        PreLoadScene,    // ← FIRST: loads all assets, then starts MainMenuScene
+        PreLoadScene,
         MainMenuScene,
         RoomScene,
         BattleScene,
@@ -9787,13 +11154,14 @@ export interface RoomCallbacks {
   onRoomCreated: (code: string) => void;
   onRoomJoined: (code: string) => void;
   onOpponentJoined: (opponentName: string) => void;
-  onOpponentAction: (action: GameAction) => void;   // ← ADD
+  onOpponentAction: (action: GameAction) => void;
   onOpponentDisconnected: () => void;
   onOpponentRollReceived: (roll: number, opponentName: string) => void;
   onError: (message: string) => void;
   onBothCryptoReady?: () => void;
   onCryptoMatchResult?: (result: CryptoMatchResult) => void;
   onTieReroll?: () => void;
+  onPayoutResult?: (result: { success: boolean; txHash?: string; error?: string }) => void;  // ← ADD
 }
 
 export interface CryptoMatchResult {
@@ -9937,7 +11305,11 @@ this.socket.on("game_seed", (data: { seed: number }) => {
       console.log("[SocketManager] Crypto match result:", result);
       this.callbacks?.onCryptoMatchResult?.(result);
     });
-
+this.socket.on('payout_result', (data: { success: boolean; txHash?: string; error?: string }) => {
+  console.log('[SocketManager] Payout result:', data);
+  (GameState as any).payoutResult = data;
+  this.callbacks?.onPayoutResult?.(data);
+});
     this.socket.on("tieReroll", () => {
       console.log("[SocketManager] Tie — re-rolling");
       this.callbacks?.onTieReroll?.();
@@ -9954,6 +11326,13 @@ sendGameAction(action: GameAction): void {
     action,
   });
   console.log('[SocketManager] Sent game_action:', action.type);
+}
+sendGameOver(localPlayerIndex: number, localPlayerWon: boolean): void {
+  console.log(`[SocketManager] Sending game_over, won: ${localPlayerWon}`);
+  this.socket?.emit('game_over', {
+    roomCode: GameState.roomCode,
+    winnerIndex: localPlayerWon ? localPlayerIndex : (localPlayerIndex === 0 ? 1 : 0),
+  });
 }
 // ADD this method to SocketManagerClass, before disconnect():
 setCallbacks(callbacks: RoomCallbacks): void {
@@ -9992,6 +11371,7 @@ import type { BattleLayoutJSON, ThemeJSON, CellRenderData, CardRenderData } from
 import { EventBus, EV } from '../events/EventBus';
 import { ThemeLoader } from '../config/ThemeLoader';
 import { CardRenderer } from './CardRenderer';
+import { setContainerHitArea } from '../utils/PhaserUtils';
 
 type HighlightType = 'none' | 'move' | 'attack' | 'aura' | 'selected' | 'hover';
 
@@ -10018,7 +11398,8 @@ export class BoardRenderer {
 
   private unsubs: Array<() => void> = [];
 
-  constructor(scene: Phaser.Scene, layout: BattleLayoutJSON, theme: ThemeJSON) {
+  constructor(scene: Phaser.Scene, layout: BattleLayoutJSON, theme: ThemeJSON, localPlayerIndex: number) {
+    this.localPlayerIndex = localPlayerIndex; 
     this.scene = scene;
     this.layout = layout;
     this.theme = theme;
@@ -10031,7 +11412,8 @@ export class BoardRenderer {
     this.unitContainer      = scene.add.container(0, 0);
     this.overlayContainer   = scene.add.container(0, 0);
     this.coordContainer     = scene.add.container(0, 0);
-
+    this.cellContainer.setDepth(1);
+this.unitContainer.setDepth(5);  // units above cells, below HUD hand
     this.rootContainer.add([
       this.cellContainer,
       this.highlightContainer,
@@ -10054,18 +11436,19 @@ setLocalPlayer(index: number): void {
 }
 
 // Add private helper:
+// AFTER (correct):
 private mirrorRow(row: number): number {
-  if (this.localPlayerIndex === 1) {
+  if (this.localPlayerIndex === 0) {   // P1 needs flip: their King is row 0, should show at bottom
     return (this.layout.grid.rows - 1) - row;
   }
-  return row;
+  return row;  // P2 needs no flip: their King is row 5, already at bottom naturally
 }
   // ─────────────────────────────────────────────
   // PUBLIC API
   // ─────────────────────────────────────────────
 
   /** Place a unit thumbnail on the board at (col, row). */
-  renderUnit(data: CardRenderData, col: number, row: number): void {
+ renderUnit(data: CardRenderData, col: number, row: number): void {
     const key = this.cellKey(col, row);
     this.clearUnit(col, row);
 
@@ -10078,17 +11461,15 @@ private mirrorRow(row: number): number {
     const unit = this.cardRenderer.render(data, 'thumbnail', cx, cy);
     unit.setName(key);
 
-    // Add interactivity for selection
-    unit.setSize(L.width, L.height);
-    unit.setInteractive();
+    // Interactivity — single call, no setSize needed
+    setContainerHitArea(unit, L.width, L.height);
     unit.on('pointerover', () => this.onCellHover(col, row));
     unit.on('pointerout',  () => this.onCellHoverEnd(col, row));
-    unit.on('pointerdown', () => EventBus.emit(EV.SELECTION_CHANGED, { col, row, source: 'board' }));
+    unit.on('pointerdown', () => EventBus.emit(EV.INPUT_BOARD_CLICK, { col, row }));
 
     this.unitContainer.add(unit);
     this.unitContainers.set(key, unit);
-  }
-
+}
   /** Remove a unit thumbnail from a cell. */
   clearUnit(col: number, row: number): void {
     const key = this.cellKey(col, row);
@@ -10278,19 +11659,33 @@ private mirrorRow(row: number): number {
   // PRIVATE — GRID BUILD
   // ─────────────────────────────────────────────
 
-  private buildGrid(): void {
+private buildGrid(): void {
     const g = this.layout.grid;
     const T = this.theme.board;
 
+    // Board skin texture behind the grid (if loaded)
+    const boardW = g.cols * g.cellSize;
+    const boardH = g.rows * g.cellSize;
+    if (this.scene.textures.exists('board_skin')) {
+      const skin = this.scene.add.image(
+        g.originX + boardW / 2,
+        g.originY + boardH / 2,
+        'board_skin'
+      ).setDisplaySize(boardW, boardH);
+      this.cellContainer.add(skin);
+    }
+
     for (let row = 0; row < g.rows; row++) {
       for (let col = 0; col < g.cols; col++) {
-        const px = g.originX + col * g.cellSize;
-        const py = g.originY + row * g.cellSize;
+      const px = g.originX + col * g.cellSize;
+      const displayRow = this.mirrorRow(row);
+      const py = g.originY + displayRow * g.cellSize;
         const isEven = (col + row) % 2 === 0;
 
         const cell = this.scene.add.graphics();
         const fillHex = isEven ? T.cellEvenFill : T.cellOddFill;
-        cell.fillStyle(ThemeLoader.hexToNum(fillHex), 1);
+        cell.fillStyle(ThemeLoader.hexToNum(fillHex), 0.6);
+
         cell.fillRect(px, py, g.cellSize, g.cellSize);
 
         // Grid line
@@ -10304,7 +11699,9 @@ private mirrorRow(row: number): number {
         );
         cell.on('pointerover', () => this.onCellHover(col, row));
         cell.on('pointerout',  () => this.onCellHoverEnd(col, row));
-        cell.on('pointerdown', () => EventBus.emit(EV.SELECTION_CHANGED, { col, row, source: 'board' }));
+        cell.on('pointerdown', () => EventBus.emit(EV.INPUT_BOARD_CLICK, { col, row }));
+
+
 
         this.cellContainer.add(cell);
         this.cellGraphics.set(this.cellKey(col, row), cell);
@@ -10313,38 +11710,25 @@ private mirrorRow(row: number): number {
   }
 
   /** Player / enemy half tints — subtle color overlay on each half */
-  private buildHalfTints(): void {
-    const g = this.layout.grid;
-    const T = this.theme.board;
+ // BEFORE:
+private buildHalfTints(): void {
+  const g = this.layout.grid;
+  const T = this.theme.board;
+  const playerHalf = ThemeLoader.hexToColorAlpha(T.playerHalfTint);
+  const enemyHalf  = ThemeLoader.hexToColorAlpha(T.enemyHalfTint);
+  const halfRows = Math.floor(g.rows / 2);
 
-    const playerHalf = ThemeLoader.hexToColorAlpha(T.playerHalfTint);
-    const enemyHalf  = ThemeLoader.hexToColorAlpha(T.enemyHalfTint);
+  // Player half always at bottom visually (both P1 and P2 see their side at bottom)
+  const playerTint = this.scene.add.graphics();
+  playerTint.fillStyle(playerHalf.color, playerHalf.alpha);
+  playerTint.fillRect(g.originX, g.originY + halfRows * g.cellSize, g.cols * g.cellSize, halfRows * g.cellSize);
 
-    const halfRows = Math.floor(g.rows / 2);
+  const enemyTint = this.scene.add.graphics();
+  enemyTint.fillStyle(enemyHalf.color, enemyHalf.alpha);
+  enemyTint.fillRect(g.originX, g.originY, g.cols * g.cellSize, halfRows * g.cellSize);
 
-    // Player half = bottom rows (own side)
-    const playerTint = this.scene.add.graphics();
-    playerTint.fillStyle(playerHalf.color, playerHalf.alpha);
-    playerTint.fillRect(
-      g.originX,
-      g.originY + halfRows * g.cellSize,
-      g.cols * g.cellSize,
-      halfRows * g.cellSize
-    );
-
-    // Enemy half = top rows
-    const enemyTint = this.scene.add.graphics();
-    enemyTint.fillStyle(enemyHalf.color, enemyHalf.alpha);
-    enemyTint.fillRect(
-      g.originX,
-      g.originY,
-      g.cols * g.cellSize,
-      halfRows * g.cellSize
-    );
-
-    // Insert tints above cell graphics but below highlights
-    this.cellContainer.add([playerTint, enemyTint]);
-  }
+  this.cellContainer.add([playerTint, enemyTint]);
+}
 
   private buildCoords(): void {
     if (!this.layout.grid.coordsVisible) return;
@@ -10369,12 +11753,14 @@ private mirrorRow(row: number): number {
     }
 
     // Row labels (1-6) left of the grid
-    for (let row = 0; row < g.rows; row++) {
-      const rx = g.originX - g.coordsFontSize - 2;
-      const ry = g.originY + row * g.cellSize + g.cellSize / 2;
-      const lbl = this.scene.add.text(rx, ry, String(row + 1), fontConfig).setOrigin(0.5, 0.5);
-      this.coordContainer.add(lbl);
-    }
+// Row labels (1-6) left of the grid — mirrored for P2
+for (let row = 0; row < g.rows; row++) {
+  const displayRow = this.mirrorRow(row);
+  const rx = g.originX - g.coordsFontSize - 2;
+  const ry = g.originY + displayRow * g.cellSize + g.cellSize / 2;
+  const lbl = this.scene.add.text(rx, ry, String(row + 1), fontConfig).setOrigin(0.5, 0.5);
+  this.coordContainer.add(lbl);
+}
   }
 
   // ─────────────────────────────────────────────
@@ -10389,7 +11775,8 @@ private mirrorRow(row: number): number {
     const T = this.theme.board;
 
     const px = g.originX + col * g.cellSize;
-    const py = g.originY + row * g.cellSize;
+const displayRow = this.mirrorRow(row);
+const py = g.originY + displayRow * g.cellSize;
 
     const gfx = this.scene.add.graphics();
 
@@ -10656,9 +12043,11 @@ export class CardRenderer {
     // a separate variable. It's removed from the children.push() call below.
 
     // — Art area —
+  // — Art area —
+// — Art area —
     const artY = bandH;
     const artH = L.artAreaHeight;
-    const artKey = `art_${data.id}`;
+    const artKey = data.artKey ?? `art_${data.id}`;
     let artObj: Phaser.GameObjects.GameObject;
 
     if (this.scene.textures.exists(artKey)) {
@@ -10760,11 +12149,18 @@ export class CardRenderer {
 
     const w = L.width;
     const h = L.height;
+// — Art: prefer dedicated thumb (200×200, closer to display size = sharper)
+    // Falls back to full art, then grey rectangle.
+    // Use data.artKey (set correctly by toCardRenderData as "art_<cardId>")
+    // and derive thumb key from it, since data.id is instanceId not cardId.
+    const baseArtKey = data.artKey ?? `art_${data.id}`;
+    const thumbKey = baseArtKey.replace(/^art_/, 'thumb_');
+    const textureKey = this.scene.textures.exists(thumbKey) ? thumbKey
+                     : this.scene.textures.exists(baseArtKey) ? baseArtKey
+                     : null;
 
-    // — Art fills entire thumbnail — already has correct fallback, unchanged
-    const artKey = `art_${data.id}`;
-    if (this.scene.textures.exists(artKey)) {
-      const art = this.scene.add.image(0, 0, artKey).setOrigin(0, 0).setDisplaySize(w, h);
+    if (textureKey) {
+      const art = this.scene.add.image(0, 0, textureKey).setOrigin(0, 0).setDisplaySize(w, h);
       container.add(art);
     } else {
       const ph = this.scene.add.graphics();
@@ -11115,6 +12511,7 @@ import Phaser from 'phaser';
 import type { BattleLayoutJSON, ThemeJSON, CardRenderData } from '../game/types/UITypes';
 import { EventBus, EV } from '../events/EventBus';
 import { CardRenderer } from './CardRenderer';
+import { setContainerHitArea } from '../utils/PhaserUtils';
 
 export class HandRenderer {
   private scene: Phaser.Scene;
@@ -11147,7 +12544,8 @@ export class HandRenderer {
 
     this.handContainer    = scene.add.container(0, 0);
     this.oppHandContainer = scene.add.container(0, 0);
-
+    this.handContainer.setDepth(10);
+  this.oppHandContainer.setDepth(10); 
     this.attachEventListeners();
   }
 
@@ -11259,10 +12657,9 @@ export class HandRenderer {
       cardContainer.setRotation(Phaser.Math.DegToRad(pos.angle));
 
       // Interactivity
-      const cardW = H.cardWidth;
-      const cardH = H.cardHeight;
-      cardContainer.setSize(cardW, cardH);
-      cardContainer.setInteractive();
+const fullW = this.layout.cards.full.width;
+const fullH = this.layout.cards.full.height;
+setContainerHitArea(cardContainer, fullW, fullH);
 
       const idx = i; // capture for closure
       cardContainer.on('pointerover',  () => this.onCardHover(idx));
@@ -11443,11 +12840,7 @@ export class HandRenderer {
     const newSelection = wasSelected ? null : index;
     this.setSelected(newSelection);
 
-    EventBus.emit(EV.SELECTION_CHANGED, {
-      source: 'hand',
-      index: newSelection,
-      card: newSelection !== null ? this.cards[newSelection] : null,
-    });
+ EventBus.emit(EV.INPUT_HAND_CLICK, { index: newSelection });
   }
 
   // ─────────────────────────────────────────────
@@ -11460,24 +12853,30 @@ export class HandRenderer {
         this.addCard(card);
       }),
 
-      EventBus.on(EV.CARD_PLAYED, ({ handIndex }) => {
-        this.removeCard(handIndex);
-        if (this.selectedIndex === handIndex) {
-          EventBus.emit(EV.SELECTION_CHANGED, { source: 'hand', index: null, card: null });
-        }
-      }),
+      EventBus.on(EV.CARD_PLAYED, ({ handIndex, isLocal }) => {
+  if (!isLocal) return;  // ← opponent played — opponent hand is count-based via HUD_REFRESH
+  this.removeCard(handIndex);
+  if (this.selectedIndex === handIndex) {
+    this.setSelected(null);
+  }
+}),
 
-      EventBus.on(EV.CARD_DISCARDED, ({ handIndex }) => {
-        this.removeCard(handIndex);
-      }),
+EventBus.on(EV.CARD_DISCARDED, ({ handIndex, isLocal }) => {
+  if (!isLocal) return;
+  this.removeCard(handIndex);
+}),
 
       // Update selected state from SelectionManager
-      EventBus.on(EV.SELECTION_CHANGED, ({ source, index }) => {
-        if (source === 'board' || source === 'clear') {
-          // Board selection clears hand selection
-          this.setSelected(null);
-        }
-      }),
+EventBus.on(EV.INPUT_BOARD_CLICK, () => {
+  this.setSelected(null);
+}),
+EventBus.on(EV.SELECTION_CHANGED, ({ source }) => {
+  if (source === 'clear') {
+    this.setSelected(null);
+  }
+}),
+    
+    
 
       // Opponent hand count update
       EventBus.on(EV.HUD_REFRESH, (snap) => {
@@ -11508,6 +12907,7 @@ import Phaser from 'phaser';
 import type { BattleLayoutJSON, ThemeJSON, HUDSnapshot, ButtonStyle } from '../game/types/UITypes';
 import { EventBus, EV } from '../events/EventBus';
 import { ThemeLoader } from '../config/ThemeLoader';
+import { setContainerHitArea } from '../utils/PhaserUtils';
 
 export class HUDRenderer {
   private scene: Phaser.Scene;
@@ -11575,7 +12975,7 @@ export class HUDRenderer {
     this.opponentNameText.setText(snap.opponentName);
     this.updatePlayerHP(snap.playerKingHP, snap.playerKingMaxHP);
     this.updateOpponentHP(snap.opponentKingHP, snap.opponentKingMaxHP);
-    this.updatePlayerLEG(snap.playerLEG, snap.playerLEGRate);
+    this.updatePlayerLEG(snap.playerLEG, snap.playerCrown);
     this.updateOpponentLEG(snap.opponentLEGCount);
     this.updatePhaseLabel(snap.currentPhase, snap.turnNumber);
     this.playerWinLossText.setText(`${snap.playerWins}W / ${snap.playerLosses}L`);
@@ -11626,20 +13026,24 @@ updatePhaseLabel(phase: string, turn: number): void {
   this.phaseLabelText.setColor(color);
 }
 
-  setEndTurnEnabled(enabled: boolean): void {
-    const btn = this.endTurnBtn;
-    if (!btn) return;
-    const style = this.theme.buttons.endTurn;
-    btn.setAlpha(enabled ? 1.0 : 0.4);
-    btn.setInteractive(enabled);
+// AFTER:
+setEndTurnEnabled(enabled: boolean): void {
+  const btn = this.endTurnBtn;
+  if (!btn) return;
+  btn.setAlpha(enabled ? 1.0 : 0.4);
+  if (btn.input) {
+    btn.input.enabled = enabled;
   }
+}
 
-  setPassEnabled(enabled: boolean): void {
-    const btn = this.passBtnObj;
-    if (!btn) return;
-    btn.setAlpha(enabled ? 1.0 : 0.4);
-    btn.setInteractive(enabled);
+setPassEnabled(enabled: boolean): void {
+  const btn = this.passBtnObj;
+  if (!btn) return;
+  btn.setAlpha(enabled ? 1.0 : 0.4);
+  if (btn.input) {
+    btn.input.enabled = enabled;
   }
+}
 
   /** Register callbacks for button presses. Called by BattleScene. */
   onEndTurnClick(fn: () => void): void { this.onEndTurn = fn; }
@@ -11854,8 +13258,7 @@ updatePhaseLabel(phase: string, turn: number): void {
     }).setOrigin(0.5, 0.5);
 
     container.add([bg, txt]);
-    container.setSize(w, h);
-    container.setInteractive();
+setContainerHitArea(container, w, h);
 
     container.on('pointerover', () => {
       bg.clear();
@@ -12000,7 +13403,7 @@ import type {
   ThemeJSON,
   CardRenderData,
   Rect,
-} from '../types/UITypes';
+} from '../game/types/UITypes';
 import { EventBus, EV } from '../events/EventBus';
 import { ThemeLoader } from '../config/ThemeLoader';
 import { CardRenderer } from './CardRenderer';
@@ -12397,13 +13800,7 @@ export class OverlayRenderer {
         });
       }),
 
-      EventBus.on(EV.GAME_OVER, (config: GameOverConfig) => {
-        this.showGameOver(
-          config,
-          () => EventBus.emit('PLAY_AGAIN', {}),
-          () => EventBus.emit('GO_MENU', {})
-        );
-      }),
+     
 
       EventBus.on(EV.DETAIL_SHOW, (data: CardRenderData) => {
         this.showCardDetail(data);
@@ -12811,7 +14208,7 @@ const refreshHUD = () => {
     opponentKingHP:    opponentKing.current,
     opponentKingMaxHP: opponentKing.max,
     playerLEG:         playerMod?.legPool     ?? 0,
-    playerLEGRate:     playerMod ? computeLEGRate(playerMod) : 1,
+    playerCrown:    playerMod ? computeLEGRate(playerMod) : 1,
     opponentLEGCount:  opponentMod?.legPool   ?? 0,
     currentPhase:      state.turn?.phase       ?? 'DRAW',
     turnNumber:        state.turn?.turnNumber  ?? 1,
@@ -12824,7 +14221,7 @@ const refreshHUD = () => {
 };
 
 // Subscribe — refresh HUD on any event that changes displayed values
-const hudUnsubs: Array<() => void> = [];
+
 this.hudUnsubs.push(EventBus.on(EV.LEG_GAINED,      refreshHUD));
 this.hudUnsubs.push(EventBus.on(EV.LEG_SPENT,       refreshHUD));
 this.hudUnsubs.push(EventBus.on('LEG_RATE_CHANGED', refreshHUD));
@@ -12835,12 +14232,14 @@ this.hudUnsubs.push(EventBus.on('TURN_STARTED',     refreshHUD));
 this.hudUnsubs.push(EventBus.on(EV.CARD_PLAYED,     refreshHUD));
 this.hudUnsubs.push(EventBus.on('OPPONENT_CARD_DRAWN', refreshHUD));
     // Init renderers
-    this.boardRenderer   = new BoardRenderer(this, layout, theme);
-    this.boardRenderer.setLocalPlayer(localPlayerIndex);
-    this.hudRenderer.setLocalPlayer(localPlayerIndex);   // ← ADD
-    this.handRenderer    = new HandRenderer(this, layout, theme);
-    this.hudRenderer     = new HUDRenderer(this, layout, theme);
-    this.overlayRenderer = new OverlayRenderer(this, layout, theme);
+this.boardRenderer = new BoardRenderer(this, layout, theme, localPlayerIndex);
+
+this.handRenderer    = new HandRenderer(this, layout, theme);
+this.hudRenderer     = new HUDRenderer(this, layout, theme);
+this.overlayRenderer = new OverlayRenderer(this, layout, theme);
+
+//this.boardRenderer.setLocalPlayer(localPlayerIndex);
+this.hudRenderer.setLocalPlayer(localPlayerIndex);
 
   
     // SelectionManager bridges col/row clicks → unitId-based engine API.
@@ -12913,7 +14312,7 @@ isPlayerUnit: (col: number, row: number) => {
       opponentName,
       playerKingHP: 30,    playerKingMaxHP: 30,
       opponentKingHP: 30,  opponentKingMaxHP: 30,
-      playerLEG: 1,        playerLEGRate: 1,
+      playerLEG: 1,        playerCrown: 1,  
       opponentLEGCount: 1,
       currentPhase: 'DRAW',
       turnNumber: 1,
@@ -12924,8 +14323,11 @@ isPlayerUnit: (col: number, row: number) => {
     });
 
     // Wire End Turn / Pass buttons
+// AFTER:
 this.hudRenderer.onEndTurnClick(() => {
-  const phase = this.engine.getState().turn?.phase;
+  const state = this.engine.getState();
+  if (state.turn?.activePlayer !== localPlayerIndex) return;  // not your turn
+  const phase = state.turn?.phase;
   if (phase === 'PLAY') {
     this.engine.endPlayPhase();
     SocketManager.sendGameAction({ type: 'END_PLAY_PHASE' });
@@ -12934,42 +14336,55 @@ this.hudRenderer.onEndTurnClick(() => {
     SocketManager.sendGameAction({ type: 'END_ACT_PHASE' });
   }
 });
+// AFTER:
 this.hudRenderer.onPassClick(() => {
+  const state = this.engine.getState();
+  if (state.turn?.activePlayer !== localPlayerIndex) return;  // not your turn
   this.engine.endActPhase();
   SocketManager.sendGameAction({ type: 'END_ACT_PHASE' });
 });
 
     // Game over → ResultScene
-   EventBus.on(EV.GAME_OVER, (ev: any) => {
-  const result    = ev.result ?? ev;   // engine wraps in .result on some versions
+EventBus.on(EV.GAME_OVER, (ev: any) => {
+  if (!this.scene.isActive('BattleScene')) return;
+
+  const result    = ev.result ?? ev;
   const turnCount = result?.turns ?? this.engine.getState().turn?.turnNumber ?? 0;
   const reason    = result?.reason ?? 'KING_DESTROYED';
   const playerWon = (result?.winner ?? ev.winner) === localPlayerIndex;
-      if (playerWon) GameState.recordWin();
-      else GameState.recordLoss();
-GameState.setLastMatch({
-  playerName,
-  opponentName,
-  playerRoll: 0,
-  opponentRoll: 0,
-  playerWon,
-  isTie: false,
-  stakeAmount: GameState.currentStake,
-  payout: playerWon ? GameState.currentStake * 2 * 0.95 : 0,
+
+  if (playerWon) GameState.recordWin();
+  else           GameState.recordLoss();
+
+  GameState.setLastMatch({
+    playerName,
+    opponentName,
+    playerRoll:   0,
+    opponentRoll: 0,
+    playerWon,
+    isTie:        false,
+    stakeAmount:  GameState.currentStake,
+    payout:       playerWon ? GameState.currentStake * 2 * 0.95 : 0,
+  });
+
+  (GameState as any).lastMatchExtra = {
+    reason,
+    turnCount,
+    winnerName: playerWon ? playerName : opponentName,
+  };
+
+  // ── NEW: Tell server who won (server triggers contract payout) ──
+  if (this.sceneData.isCryptoMode) {
+    SocketManager.sendGameOver(localPlayerIndex, playerWon);
+  }
+
+  this.time.delayedCall(1500, () => {
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () =>
+      this.scene.start('ResultScene')
+    );
+  });
 });
-
-// Store extra match data for ResultScene
-(GameState as any).lastMatchExtra = {
-  reason,
-  turnCount,
-  winnerName: playerWon ? playerName : opponentName,
-};
-      this.time.delayedCall(2000, () => {
-        this.cameras.main.fadeOut(300, 0, 0, 0);
-        this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('ResultScene'));
-      });
-    });
-
     // Start!
 
   // REPLACE SocketManager.connect({...}) in BattleScene.create() WITH:
@@ -12981,6 +14396,8 @@ SocketManager.setCallbacks({
   onOpponentDisconnected: () => this.handleOpponentDisconnect(),
   onOpponentRollReceived: () => {},
   onError: (msg) => console.error('[BattleScene] Socket error:', msg),
+  onPayoutResult: () => {},
+
 });
  // WITH:
 this.engine.startGame();
@@ -13013,182 +14430,271 @@ shutdown() {
 # src\scenes\MainMenuScene.ts
 
 ```ts
-/// <reference lib="dom" />
+// ============================================================
+// MainMenuScene.ts  (REFACTORED)
+//
+// Changes vs original:
+//   1. Content vertically centred in the 720px canvas
+//   2. HTML inputs managed via DOMInputManager (resize-safe)
+//   3. Buttons use MenuButton component (consistent hover/press)
+//   4. Toast errors use ToastNotification (fade in/out)
+//   5. Auto-fills room code from URL query param (?room=XXXXXX)
+//   6. Last-match banner repositioned to not overlap buttons
+//   7. Scene fade-in / fade-out transitions per UI spec
+// ============================================================
+
 import Phaser from 'phaser';
-import GameState, { RoomAction } from '../GameState.ts';
+import GameState, { RoomAction, GameMode } from '../GameState';
 import WalletManager from '../web3/WalletManager';
+import { DOMInputManager } from '../ui/DOMInputManager';
+import { MenuButton } from '../ui/MenuButton';
+import { ToastNotification } from '../ui/ToastNotification';
+import { ShareHelper } from '../ui/ShareHelper';
+
+// ─── Layout constants (game-space coords, 1280×720) ────────────
+// Everything is relative to centerX / a baseline Y so the whole
+// block sits visually centred on the canvas.
+const CX = 640;                       // horizontal center
+const BASE_Y = 140;                   // top of content block
+const GAP = 68;                       // vertical spacing between rows
+
+const LAYOUT = {
+  title:       { x: CX, y: BASE_Y },
+  tagline:     { x: CX, y: BASE_Y + 52 },
+  nameLabel:   { x: CX, y: BASE_Y + GAP * 1.5 },
+  nameInput:   { x: CX, y: BASE_Y + GAP * 1.5 + 38, w: 340, h: 44 },
+  roomLabel:   { x: CX, y: BASE_Y + GAP * 2.5 + 10 },
+  roomInput:   { x: CX, y: BASE_Y + GAP * 2.5 + 48, w: 280, h: 44 },
+  playFreeBtn: { x: CX, y: BASE_Y + GAP * 3.5 + 30 },
+  cryptoBtn:   { x: CX, y: BASE_Y + GAP * 4.2 + 30 },
+  matchBanner: { x: CX, y: BASE_Y + GAP * 5 + 30 },
+  record:      { x: CX, y: BASE_Y + GAP * 5 + 58 },
+} as const;
 
 export default class MainMenuScene extends Phaser.Scene {
-  private nameInput: HTMLInputElement | null = null;
-  private roomCodeInput: HTMLInputElement | null = null;
+
+  // ─── UI handles ──────────────────────────────────────────────
+  private inputManager!: DOMInputManager;
+  private nameInput!: HTMLInputElement;
+  private roomCodeInput!: HTMLInputElement;
+  private playFreeBtn!: MenuButton;
+  private cryptoBtn!: MenuButton;
 
   constructor() {
     super('MainMenuScene');
   }
 
-  create() {
-    // Always clean up any leftover inputs first
-    this.removeInputs();
+  // ─── Lifecycle ───────────────────────────────────────────────
+
+  create(): void {
+    this.cleanupPrevious();
 
     const { width, height } = this.scale;
 
-    this.add.text(width / 2, 100, 'OnChainBattles', {
-      fontSize: '48px', color: '#ffffff', fontStyle: 'bold',
-    }).setOrigin(0.5);
-
-    this.add.text(width / 2, 160, 'Chess-like On-Chain Card Game', {
-      fontSize: '20px', color: '#aaaaaa',
-    }).setOrigin(0.5);
-
-    this.add.text(width / 2, 240, 'Your Name', {
-      fontSize: '18px', color: '#aaaaaa',
-    }).setOrigin(0.5);
-
-    this.nameInput = this.createInput(width / 2, 275, 'Enter your name...');
-
-    this.add.text(width / 2, 330, 'Room Code  (leave blank to create new room)', {
-      fontSize: '18px', color: '#aaaaaa',
-    }).setOrigin(0.5);
-
-    this.roomCodeInput = this.createInput(width / 2, 365, 'Enter code to join...');
-
-    const playBtn = this.add.text(width / 2, 450, '[ PLAY FREE ]', {
-      fontSize: '28px', color: '#00ff88',
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-
-    playBtn.on('pointerdown', () => this.onPlayClicked());
-    playBtn.on('pointerover', () => playBtn.setColor('#ffffff'));
-    playBtn.on('pointerout', () => playBtn.setColor('#00ff88'));
-    
-        // Add this after the PLAY FREE button in create()
-    const cryptoBtn = this.add.text(width / 2, 510, '[ PLAY CRYPTO (AVAX) ]', {
-      fontSize: '24px', color: '#f5a623',
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-
-    cryptoBtn.on('pointerdown', () => this.onCryptoPlayClicked());
-    cryptoBtn.on('pointerover', () => cryptoBtn.setColor('#ffffff'));
-    cryptoBtn.on('pointerout', () => cryptoBtn.setColor('#f5a623'));
-        // Record W/L if returning from a match
-    const match = GameState.lastMatch;
-    if (match) {
-      const resultColor = match.playerWon ? '#00ff88' : '#ff6666';
-      const resultMsg = match.playerWon
-        ? `Last match: You beat ${match.opponentName}! (${match.playerRoll} vs ${match.opponentRoll})`
-        : match.isTie
-        ? `Last match: Tie with ${match.opponentName}`
-        : `Last match: ${match.opponentName} beat you (${match.playerRoll} vs ${match.opponentRoll})`;
-
-      this.add.text(width / 2, 530, resultMsg, {
-        fontSize: '16px', color: resultColor,
-      }).setOrigin(0.5);
-
-      this.add.text(width / 2, 560, `Record: ${GameState.winCount}W / ${GameState.lossCount}L`, {
-        fontSize: '16px', color: '#aaaaaa',
-      }).setOrigin(0.5);
+// Background — use loaded image if available, fallback to solid color
+    if (this.textures.exists('bg_main_menu')) {
+      this.add.image(width / 2, height / 2, 'bg_main_menu').setDisplaySize(width, height);
+    } else {
+      this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a2e);
     }
 
-    this.events.on('shutdown', () => this.removeInputs());
-    this.events.on('destroy', () => this.removeInputs());
+    // Fade in
+    this.cameras.main.fadeIn(400, 0, 0, 0);
+
+    // ── Static text ──────────────────────────────────────────
+    this.add.text(LAYOUT.title.x, LAYOUT.title.y, 'OnChainBattles', {
+      fontSize: '44px',
+      fontFamily: '"Courier New", monospace',
+      fontStyle: 'bold',
+      color: '#ffffff',
+    }).setOrigin(0.5);
+
+    this.add.text(LAYOUT.tagline.x, LAYOUT.tagline.y, 'Chess-like On-Chain Card Game', {
+      fontSize: '18px',
+      fontFamily: '"Courier New", monospace',
+      color: '#888888',
+    }).setOrigin(0.5);
+
+    // ── Labels ───────────────────────────────────────────────
+    this.add.text(LAYOUT.nameLabel.x, LAYOUT.nameLabel.y, 'Your Name', {
+      fontSize: '16px',
+      fontFamily: '"Courier New", monospace',
+      color: '#aaaaaa',
+    }).setOrigin(0.5);
+
+    this.add.text(LAYOUT.roomLabel.x, LAYOUT.roomLabel.y, 'Room Code  (leave blank to create new room)', {
+      fontSize: '14px',
+      fontFamily: '"Courier New", monospace',
+      color: '#777777',
+    }).setOrigin(0.5);
+
+    // ── HTML Inputs via DOMInputManager ──────────────────────
+    this.inputManager = new DOMInputManager(this);
+
+    this.nameInput = this.inputManager.createInput({
+      gameX: LAYOUT.nameInput.x,
+      gameY: LAYOUT.nameInput.y,
+      width: LAYOUT.nameInput.w,
+      height: LAYOUT.nameInput.h,
+      placeholder: 'Enter your name...',
+      maxLength: 20,
+    });
+
+    this.roomCodeInput = this.inputManager.createInput({
+      gameX: LAYOUT.roomInput.x,
+      gameY: LAYOUT.roomInput.y,
+      width: LAYOUT.roomInput.w,
+      height: LAYOUT.roomInput.h,
+      placeholder: 'Enter code to join...',
+      maxLength: 6,
+      uppercase: true,
+    });
+
+    // Auto-fill room code from URL (?room=XXXXXX)
+    const urlCode = ShareHelper.getRoomCodeFromURL();
+    if (urlCode) {
+      this.roomCodeInput.value = urlCode;
+    }
+
+    // ── Buttons ──────────────────────────────────────────────
+    this.playFreeBtn = new MenuButton(
+      this,
+      LAYOUT.playFreeBtn.x,
+      LAYOUT.playFreeBtn.y,
+      '[ PLAY FREE ]',
+      {
+        color: '#00ff88',
+        fontSize: '26px',
+        onPointerDown: () => this.onPlayFree(),
+      },
+    );
+
+    this.cryptoBtn = new MenuButton(
+      this,
+      LAYOUT.cryptoBtn.x,
+      LAYOUT.cryptoBtn.y,
+      '[ PLAY CRYPTO (AVAX) ]',
+      {
+        color: '#f5a623',
+        fontSize: '20px',
+        onPointerDown: () => this.onPlayCrypto(),
+      },
+    );
+
+    // ── Last match banner (conditional) ─────────────────────
+    this.renderLastMatchBanner();
+
+    // ── Cleanup on scene shutdown ────────────────────────────
+    this.events.once('shutdown', () => this.cleanupPrevious());
+    this.events.once('destroy', () => this.cleanupPrevious());
   }
 
-  private createInput(x: number, y: number, placeholder: string): HTMLInputElement {
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.placeholder = placeholder;
+  // ─── Play Free ───────────────────────────────────────────────
 
-    const canvas = this.game.canvas;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = rect.width / this.scale.width;
-    const scaleY = rect.height / this.scale.height;
+  private onPlayFree(): void {
+    const name = this.nameInput.value.trim();
+    if (!this.validateName(name)) return;
 
-    const inputWidth = 300 * scaleX;
-    const left = rect.left + (x - 150) * scaleX;
-    const top = rect.top + window.scrollY + (y - 20) * scaleY;
-
-    input.style.cssText = `
-      position: absolute;
-      left: ${left}px;
-      top: ${top}px;
-      width: ${inputWidth}px;
-      padding: 10px;
-      font-size: 16px;
-      border: 1px solid #444;
-      border-radius: 4px;
-      background: #2a2a4a;
-      color: #ffffff;
-      outline: none;
-      text-align: center;
-      box-sizing: border-box;
-      z-index: 10;
-    `;
-
-    document.body.appendChild(input);
-    return input;
+    GameState.setPlayerName(name);
+    GameState.currentMode = GameMode.FreePlay;
+    this.resolveRoomAction();
+    this.transitionToRoom();
   }
 
-  private onPlayClicked() {
-    const name = this.nameInput?.value.trim() ?? '';
-    const code = this.roomCodeInput?.value.trim().toUpperCase() ?? '';
+  // ─── Play Crypto ─────────────────────────────────────────────
 
+  private async onPlayCrypto(): Promise<void> {
+    const name = this.nameInput.value.trim();
+    if (!this.validateName(name)) return;
+
+    // Disable buttons during wallet flow
+    this.playFreeBtn.setDisabled(true);
+    this.cryptoBtn.setDisabled(true);
+    this.cryptoBtn.setLabel('Connecting wallet...');
+
+    try {
+      const address = await WalletManager.connect();
+      GameState.connectWallet(address);
+      GameState.setPlayerName(name);
+      this.resolveRoomAction();
+      this.transitionToRoom();
+    } catch (err: any) {
+      ToastNotification.show(this, err.message, { color: '#ff4444' });
+      this.playFreeBtn.setDisabled(false);
+      this.cryptoBtn.setDisabled(false);
+      this.cryptoBtn.setLabel('[ PLAY CRYPTO (AVAX) ]');
+    }
+  }
+
+  // ─── Shared helpers ──────────────────────────────────────────
+
+  private validateName(name: string): boolean {
     if (!name) {
-      const warn = this.add.text(this.scale.width / 2, 510, 'Please enter your name!', {
-        fontSize: '18px', color: '#ff4444',
-      }).setOrigin(0.5);
-      this.time.delayedCall(2000, () => warn.destroy());
-      return;
+      ToastNotification.show(this, 'Please enter your name!', {
+        color: '#ff4444',
+        y: LAYOUT.playFreeBtn.y - 30,
+      });
+      this.nameInput.focus();
+      return false;
     }
+    return true;
+  }
 
-    GameState.setPlayerName(name);
-
-    if (!code) {
-      GameState.setRoomAction(RoomAction.Create);
-    } else {
+  /** Set room action based on whether a room code was entered */
+  private resolveRoomAction(): void {
+    const code = this.roomCodeInput.value.trim().toUpperCase();
+    if (code) {
       GameState.setRoomCode(code);
       GameState.setRoomAction(RoomAction.Join);
-    }
-
-    this.removeInputs();
-    this.scene.start('RoomScene');
-  }
-
-  private removeInputs() {
-    this.nameInput?.remove();
-    this.nameInput = null;
-    this.roomCodeInput?.remove();
-    this.roomCodeInput = null;
-  }
-  private async onCryptoPlayClicked() {
-  const name = this.nameInput?.value.trim() ?? '';
-  if (!name) {
-    const warn = this.add.text(this.scale.width / 2, 580, 'Please enter your name!', {
-      fontSize: '18px', color: '#ff4444',
-    }).setOrigin(0.5);
-    this.time.delayedCall(2000, () => warn.destroy());
-    return;
-  }
-
-  try {
-    const address = await WalletManager.connect();
-    GameState.connectWallet(address);
-    GameState.setPlayerName(name);
-
-    const code = this.roomCodeInput?.value.trim().toUpperCase() ?? '';
-    if (!code) {
-      GameState.setRoomAction(RoomAction.Create);
     } else {
-      GameState.setRoomCode(code);
-      GameState.setRoomAction(RoomAction.Join);
+      GameState.setRoomAction(RoomAction.Create);
     }
-
-    this.removeInputs();
-    this.scene.start('RoomScene');
-  } catch (err: any) {
-    const warn = this.add.text(this.scale.width / 2, 580, err.message, {
-      fontSize: '16px', color: '#ff4444',
-    }).setOrigin(0.5);
-    this.time.delayedCall(3000, () => warn.destroy());
   }
-}
+
+  /** Fade out then start RoomScene */
+  private transitionToRoom(): void {
+    this.inputManager.destroyAll();
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start('RoomScene');
+    });
+  }
+
+  /** Show last-match result + W/L record if available */
+  private renderLastMatchBanner(): void {
+    const match = GameState.lastMatch;
+    if (!match) return;
+
+    const resultColor = match.playerWon ? '#00ff88'
+      : match.isTie ? '#f5a623'
+      : '#ff6666';
+
+    const resultMsg = match.playerWon
+      ? `Last: You beat ${match.opponentName}! (${match.playerRoll} vs ${match.opponentRoll})`
+      : match.isTie
+      ? `Last: Tie with ${match.opponentName}`
+      : `Last: ${match.opponentName} beat you (${match.playerRoll} vs ${match.opponentRoll})`;
+
+    this.add.text(LAYOUT.matchBanner.x, LAYOUT.matchBanner.y, resultMsg, {
+      fontSize: '15px',
+      fontFamily: '"Courier New", monospace',
+      color: resultColor,
+    }).setOrigin(0.5);
+
+    this.add.text(LAYOUT.record.x, LAYOUT.record.y,
+      `Record: ${GameState.winCount}W / ${GameState.lossCount}L`, {
+      fontSize: '14px',
+      fontFamily: '"Courier New", monospace',
+      color: '#777777',
+    }).setOrigin(0.5);
+  }
+
+  /** Tear down DOM inputs + buttons from a previous run of this scene */
+  private cleanupPrevious(): void {
+    if (this.inputManager) {
+      this.inputManager.destroyAll();
+    }
+  }
 }
 ```
 
@@ -13201,11 +14707,13 @@ export default class MainMenuScene extends Phaser.Scene {
 // Must be the FIRST scene in main.ts scene array.
 //
 // Asset key naming conventions (must match CardRenderer/BoardRenderer):
-//   art_<cardId>          → card artwork
+//   art_<cardId>          → card artwork (full 440×320)
+//   thumb_<cardId>        → card thumbnail (200×200) ← NEW
 //   card_frame_<type>     → card frame overlays
-//   icon_<name>           → stat icons
+//   icon_<n>              → stat icons
 //   icon_type_<allegiance>→ allegiance type icons
 //   marker_<type>         → board highlight markers
+//   bg_<scene>            → scene backgrounds
 //
 // All loads use silent error handling — missing files fall through
 // to CardRenderer's built-in fallback (grey rectangle).
@@ -13213,10 +14721,15 @@ export default class MainMenuScene extends Phaser.Scene {
 // ============================================================
 
 import Phaser from 'phaser';
+import { DeckLoader } from '../config/DeckLoader';
 
 export default class PreLoadScene extends Phaser.Scene {
   constructor() {
     super({ key: 'PreLoadScene' });
+  }
+
+  async init(): Promise<void> {
+    await DeckLoader.load();
   }
 
   // ─── preload() is called automatically by Phaser before create() ──────────
@@ -13225,12 +14738,10 @@ export default class PreLoadScene extends Phaser.Scene {
     const H = this.scale.height;  // 720
 
     // ── Loading bar UI ────────────────────────────────────────────────────────
-    // Dark background so bar is readable before any assets load
     const bg = this.add.graphics();
     bg.fillStyle(0x1a1a2e, 1);
     bg.fillRect(0, 0, W, H);
 
-    // Logo / title text (no texture needed — pure text)
     this.add.text(W / 2, H / 2 - 80, 'OnChainBattles', {
       fontFamily: 'Arial',
       fontSize: '36px',
@@ -13253,17 +14764,14 @@ export default class PreLoadScene extends Phaser.Scene {
     barTrack.lineStyle(1, 0x444466, 1);
     barTrack.strokeRect(barX, barY, barW, barH);
 
-    // Progress bar fill (updates on 'progress' event)
     const barFill = this.add.graphics();
 
-    // Percent text
     const pctText = this.add.text(W / 2, barY + barH + 12, '0%', {
       fontFamily: 'Arial',
       fontSize: '13px',
       color: '#aaaaaa',
     }).setOrigin(0.5, 0);
 
-    // File name text (shows what's loading)
     const fileText = this.add.text(W / 2, barY + barH + 32, '', {
       fontFamily: 'Arial',
       fontSize: '11px',
@@ -13282,14 +14790,14 @@ export default class PreLoadScene extends Phaser.Scene {
       fileText.setText(file.key);
     });
 
-    // Silent fail — CardRenderer already draws grey rect for missing textures.
-    // Log to console so developer can see what's missing, but never crash.
+    // Silent fail — CardRenderer draws grey rect for missing textures.
     this.load.on('loaderror', (file: Phaser.Loader.File) => {
       console.warn(`[PreloadScene] Asset not found (ok — fallback active): ${file.key}  →  ${file.url}`);
     });
 
     // ── Now queue all assets ──────────────────────────────────────────────────
     this.loadCardArt();
+    this.loadCardThumbnails();   // ← NEW: loads 200×200 thumb images
     this.loadCardFrames();
     this.loadIcons();
     this.loadBoardMarkers();
@@ -13297,101 +14805,143 @@ export default class PreLoadScene extends Phaser.Scene {
     this.loadUI();
   }
 
-  create(): void {
+create(): void {
     console.log('[PreloadScene] All assets loaded. Starting MainMenuScene.');
     this.scene.start('MainMenuScene');
   }
 
+  /** Generate mipmaps for a texture (drastically improves downscale quality). */
+  /** Generate mipmaps for a texture (improves downscale quality). */
+  private enableMipmaps(key: string, gl: WebGLRenderingContext): void {
+    if (!this.textures.exists(key)) return;
+
+    const texture = this.textures.get(key);
+    const source = texture.source?.[0];
+    if (!source) return;
+
+    // Phaser 4 stores the WebGL texture in varying paths — find it
+    const glTex = (source as any).glTexture
+      ?? (source as any).texture
+      ?? (source as any).webGLTexture;
+
+    if (!glTex || !(glTex instanceof WebGLTexture)) {
+      // Log once so we can find the right path
+      if (key === 'art_king') {
+        console.log('[Mipmap] source keys:', Object.keys(source));
+        console.log('[Mipmap] source:', source);
+      }
+      return;
+    }
+
+    gl.bindTexture(gl.TEXTURE_2D, glTex);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+
+  // ─── ALL CARD IDS (shared by art + thumb loaders) ─────────────────────────
+  // Union of DEMO_DECK_IDS (unique) + 'king'.
+  // Kept inline so PreloadScene has no import from game logic.
+  // If you add a card to CardDefinitions, add its id here too.
+  private static readonly ALL_CARD_IDS: string[] = [
+    // King (pre-placed, not in deck)
+    'king',
+    // Standard units
+    'foot_soldier',   // 3 copies
+    'pikeman',        // 2
+    'archer',         // 2
+    'assassin',       // 2
+    'militia',        // 2
+    'scout',          // 2
+    'lancer',         // 2
+    'mystic',         // 1
+    'messenger',      // 2
+    // Royal units
+    'swordsman',      // 2
+    'princess',       // 1
+    'priest',         // 2
+    'commander',      // 1
+    'inquisitor',     // 2
+    'knight',         // 2
+    'knights_guard',  // 1
+    'scribe',         // 2
+    // Structures
+    'castle',         // 1
+    'temple',         // 2
+    'village',        // 2
+    // Spells
+    'disease',        // 2
+    'casus_belli',    // 1
+    'reform',         // 2
+    'civil_war',      // 1
+    'earthquake',     // 1
+    'war_horn',       // 2
+    'coup',           // 1
+    'treason',        // 2
+    'motherland',     // 1
+    'peasant_revolt', // 1
+  ];
+
   // ─── CARD ART ─────────────────────────────────────────────────────────────
-  // Sourced from DEMO_DECK_IDS + king (pre-placed, not in deck).
+  // Full card art (440×320) used in hand display and detail overlay.
   // Key pattern: art_<cardId>   Path: assets/cards/art/<cardId>.png
-  // Any missing file falls through to CardRenderer grey-rect fallback.
+  //
+  // NOTE: The file on disk for "knights_guard" is named "kings_guard.png".
+  // We handle this mismatch explicitly below.
   private loadCardArt(): void {
     const BASE = 'assets/cards/art/';
 
-    // ── All card IDs used in the game ────────────────────────────────────────
-    // This list is the union of DEMO_DECK_IDS (unique) + 'king'.
-    // Kept inline here so PreloadScene has no import from game logic.
-    // If you add a card to CardDefinitions, add its id here too.
-    const ALL_CARD_IDS: string[] = [
-      // King (pre-placed, not in deck)
-      'king',
-      // Standard units
-      'foot_soldier',   // 3 copies
-      'pikeman',        // 2
-      'archer',         // 2
-      'assassin',       // 2
-      'militia',        // 2
-      'scout',          // 2
-      'lancer',         // 2
-      'mystic',         // 1
-      'messenger',      // 2
-      // Royal units
-      'swordsman',      // 2
-      'princess',       // 1
-      'priest',         // 2
-      'commander',      // 1
-      'inquisitor',     // 2
-      'knight',         // 2
-      'knights_guard',  // 1
-      'scribe',         // 2
-      // Structures
-      'castle',         // 1
-      'temple',         // 2
-      'village',        // 2
-      // Spells
-      'disease',        // 2
-      'casus_belli',    // 1
-      'reform',         // 2
-      'civil_war',      // 1
-      'earthquake',     // 1
-      'war_horn',       // 2
-      'coup',           // 1
-      'treason',        // 2
-      'motherland',     // 1
-      'peasant_revolt', // 1
-    ];
+    PreLoadScene.ALL_CARD_IDS.forEach(id => {
+      // ── Filename mismatch fix ──────────────────────────
+      // CardDefinitions uses id "knights_guard" but the art
+      // file on disk is "kings_guard.png".
+      const filename = id === 'knights_guard' ? 'kings_guard' : id;
+      this.load.image(`art_${id}`, `${BASE}${filename}.png`);
+    });
+  }
 
-    ALL_CARD_IDS.forEach(id => {
-      this.load.image(`art_${id}`, `${BASE}${id}.png`);
+  // ─── CARD THUMBNAILS (NEW) ────────────────────────────────────────────────
+  // Dedicated 200×200 thumbnail images for board unit rendering.
+  // Using these instead of downscaling 440×320 full art to 100×100
+  // eliminates the blurriness on board units.
+  //
+  // Key pattern: thumb_<cardId>   Path: assets/cards/thumb/<cardId>_thumb.png
+  // If thumb is missing, CardRenderer falls back to art_<cardId>.
+  private loadCardThumbnails(): void {
+    const BASE = 'assets/cards/thumb/';
+
+    PreLoadScene.ALL_CARD_IDS.forEach(id => {
+      // Thumb files use the consistent naming: <id>_thumb.png
+      // knights_guard → knights_guard_thumb.png (correct on disk)
+      this.load.image(`thumb_${id}`, `${BASE}${id}_thumb.png`);
     });
   }
 
   // ─── CARD FRAMES ──────────────────────────────────────────────────────────
-  // Used by CardRenderer as frame overlay on full cards.
-  // Keys must match theme.cards.STANDARD/ROYAL/STATIC/SPELL.frameAsset
   private loadCardFrames(): void {
     const BASE = 'assets/cards/';
 
-    // Frame overlays — one per allegiance/class combo
     ['standard', 'royal', 'static', 'spell'].forEach(type => {
       this.load.image(`card_frame_${type}`, `${BASE}card_frame_${type}.png`);
     });
 
-    // Card back — used for opponent hand face-down cards
     this.load.image('card_back', `${BASE}card_back_pattern.png`);
   }
 
   // ─── ICONS ────────────────────────────────────────────────────────────────
-  // Stat icons (atk/def/leg/move) and allegiance type icons.
-  // Missing icons simply don't render — no crash.
   private loadIcons(): void {
     const BASE = 'assets/icons/';
 
-    // Stat icons — shown on card stat rows and board thumbnails
     ['atk', 'def', 'leg', 'move', 'cavalry', 'clock', 'ranged'].forEach(name => {
       this.load.image(`icon_${name}`, `${BASE}icon_${name}.png`);
     });
 
-    // Allegiance type icons — top-right corner of full cards
     ['standard', 'royal', 'static', 'spell'].forEach(type => {
       this.load.image(`icon_type_${type}`, `${BASE}icon_type_${type}.png`);
     });
   }
 
   // ─── BOARD MARKERS ────────────────────────────────────────────────────────
-  // Semi-transparent overlay tiles used for move/attack/aura highlights.
-  // BoardRenderer falls back to fillStyle graphics if these are missing.
   private loadBoardMarkers(): void {
     const BASE = 'assets/fx/';
 
@@ -13401,12 +14951,22 @@ export default class PreLoadScene extends Phaser.Scene {
   }
 
   // ─── BACKGROUNDS ──────────────────────────────────────────────────────────
+  // Load ALL background images from assets/backgrounds/.
+  // Scenes check textures.exists() before using — missing is safe.
   private loadBackgrounds(): void {
     const BASE = 'assets/backgrounds/';
 
+    // Scene backgrounds
     this.load.image('bg_main_menu', `${BASE}bg_main_menu.png`);
     this.load.image('bg_battle',    `${BASE}bg_battle.png`);
     this.load.image('bg_result',    `${BASE}bg_result.png`);
+
+    // Additional backgrounds available on disk
+    this.load.image('bg_board',     `${BASE}bg_board.png`);
+    this.load.image('bg_lobby',     `${BASE}bg_lobby.png`);
+    this.load.image('bg_menu',      `${BASE}bg_menu.png`);
+
+    // Board skin overlay
     this.load.image('board_skin',   'assets/board/board_skin.png');
   }
 
@@ -13423,14 +14983,34 @@ export default class PreLoadScene extends Phaser.Scene {
 // ============================================================
 // ResultScene.ts
 // Shows match result after BattleScene ends.
-// Reads GameState.lastMatch for outcome data.
+// Reads GameState.lastMatch + lastMatchExtra + payoutResult.
+//
+// Handles:
+//   - Victory / Defeat / Tie headline
+//   - Winner name + reason (King destroyed, Disconnect, etc.)
+//   - Turn count
+//   - AVAX payout amount + clickable tx link (crypto mode)
+//   - Win/loss record
+//   - Play Again / Menu buttons
+//   - Auto-navigate to MainMenu after 15s
 // ============================================================
 
 import Phaser from 'phaser';
-import GameState from '../GameState';
+import GameState, { GameMode } from '../GameState';
+
+interface MatchExtra {
+  reason?: string;
+  turnCount?: number;
+  winnerName?: string;
+}
+
+interface PayoutResult {
+  success: boolean;
+  txHash?: string;
+  error?: string;
+}
 
 export default class ResultScene extends Phaser.Scene {
-
   constructor() {
     super('ResultScene');
   }
@@ -13438,120 +15018,201 @@ export default class ResultScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale;
     const match = GameState.lastMatch;
+    const extra = (GameState as any).lastMatchExtra as MatchExtra | undefined;
+    const payoutResult = (GameState as any).payoutResult as PayoutResult | undefined;
 
-    // Background
-    this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a2e);
+    // ── Background ─────────────────────────────────────────────
+    if (this.textures.exists('bg_result')) {
+      this.add.image(width / 2, height / 2, 'bg_result').setDisplaySize(width, height);
+    } else {
+      this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a2e);
+    }
 
-    // Title
-    this.add.text(width / 2, 80, 'OnChainBattles', {
+    // ── Title ──────────────────────────────────────────────────
+    this.add.text(width / 2, 50, 'OnChainBattles', {
       fontSize: '28px', color: '#ffffff', fontStyle: 'bold',
     }).setOrigin(0.5);
 
+    // ── No match data fallback ─────────────────────────────────
     if (!match) {
-      // Fallback if arrived here without match data
-      this.add.text(width / 2, 300, 'Match Complete', {
+      this.add.text(width / 2, height / 2, 'Match Complete', {
         fontSize: '48px', color: '#ffffff',
       }).setOrigin(0.5);
-    } else {
-      // Win / Loss / Tie headline
-      const won = match.playerWon;
-      const tie = match.isTie;
-      const headline = tie ? "It's a Tie!" : won ? 'Victory!' : 'Defeat';
-      const headlineColor = tie ? '#f5a623' : won ? '#00ff88' : '#ff4444';
+      this.addNavigationButtons(width, height);
+      this.addAutoReturn();
+      this.cameras.main.fadeIn(300, 0, 0, 0);
+      return;
+    }
 
-      this.add.text(width / 2, 200, headline, {
-        fontSize: '64px', color: headlineColor, fontStyle: 'bold',
-      }).setOrigin(0.5);
+    // ── Outcome ────────────────────────────────────────────────
+    const won = match.playerWon;
+    const tie = match.isTie;
 
-      // Opponent name
-      this.add.text(width / 2, 290, `vs ${match.opponentName}`, {
-        fontSize: '24px', color: '#aaaaaa',
-      }).setOrigin(0.5);
+    const headline = tie ? "It's a Tie!" : won ? 'Victory!' : 'Defeat';
+    const headlineColor = tie ? '#f5a623' : won ? '#00ff88' : '#ff4444';
+    const panelBorder = tie ? 0xf5a623 : won ? 0x00ff88 : 0xff4444;
 
-      // Win/loss record
-      this.add.text(width / 2, 340, `Record: ${GameState.winCount}W / ${GameState.lossCount}L`, {
-        fontSize: '20px', color: '#ffffff',
-      }).setOrigin(0.5);
-// In ResultScene.create(), ADD after the win/loss record text block:
+    // ── Central panel ──────────────────────────────────────────
+    const panelW = 600;
+    const panelH = 400;
+    const panelX = width / 2;
+    const panelY = height / 2 - 10;
 
-const extra = (GameState as any).lastMatchExtra as
-  { reason?: string; turnCount?: number; winnerName?: string } | undefined;
+    const panelBg = this.add.graphics();
+    panelBg.fillStyle(0x16213e, 0.92);
+    panelBg.fillRoundedRect(panelX - panelW / 2, panelY - panelH / 2, panelW, panelH, 10);
+    panelBg.lineStyle(2, panelBorder, 1);
+    panelBg.strokeRoundedRect(panelX - panelW / 2, panelY - panelH / 2, panelW, panelH, 10);
 
-if (extra) {
-  // Turn count
-  this.add.text(width / 2, 385, `Turns played: ${extra.turnCount ?? '—'}`, {
-    fontSize: '18px', color: '#aaaaaa',
-  }).setOrigin(0.5);
+    // ── Headline ───────────────────────────────────────────────
+    let yPos = panelY - panelH / 2 + 50;
 
-  // Reason (only if not standard king kill — keep it clean)
-  const reasonMap: Record<string, string> = {
-    'KING_DESTROYED': 'King destroyed',
-    'DISCONNECT':     'Opponent disconnected',
-    'SURRENDER':      'Surrender',
-    'TIMEOUT':        'Timeout',
-  };
-  const reasonText = reasonMap[extra.reason ?? ''] ?? extra.reason ?? '';
-  if (reasonText) {
-    this.add.text(width / 2, 410, reasonText, {
-      fontSize: '16px', color: '#666688',
+    this.add.text(panelX, yPos, headline, {
+      fontSize: '56px', color: headlineColor, fontStyle: 'bold',
     }).setOrigin(0.5);
-  }
-}
+    yPos += 70;
 
-// ADD auto-navigate after 15s (quality of life — player can still click buttons)
-this.time.delayedCall(15000, () => {
-  this.cameras.main.fadeOut(300, 0, 0, 0);
-  this.cameras.main.once('camerafadeoutcomplete', () =>
-    this.scene.start('MainMenuScene')
-  );
-});
-      // Crypto payout info
-      if (match.stakeAmount > 0) {
-        const payoutMsg = won
-          ? `You won ${match.payout.toFixed(4)} AVAX!`
-          : `You lost ${match.stakeAmount} AVAX`;
-        this.add.text(width / 2, 390, payoutMsg, {
-          fontSize: '20px', color: won ? '#f5a623' : '#ff6666',
+    // ── Winner name ────────────────────────────────────────────
+    const winnerName = extra?.winnerName
+      ?? (won ? match.playerName : match.opponentName)
+      ?? '—';
+
+    const winnerLabel = won
+      ? `You defeated ${match.opponentName}`
+      : tie
+        ? `${match.playerName} vs ${match.opponentName}`
+        : `${match.opponentName} wins`;
+
+    this.add.text(panelX, yPos, winnerLabel, {
+      fontSize: '22px', color: '#aaaaaa',
+    }).setOrigin(0.5);
+    yPos += 40;
+
+    // ── Reason ─────────────────────────────────────────────────
+    if (extra?.reason) {
+      const reasonMap: Record<string, string> = {
+        'KING_DESTROYED': 'King destroyed',
+        'DISCONNECT':     'Opponent disconnected',
+        'SURRENDER':      'Surrender',
+        'TIMEOUT':        'Timeout',
+      };
+      const reasonText = reasonMap[extra.reason] ?? extra.reason;
+      this.add.text(panelX, yPos, reasonText, {
+        fontSize: '16px', color: '#666688',
+      }).setOrigin(0.5);
+      yPos += 28;
+    }
+
+    // ── Turn count ─────────────────────────────────────────────
+    if (extra?.turnCount) {
+      this.add.text(panelX, yPos, `Turns played: ${extra.turnCount}`, {
+        fontSize: '16px', color: '#888899',
+      }).setOrigin(0.5);
+      yPos += 30;
+    }
+
+    // ── Divider ────────────────────────────────────────────────
+    const divider = this.add.graphics();
+    divider.lineStyle(1, 0x444466, 0.6);
+    divider.lineBetween(panelX - 200, yPos, panelX + 200, yPos);
+    yPos += 20;
+
+    // ── Win/Loss record ────────────────────────────────────────
+    this.add.text(panelX, yPos, `Record: ${GameState.winCount}W / ${GameState.lossCount}L`, {
+      fontSize: '18px', color: '#ffffff',
+    }).setOrigin(0.5);
+    yPos += 35;
+
+    // ── Crypto payout info ─────────────────────────────────────
+    const isCrypto = GameState.currentMode === GameMode.CryptoPlay
+      || (match.stakeAmount != null && match.stakeAmount > 0);
+
+    if (isCrypto) {
+      if (won) {
+        const payoutAmount = (match.stakeAmount * 2 * 0.95).toFixed(4);
+        this.add.text(panelX, yPos, `Payout: ${payoutAmount} AVAX`, {
+          fontSize: '20px', color: '#f5a623',
         }).setOrigin(0.5);
+        yPos += 30;
+
+        // Tx hash link (clickable)
+        const txHash = payoutResult?.txHash;
+        if (txHash) {
+          const shortHash = txHash.slice(0, 10) + '...' + txHash.slice(-6);
+          const txText = this.add.text(panelX, yPos, `TX: ${shortHash}`, {
+            fontSize: '14px', color: '#4FC3F7',
+          }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+          txText.on('pointerover', () => txText.setColor('#ffffff'));
+          txText.on('pointerout', () => txText.setColor('#4FC3F7'));
+          txText.on('pointerdown', () => {
+            window.open(`https://testnet.snowtrace.io/tx/${txHash}`, '_blank');
+          });
+          yPos += 25;
+        } else if (payoutResult && !payoutResult.success) {
+          this.add.text(panelX, yPos, `Payout pending...`, {
+            fontSize: '14px', color: '#ff6666',
+          }).setOrigin(0.5);
+          yPos += 25;
+        }
+      } else if (!tie) {
+        this.add.text(panelX, yPos, `You lost ${match.stakeAmount} AVAX`, {
+          fontSize: '18px', color: '#ff6666',
+        }).setOrigin(0.5);
+        yPos += 30;
       }
     }
 
-    // Divider
-    const line = this.add.graphics();
-    line.lineStyle(1, 0x444466, 1);
-    line.lineBetween(width / 2 - 200, 450, width / 2 + 200, 450);
+    // ── Navigation buttons ─────────────────────────────────────
+    this.addNavigationButtons(width, height);
 
-    // Play Again button
-    const playAgainBtn = this.add.text(width / 2, 510, '[ PLAY AGAIN ]', {
-      fontSize: '28px', color: '#00ff88',
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-// ADD after the existing playAgainBtn block:
-const menuBtn = this.add.text(width / 2 + 140, 510, '[ MENU ]', {
-  fontSize: '22px', color: '#aaaaaa',
-}).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    // ── Auto-return timer ──────────────────────────────────────
+    this.addAutoReturn();
 
-menuBtn.on('pointerover', () => menuBtn.setColor('#ffffff'));
-menuBtn.on('pointerout',  () => menuBtn.setColor('#aaaaaa'));
-menuBtn.on('pointerdown', () => {
-  this.cameras.main.fadeOut(200, 0, 0, 0);
-  this.cameras.main.once('camerafadeoutcomplete', () =>
-    this.scene.start('MainMenuScene')
-  );
-});
-
-// Shift Play Again left to make room:
-// Change playAgainBtn x from width/2 to width/2 - 80
-    playAgainBtn.on('pointerover', () => playAgainBtn.setColor('#ffffff'));
-    playAgainBtn.on('pointerout',  () => playAgainBtn.setColor('#00ff88'));
-    playAgainBtn.on('pointerdown', () => {
-      this.cameras.main.fadeOut(200, 0, 0, 0);
-      this.cameras.main.once('camerafadeoutcomplete', () => {
-        this.scene.start('MainMenuScene');
-      });
-    });
-
-    // Fade in
+    // ── Fade in ────────────────────────────────────────────────
     this.cameras.main.fadeIn(300, 0, 0, 0);
+  }
+
+  // ─── HELPERS ───────────────────────────────────────────────
+
+  private addNavigationButtons(width: number, height: number): void {
+    const btnY = height - 80;
+
+    // Play Again
+    const playAgainBtn = this.add.text(width / 2 - 100, btnY, '[ PLAY AGAIN ]', {
+      fontSize: '26px', color: '#00ff88',
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    playAgainBtn.on('pointerover', () => playAgainBtn.setColor('#ffffff'));
+    playAgainBtn.on('pointerout', () => playAgainBtn.setColor('#00ff88'));
+    playAgainBtn.on('pointerdown', () => this.goToMenu());
+
+    // Menu
+    const menuBtn = this.add.text(width / 2 + 120, btnY, '[ MENU ]', {
+      fontSize: '22px', color: '#aaaaaa',
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    menuBtn.on('pointerover', () => menuBtn.setColor('#ffffff'));
+    menuBtn.on('pointerout', () => menuBtn.setColor('#aaaaaa'));
+    menuBtn.on('pointerdown', () => this.goToMenu());
+  }
+
+  private addAutoReturn(): void {
+    this.time.delayedCall(15000, () => {
+      if (!this.scene.isActive('ResultScene')) return;
+      this.goToMenu();
+    });
+  }
+
+  private goToMenu(): void {
+    // Clear payout data so it doesn't leak into next match
+    (GameState as any).payoutResult = undefined;
+    (GameState as any).lastMatchExtra = undefined;
+
+    this.cameras.main.fadeOut(200, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start('MainMenuScene');
+    });
   }
 }
 ```
@@ -13560,161 +15221,358 @@ menuBtn.on('pointerdown', () => {
 
 ```ts
 // ============================================================
-// RoomScene.ts — Phase 2
-// Matchmaking lobby. When opponent joins → go to BattleScene.
-// Crypto mode: deposit escrow first, then enter battle.
+// RoomScene.ts  (REFACTORED)
+//
+// Changes vs original:
+//   1. Room code is COPIABLE — click the code text to copy
+//   2. "Copy Code" + "Share Link" buttons below room code
+//   3. Uses MenuButton, ToastNotification, ShareHelper components
+//   4. Fade in/out transitions
+//   5. Cleaner layout with named constants
+//   6. DOMOverlay for copy/share uses native HTML buttons for
+//      reliable clipboard access (Phaser canvas can't focus)
 // ============================================================
 
 import Phaser from 'phaser';
-import GameState, { GameMode } from '../GameState';
+import GameState, { GameMode, RoomAction } from '../GameState';
 import SocketManager from '../network/SocketManager';
 import EscrowManager, { STAKE_AVAX } from '../web3/EscrowManager';
+import { MenuButton } from '../ui/MenuButton';
+import { ToastNotification } from '../ui/ToastNotification';
+import { ShareHelper } from '../ui/ShareHelper';
 
-type CryptoPhase = 'idle' | 'depositing' | 'waiting_opponent_deposit' | 'both_ready';
+// ─── Layout constants ──────────────────────────────────────────
+const CX = 640;
+
+const LAYOUT = {
+  title:        { x: CX, y: 40 },
+  modeBadge:    { x: CX, y: 75 },
+  roomCode:     { x: CX, y: 118 },
+  copyBtn:      { x: CX - 90, y: 155 },
+  shareBtn:     { x: CX + 90, y: 155 },
+  stake:        { x: CX, y: 185 },
+  playerName:   { x: 320, y: 240 },
+  vs:           { x: CX, y: 310 },
+  opponentName: { x: 960, y: 240 },
+  status:       { x: CX, y: 430 },
+  subStatus:    { x: CX, y: 465 },
+} as const;
+
+type CryptoPhase = 'idle' | 'depositing' | 'waiting_opponent_deposit' | 'both_ready' | 'rolling' | 'waiting_payout';
 
 export default class RoomScene extends Phaser.Scene {
+
+  // ─── UI handles ──────────────────────────────────────────────
   private statusText!: Phaser.GameObjects.Text;
   private subStatusText!: Phaser.GameObjects.Text;
   private roomCodeText!: Phaser.GameObjects.Text;
   private opponentNameText!: Phaser.GameObjects.Text;
   private stakeText!: Phaser.GameObjects.Text;
+  private copyBtn!: MenuButton;
+  private shareBtn!: MenuButton;
 
+  // ─── State ───────────────────────────────────────────────────
   private isCryptoMode: boolean = false;
   private opponentName: string = '';
   private cryptoPhase: CryptoPhase = 'idle';
+  private currentRoomCode: string = '';
 
   constructor() {
     super('RoomScene');
   }
 
-  create() {
+  // ─── Lifecycle ───────────────────────────────────────────────
+
+  create(): void {
     const { width, height } = this.scale;
     this.isCryptoMode = GameState.currentMode === GameMode.CryptoPlay;
 
     // Background
-    this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a2e);
+   // Background — use loaded image if available, fallback to solid color
+    if (this.textures.exists('bg_lobby')) {
+      this.add.image(width / 2, height / 2, 'bg_lobby').setDisplaySize(width, height);
+    } else {
+      this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a2e);
+    }
+    this.cameras.main.fadeIn(400, 0, 0, 0);
 
-    // Title
-    this.add.text(width / 2, 40, 'OnChainBattles', {
-      fontSize: '28px', color: '#ffffff', fontStyle: 'bold',
+    // ── Title ────────────────────────────────────────────────
+    this.add.text(LAYOUT.title.x, LAYOUT.title.y, 'OnChainBattles', {
+      fontSize: '28px',
+      fontFamily: '"Courier New", monospace',
+      fontStyle: 'bold',
+      color: '#ffffff',
     }).setOrigin(0.5);
 
-    // Mode badge
-    const modeLabel = this.isCryptoMode ? '🔺 CRYPTO MODE' : '🎮 FREE PLAY';
+    // ── Mode badge ───────────────────────────────────────────
+    const modeLabel = this.isCryptoMode ? 'CRYPTO MODE' : 'FREE PLAY';
     const modeColor = this.isCryptoMode ? '#f5a623' : '#00ff88';
-    this.add.text(width / 2, 75, modeLabel, {
-      fontSize: '16px', color: modeColor,
+    this.add.text(LAYOUT.modeBadge.x, LAYOUT.modeBadge.y, modeLabel, {
+      fontSize: '14px',
+      fontFamily: '"Courier New", monospace',
+      fontStyle: 'bold',
+      color: modeColor,
     }).setOrigin(0.5);
 
-    // Room code display
-    this.roomCodeText = this.add.text(width / 2, 115, 'Room: connecting...', {
-      fontSize: '20px', color: '#4fc3f7',
+    // ── Room code (clickable to copy) ────────────────────────
+    this.roomCodeText = this.add.text(LAYOUT.roomCode.x, LAYOUT.roomCode.y,
+      'ROOM: connecting...', {
+      fontSize: '22px',
+      fontFamily: '"Courier New", monospace',
+      fontStyle: 'bold',
+      color: '#4fc3f7',
     }).setOrigin(0.5);
 
-    // Stake display (crypto only)
+    // Make the room code text itself clickable
+    this.roomCodeText.setInteractive({ useHandCursor: true });
+    this.roomCodeText.on('pointerdown', () => this.copyRoomCode());
+    this.roomCodeText.on('pointerover', () => {
+      this.roomCodeText.setColor('#ffffff');
+    });
+    this.roomCodeText.on('pointerout', () => {
+      this.roomCodeText.setColor('#4fc3f7');
+    });
+
+    // ── Copy & Share buttons ─────────────────────────────────
+    this.copyBtn = new MenuButton(
+      this,
+      LAYOUT.copyBtn.x,
+      LAYOUT.copyBtn.y,
+      '[ Copy Code ]',
+      {
+        color: '#4fc3f7',
+        fontSize: '13px',
+        fontStyle: 'normal',
+        onPointerDown: () => this.copyRoomCode(),
+      },
+    );
+
+    this.shareBtn = new MenuButton(
+      this,
+      LAYOUT.shareBtn.x,
+      LAYOUT.shareBtn.y,
+      '[ Share Link ]',
+      {
+        color: '#4fc3f7',
+        fontSize: '13px',
+        fontStyle: 'normal',
+        onPointerDown: () => this.shareRoomLink(),
+      },
+    );
+
+    // Initially hidden until we have a room code
+    this.copyBtn.text.setVisible(false);
+    this.shareBtn.text.setVisible(false);
+
+    // ── Stake display (crypto only) ──────────────────────────
     if (this.isCryptoMode) {
-      this.stakeText = this.add.text(width / 2, 148,
+      this.stakeText = this.add.text(LAYOUT.stake.x, LAYOUT.stake.y,
         `Stake: ${STAKE_AVAX} AVAX each | Pot: ${(STAKE_AVAX * 2 * 0.95).toFixed(4)} AVAX to winner`, {
-        fontSize: '14px', color: '#f5a623',
+        fontSize: '13px',
+        fontFamily: '"Courier New", monospace',
+        color: '#f5a623',
       }).setOrigin(0.5);
     }
 
-    // Player name
-    this.add.text(width / 4, 200, GameState.playerName, {
-      fontSize: '22px', color: '#00ff88', fontStyle: 'bold',
+    // ── Player names ─────────────────────────────────────────
+    this.add.text(LAYOUT.playerName.x, LAYOUT.playerName.y, GameState.playerName, {
+      fontSize: '22px',
+      fontFamily: '"Courier New", monospace',
+      fontStyle: 'bold',
+      color: '#00ff88',
     }).setOrigin(0.5);
 
-    // Opponent name (waiting state)
-    this.opponentNameText = this.add.text((width / 4) * 3, 200, 'Waiting for opponent...', {
-      fontSize: '18px', color: '#888888',
+    this.opponentNameText = this.add.text(
+      LAYOUT.opponentName.x,
+      LAYOUT.opponentName.y,
+      'Waiting for opponent...',
+      {
+        fontSize: '18px',
+        fontFamily: '"Courier New", monospace',
+        color: '#555555',
+      },
+    ).setOrigin(0.5);
+
+    // ── VS icon ──────────────────────────────────────────────
+    this.add.text(LAYOUT.vs.x, LAYOUT.vs.y, 'VS', {
+      fontSize: '48px',
+      fontFamily: '"Courier New", monospace',
+      fontStyle: 'bold',
+      color: '#253348',
     }).setOrigin(0.5);
 
-    // Sword icon
-    this.add.text(width / 2, 310, '⚔', {
-      fontSize: '64px', color: '#253348',
+    // ── Status ───────────────────────────────────────────────
+    this.statusText = this.add.text(LAYOUT.status.x, LAYOUT.status.y,
+      'Connecting to server...', {
+      fontSize: '18px',
+      fontFamily: '"Courier New", monospace',
+      color: '#f5a623',
     }).setOrigin(0.5);
 
-    // Status text
-    this.statusText = this.add.text(width / 2, 430, 'Connecting to server...', {
-      fontSize: '20px', color: '#f5a623',
+    this.subStatusText = this.add.text(LAYOUT.subStatus.x, LAYOUT.subStatus.y,
+      'Share your room code with a friend', {
+      fontSize: '13px',
+      fontFamily: '"Courier New", monospace',
+      color: '#777777',
     }).setOrigin(0.5);
 
-    this.subStatusText = this.add.text(width / 2, 465, 'Share your room code with a friend', {
-      fontSize: '14px', color: '#aaaaaa',
-    }).setOrigin(0.5);
-
-    // Connect socket
-    SocketManager.connect({
-      onRoomCreated: (code) => {
-        GameState.setRoomCode(code);
-        this.roomCodeText.setText(`Room: ${code}`);
-        this.statusText.setText('Waiting for opponent...');
-        this.subStatusText.setText(`Share code: ${code}`);
-        if (this.isCryptoMode && GameState.walletAddress) {
-          SocketManager.registerWallet(GameState.walletAddress);
-        }
-      },
-
-      onRoomJoined: (code) => {
-        this.roomCodeText.setText(`Room: ${code}`);
-        this.statusText.setText('Joined room! Waiting...');
-        if (this.isCryptoMode && GameState.walletAddress) {
-          SocketManager.registerWallet(GameState.walletAddress);
-        }
-      },
-
-      onOpponentJoined: (opponentName) => {
-        this.opponentName = opponentName;
-        GameState.setOpponentName(opponentName);
-        this.opponentNameText.setText(opponentName).setColor('#ff6666');
-
-        if (this.isCryptoMode) {
-          this.handleCryptoDeposit();
-        } else {
-          this.statusText.setText('Opponent joined! Entering battle...');
-          this.time.delayedCall(800, () => this.enterBattle());
-        }
-      },
-
-      onOpponentDisconnected: () => {
-        this.statusText.setText('Opponent disconnected.').setColor('#ff4444');
-        this.time.delayedCall(3000, () => this.scene.start('MainMenuScene'));
-      },
-
-      onError: (msg) => {
-        this.statusText.setText(`Error: ${msg}`).setColor('#ff4444');
-      },
-
-      // Crypto: both deposits confirmed → enter battle
-      onBothCryptoReady: () => {
-        this.cryptoPhase = 'both_ready';
-        this.statusText.setText('Funds locked! Entering battle...').setColor('#00ff88');
-        this.time.delayedCall(1000, () => this.enterBattle());
-      },
-
-      // Unused in Phase 2 — kept for SocketManager interface compatibility
-      onOpponentRollReceived: () => {},
-      onCryptoMatchResult: () => {},
-      onTieReroll: () => {},
-    });
+    // ── Connect socket ───────────────────────────────────────
+    this.connectSocket();
   }
 
-  private async handleCryptoDeposit(): Promise<void> {
-    this.cryptoPhase = 'depositing';
-    this.statusText.setText('Locking funds... Check your wallet').setColor('#f5a623');
-    this.subStatusText.setText('MetaMask popup incoming');
+  // ─── Clipboard: Copy Room Code ───────────────────────────────
 
-    try {
-      await EscrowManager.createMatch(GameState.roomCode);
-      this.cryptoPhase = 'waiting_opponent_deposit';
-      this.statusText.setText('Funds locked ✓  Waiting for opponent...').setColor('#4fc3f7');
-      this.subStatusText.setText('');
-      SocketManager.signalCryptoReady();
-    } catch (err: any) {
-      this.statusText.setText(`Deposit failed: ${err.message}`).setColor('#ff4444');
-      this.time.delayedCall(4000, () => this.scene.start('MainMenuScene'));
+  private async copyRoomCode(): Promise<void> {
+    if (!this.currentRoomCode) return;
+
+    const ok = await ShareHelper.copyToClipboard(this.currentRoomCode);
+    if (ok) {
+      ToastNotification.show(this, `Copied: ${this.currentRoomCode}`, {
+        color: '#00ff88',
+        y: LAYOUT.copyBtn.y + 30,
+        duration: 1500,
+      });
+    } else {
+      ToastNotification.show(this, 'Copy failed — select manually', {
+        color: '#ff4444',
+        y: LAYOUT.copyBtn.y + 30,
+      });
     }
   }
+
+  // ─── Share Room Link ─────────────────────────────────────────
+
+  private async shareRoomLink(): Promise<void> {
+    if (!this.currentRoomCode) return;
+
+    const result = await ShareHelper.shareRoom(this.currentRoomCode);
+    if (result === 'shared') {
+      ToastNotification.show(this, 'Shared!', {
+        color: '#00ff88',
+        y: LAYOUT.shareBtn.y + 30,
+        duration: 1500,
+      });
+    } else if (result === 'copied') {
+      ToastNotification.show(this, 'Link copied to clipboard!', {
+        color: '#00ff88',
+        y: LAYOUT.shareBtn.y + 30,
+        duration: 1500,
+      });
+    } else {
+      ToastNotification.show(this, 'Share failed', {
+        color: '#ff4444',
+        y: LAYOUT.shareBtn.y + 30,
+      });
+    }
+  }
+
+  // ─── Socket wiring ──────────────────────────────────────────
+
+  private connectSocket(): void {
+    SocketManager.connect({
+  onRoomCreated: (code) => this.onRoomCreated(code),
+  onRoomJoined: (code) => this.onRoomJoined(code),
+  onOpponentJoined: (name) => this.onOpponentJoined(name),
+  onOpponentAction: () => {},          // ← ADD THIS LINE
+  onOpponentDisconnected: () => this.onOpponentDisconnected(),
+  onError: (msg) => this.onSocketError(msg),
+  onBothCryptoReady: () => this.onBothCryptoReady(),
+  onOpponentRollReceived: () => {},
+  onCryptoMatchResult: () => {},
+  onTieReroll: () => {},
+});
+  }
+
+  private onRoomCreated(code: string): void {
+    this.currentRoomCode = code;
+    GameState.setRoomCode(code);
+    this.roomCodeText.setText(`ROOM: ${code}`);
+    this.statusText.setText('Waiting for opponent...');
+    this.subStatusText.setText('Share the code or link below');
+
+    // Show copy/share buttons
+    this.copyBtn.text.setVisible(true);
+    this.shareBtn.text.setVisible(true);
+
+    if (this.isCryptoMode && GameState.walletAddress) {
+      SocketManager.registerWallet(GameState.walletAddress);
+    }
+  }
+
+  private onRoomJoined(code: string): void {
+    this.currentRoomCode = code;
+    this.roomCodeText.setText(`ROOM: ${code}`);
+    this.statusText.setText('Joined room! Waiting...');
+
+    // Show copy/share for joiners too
+    this.copyBtn.text.setVisible(true);
+    this.shareBtn.text.setVisible(true);
+
+    if (this.isCryptoMode && GameState.walletAddress) {
+      SocketManager.registerWallet(GameState.walletAddress);
+    }
+  }
+
+  private onOpponentJoined(opponentName: string): void {
+    this.opponentName = opponentName;
+    GameState.setOpponentName(opponentName);
+    this.opponentNameText.setText(opponentName).setColor('#ff6666');
+
+    if (this.isCryptoMode) {
+      this.handleCryptoDeposit();
+    } else {
+      this.statusText.setText('Opponent joined! Entering battle...');
+      this.time.delayedCall(800, () => this.enterBattle());
+    }
+  }
+
+  private onOpponentDisconnected(): void {
+    this.statusText.setText('Opponent disconnected.').setColor('#ff4444');
+    this.time.delayedCall(3000, () => this.scene.start('MainMenuScene'));
+  }
+
+  private onSocketError(msg: string): void {
+    this.statusText.setText(`Error: ${msg}`).setColor('#ff4444');
+  }
+
+  private onBothCryptoReady(): void {
+    this.cryptoPhase = 'both_ready';
+    this.statusText.setText('Funds locked! Entering battle...').setColor('#00ff88');
+    this.time.delayedCall(1000, () => this.enterBattle());
+  }
+
+  // ─── Crypto deposit flow ─────────────────────────────────────
+
+ private async handleCryptoDeposit(): Promise<void> {
+  this.cryptoPhase = 'depositing';
+  this.statusText.setText('Locking funds... Check your wallet').setColor('#f5a623');
+  this.subStatusText.setText('MetaMask popup incoming');
+
+  try {
+    const isHost = GameState.roomAction === RoomAction.Create;
+    let txHash: string;
+
+    if (isHost) {
+      txHash = await EscrowManager.createMatch(GameState.roomCode);
+    } else {
+      txHash = await EscrowManager.joinMatch(GameState.roomCode);
+    }
+
+    // Store tx hash for ResultScene display
+    (GameState as any).depositTxHash = txHash;
+
+    this.cryptoPhase = 'waiting_opponent_deposit';
+    this.statusText.setText('Funds locked ✓  Waiting for opponent...').setColor('#4fc3f7');
+    this.subStatusText.setText('');
+    SocketManager.registerWallet(GameState.walletAddress!);
+    SocketManager.signalCryptoReady();
+  } catch (err: any) {
+    this.statusText.setText(`Deposit failed: ${err.message}`).setColor('#ff4444');
+    this.time.delayedCall(4000, () => this.scene.start('MainMenuScene'));
+  }
+}
+
+  // ─── Scene transition ────────────────────────────────────────
 
   private enterBattle(): void {
     this.cameras.main.fadeOut(300, 0, 0, 0);
@@ -13727,6 +15585,496 @@ export default class RoomScene extends Phaser.Scene {
       });
     });
   }
+}
+```
+
+# src\ui\DOMInputManager.ts
+
+```ts
+// ============================================================
+// DOMInputManager.ts
+// Manages HTML DOM inputs overlaid on the Phaser canvas.
+//
+// Uses Phaser's built-in DOM element system (scene.add.dom) which
+// automatically handles Scale.FIT + CENTER_BOTH transforms.
+// This eliminates all manual coordinate math and the alignment
+// bugs that come with it.
+//
+// REQUIRES: dom.createContainer = true  in Phaser GameConfig
+//
+// USAGE:
+//   const mgr = new DOMInputManager(this);      // 'this' = Phaser.Scene
+//   const inp = mgr.createInput({ gameX: 640, gameY: 300, ... });
+//   mgr.destroyAll();                            // on scene shutdown
+// ============================================================
+
+import Phaser from 'phaser';
+
+// ─── Config for a single input ─────────────────────────────────
+export interface InputConfig {
+  /** Center X in game-space pixels (0–1280) */
+  gameX: number;
+  /** Center Y in game-space pixels (0–720) */
+  gameY: number;
+  /** Width in game-space pixels */
+  width?: number;
+  /** Height in game-space pixels */
+  height?: number;
+  /** Placeholder text */
+  placeholder?: string;
+  /** Max character length */
+  maxLength?: number;
+  /** Force uppercase on input */
+  uppercase?: boolean;
+  /** Extra CSS overrides (applied last) */
+  cssOverrides?: Partial<CSSStyleDeclaration>;
+}
+
+// ─── Managed input handle ──────────────────────────────────────
+interface ManagedInput {
+  element: HTMLInputElement;
+  domElement: Phaser.GameObjects.DOMElement;
+}
+
+// ─── Default styling tokens ────────────────────────────────────
+const DEFAULTS = {
+  width: 300,
+  height: 44,
+  bg: '#16213E',
+  border: '#253348',
+  focusBorder: '#4fc3f7',
+  text: '#ffffff',
+  placeholder: '#666688',
+  fontSize: '15px',
+  fontFamily: '"Courier New", monospace',
+  borderRadius: '6px',
+} as const;
+
+export class DOMInputManager {
+  private scene: Phaser.Scene;
+  private inputs: ManagedInput[] = [];
+
+  constructor(scene: Phaser.Scene) {
+    this.scene = scene;
+  }
+
+  // ─── Public API ────────────────────────────────────────────────
+
+  /**
+   * Create an HTML input positioned in game-space via Phaser's DOM layer.
+   * Returns the raw HTMLInputElement for reading .value etc.
+   */
+  createInput(config: InputConfig): HTMLInputElement {
+    const w = config.width ?? DEFAULTS.width;
+    const h = config.height ?? DEFAULTS.height;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = config.placeholder ?? '';
+    if (config.maxLength) input.maxLength = config.maxLength;
+
+    // ── Uppercase transform ────────────────────────────────
+    if (config.uppercase) {
+      input.style.textTransform = 'uppercase';
+      input.addEventListener('input', () => {
+        const pos = input.selectionStart;
+        input.value = input.value.toUpperCase();
+        input.setSelectionRange(pos, pos);
+      });
+    }
+
+    // ── Styling ────────────────────────────────────────────
+    input.style.cssText = `
+      width: ${w}px;
+      height: ${h}px;
+      padding: 0 14px;
+      font-size: ${DEFAULTS.fontSize};
+      font-family: ${DEFAULTS.fontFamily};
+      border: 1px solid ${DEFAULTS.border};
+      border-radius: ${DEFAULTS.borderRadius};
+      background: ${DEFAULTS.bg};
+      color: ${DEFAULTS.text};
+      outline: none;
+      text-align: center;
+      box-sizing: border-box;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    `;
+
+    // Focus glow
+    input.addEventListener('focus', () => {
+      input.style.borderColor = DEFAULTS.focusBorder;
+      input.style.boxShadow = `0 0 8px ${DEFAULTS.focusBorder}44`;
+    });
+    input.addEventListener('blur', () => {
+      input.style.borderColor = DEFAULTS.border;
+      input.style.boxShadow = 'none';
+    });
+
+    // Extra overrides
+    if (config.cssOverrides) {
+      Object.assign(input.style, config.cssOverrides);
+    }
+
+    // ── Add via Phaser's DOM system ────────────────────────
+    // scene.add.dom() positions the element in game-space coordinates,
+    // automatically handling canvas scaling and centering.
+    const domElement = this.scene.add.dom(config.gameX, config.gameY, input);
+
+    this.inputs.push({ element: input, domElement });
+
+    return input;
+  }
+
+  /** Remove a specific input */
+  destroyInput(input: HTMLInputElement): void {
+    const idx = this.inputs.findIndex(m => m.element === input);
+    if (idx !== -1) {
+      this.inputs[idx].domElement.destroy();
+      this.inputs.splice(idx, 1);
+    }
+  }
+
+  /** Remove ALL managed inputs */
+  destroyAll(): void {
+    for (const managed of this.inputs) {
+      managed.domElement.destroy();
+    }
+    this.inputs = [];
+  }
+}
+```
+
+# src\ui\MenuButton.ts
+
+```ts
+// ============================================================
+// MenuButton.ts
+// Reusable Phaser text button with hover, press, and disabled states.
+//
+// Encapsulates interactive text with consistent styling so scenes
+// don't repeat pointer event wiring for every button.
+//
+// USAGE:
+//   const btn = new MenuButton(scene, 640, 450, '[ PLAY FREE ]', {
+//     color: '#00ff88', fontSize: '28px',
+//     onPointerDown: () => doSomething(),
+//   });
+//   btn.setDisabled(true);   // grey out
+//   btn.destroy();           // cleanup
+// ============================================================
+
+import Phaser from 'phaser';
+
+export interface MenuButtonConfig {
+  /** Base text color (hex string) */
+  color?: string;
+  /** Hover text color */
+  hoverColor?: string;
+  /** Disabled text color */
+  disabledColor?: string;
+  /** Font size string e.g. '28px' */
+  fontSize?: string;
+  /** Font style e.g. 'bold' */
+  fontStyle?: string;
+  /** Font family */
+  fontFamily?: string;
+  /** Callback on click */
+  onPointerDown?: () => void;
+}
+
+const BTN_DEFAULTS: Required<Omit<MenuButtonConfig, 'onPointerDown'>> = {
+  color: '#00ff88',
+  hoverColor: '#ffffff',
+  disabledColor: '#555555',
+  fontSize: '24px',
+  fontStyle: 'bold',
+  fontFamily: '"Courier New", monospace',
+};
+
+export class MenuButton {
+  readonly text: Phaser.GameObjects.Text;
+  private config: Required<Omit<MenuButtonConfig, 'onPointerDown'>>;
+  private callback: (() => void) | undefined;
+  private _disabled: boolean = false;
+
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    label: string,
+    cfg?: MenuButtonConfig,
+  ) {
+    this.config = { ...BTN_DEFAULTS, ...cfg };
+    this.callback = cfg?.onPointerDown;
+
+    this.text = scene.add.text(x, y, label, {
+      fontSize: this.config.fontSize,
+      fontStyle: this.config.fontStyle,
+      fontFamily: this.config.fontFamily,
+      color: this.config.color,
+    }).setOrigin(0.5);
+
+    this.text.setInteractive({ useHandCursor: true });
+
+    this.text.on('pointerover', () => {
+      if (!this._disabled) this.text.setColor(this.config.hoverColor);
+    });
+
+    this.text.on('pointerout', () => {
+      if (!this._disabled) this.text.setColor(this.config.color);
+    });
+
+    this.text.on('pointerdown', () => {
+      if (!this._disabled && this.callback) {
+        // Scale press feedback
+        scene.tweens.add({
+          targets: this.text,
+          scaleX: 0.95, scaleY: 0.95,
+          duration: 80,
+          yoyo: true,
+        });
+        this.callback();
+      }
+    });
+  }
+
+  /** Grey out and disable interaction */
+  setDisabled(disabled: boolean): void {
+    this._disabled = disabled;
+    this.text.setColor(disabled ? this.config.disabledColor : this.config.color);
+    if (disabled) {
+      this.text.disableInteractive();
+    } else {
+      this.text.setInteractive({ useHandCursor: true });
+    }
+  }
+
+  /** Update the label text */
+  setLabel(label: string): void {
+    this.text.setText(label);
+  }
+
+  /** Update color (resets base color) */
+  setColor(color: string): void {
+    this.config.color = color;
+    if (!this._disabled) this.text.setColor(color);
+  }
+
+  /** Clean up */
+  destroy(): void {
+    this.text.destroy();
+  }
+}
+
+```
+
+# src\ui\ShareHelper.ts
+
+```ts
+// ============================================================
+// ShareHelper.ts
+// Utility class for clipboard operations and room sharing.
+//
+// Provides:
+//   - copyToClipboard()  → copies text with fallback for older browsers
+//   - buildRoomLink()    → generates a joinable URL with room code
+//   - shareRoom()        → uses Web Share API if available, else copies
+//
+// All methods are static — no instantiation needed.
+// ============================================================
+
+export class ShareHelper {
+
+  /**
+   * Copy arbitrary text to the clipboard.
+   * Returns true on success, false on failure.
+   */
+  static async copyToClipboard(text: string): Promise<boolean> {
+    // Modern API
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        // Fall through to legacy approach
+      }
+    }
+
+    // Legacy fallback: invisible textarea
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Build a URL that a second player can open to auto-join a room.
+   * Format: {origin}?room={code}
+   *
+   * If the current page is file:// or about:blank (dev), returns
+   * a placeholder string the user can still share manually.
+   */
+  static buildRoomLink(roomCode: string): string {
+    const base = window.location.origin + window.location.pathname;
+    // Avoid broken links in dev / iframe contexts
+    if (base.startsWith('file://') || base === 'about:blank') {
+      return `[Room Code: ${roomCode}]`;
+    }
+    return `${base}?room=${roomCode}`;
+  }
+
+  /**
+   * Try the native Web Share API (mobile-friendly).
+   * Falls back to copying the link to clipboard.
+   * Returns 'shared' | 'copied' | 'failed'.
+   */
+  static async shareRoom(roomCode: string): Promise<'shared' | 'copied' | 'failed'> {
+    const link = ShareHelper.buildRoomLink(roomCode);
+
+    // Try native share (mobile browsers, some desktops)
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'OnChainBattles — Join My Room',
+          text: `Join my OnChainBattles match! Room code: ${roomCode}`,
+          url: link,
+        });
+        return 'shared';
+      } catch {
+        // User cancelled or API error — fall through to copy
+      }
+    }
+
+    // Fallback: copy link
+    const ok = await ShareHelper.copyToClipboard(link);
+    return ok ? 'copied' : 'failed';
+  }
+
+  /**
+   * Read room code from URL query params if present.
+   * Returns empty string if not found.
+   * Used by MainMenuScene to auto-fill the room code input.
+   */
+  static getRoomCodeFromURL(): string {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('room')?.trim().toUpperCase() ?? '';
+    } catch {
+      return '';
+    }
+  }
+}
+
+```
+
+# src\ui\ToastNotification.ts
+
+```ts
+// ============================================================
+// ToastNotification.ts
+// Displays a temporary notification on the Phaser canvas.
+// Auto-dismisses after a configurable duration.
+//
+// USAGE:
+//   ToastNotification.show(scene, 'Copied!', { color: '#00ff88' });
+//   ToastNotification.show(scene, 'Error!', { color: '#ff4444', y: 600 });
+// ============================================================
+
+import Phaser from 'phaser';
+
+export interface ToastConfig {
+  /** Text color (hex) */
+  color?: string;
+  /** Font size */
+  fontSize?: string;
+  /** Duration in ms before auto-dismiss */
+  duration?: number;
+  /** Y position (default: scene height - 80) */
+  y?: number;
+  /** X position (default: center) */
+  x?: number;
+}
+
+const TOAST_DEFAULTS = {
+  color: '#ff4444',
+  fontSize: '16px',
+  duration: 2500,
+} as const;
+
+export class ToastNotification {
+  /**
+   * Show a temporary text notification on screen.
+   * Returns the text object in case caller needs to destroy early.
+   */
+  static show(
+    scene: Phaser.Scene,
+    message: string,
+    config?: ToastConfig,
+  ): Phaser.GameObjects.Text {
+    const cfg = { ...TOAST_DEFAULTS, ...config };
+    const x = cfg.x ?? scene.scale.width / 2;
+    const y = cfg.y ?? scene.scale.height - 80;
+
+    const text = scene.add.text(x, y, message, {
+      fontSize: cfg.fontSize,
+      fontFamily: '"Courier New", monospace',
+      color: cfg.color,
+    }).setOrigin(0.5).setAlpha(0);
+
+    // Fade in
+    scene.tweens.add({
+      targets: text,
+      alpha: 1,
+      duration: 150,
+    });
+
+    // Fade out and destroy
+    scene.time.delayedCall(cfg.duration!, () => {
+      scene.tweens.add({
+        targets: text,
+        alpha: 0,
+        duration: 300,
+        onComplete: () => text.destroy(),
+      });
+    });
+
+    return text;
+  }
+}
+
+```
+
+# src\utils\PhaserUtils.ts
+
+```ts
+import Phaser from 'phaser';
+
+/**
+ * Set up a top-left-origin hit area on a Phaser Container.
+ * 
+ * IMPORTANT: We intentionally do NOT call container.setSize().
+ * setSize() shifts displayOriginX/Y to center (w/2, h/2),
+ * which offsets Phaser's hit testing coordinates.
+ * Without setSize(), displayOrigin stays at (0,0) and the
+ * Rectangle(0, 0, w, h) matches the visual bounds exactly.
+ */
+export function setContainerHitArea(
+  container: Phaser.GameObjects.Container,
+  w: number,
+  h: number
+): void {
+  container.setInteractive(
+    new Phaser.Geom.Rectangle(0, 0, w, h),
+    Phaser.Geom.Rectangle.Contains
+  );
 }
 ```
 

@@ -14,7 +14,7 @@ import type {
   ThemeJSON,
   CardRenderData,
   Rect,
-} from '../types/UITypes';
+} from '../game/types/UITypes';
 import { EventBus, EV } from '../events/EventBus';
 import { ThemeLoader } from '../config/ThemeLoader';
 import { CardRenderer } from './CardRenderer';
@@ -411,13 +411,7 @@ export class OverlayRenderer {
         });
       }),
 
-      EventBus.on(EV.GAME_OVER, (config: GameOverConfig) => {
-        this.showGameOver(
-          config,
-          () => EventBus.emit('PLAY_AGAIN', {}),
-          () => EventBus.emit('GO_MENU', {})
-        );
-      }),
+     
 
       EventBus.on(EV.DETAIL_SHOW, (data: CardRenderData) => {
         this.showCardDetail(data);

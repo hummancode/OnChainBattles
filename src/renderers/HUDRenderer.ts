@@ -12,6 +12,7 @@ import Phaser from 'phaser';
 import type { BattleLayoutJSON, ThemeJSON, HUDSnapshot, ButtonStyle } from '../game/types/UITypes';
 import { EventBus, EV } from '../events/EventBus';
 import { ThemeLoader } from '../config/ThemeLoader';
+import { setContainerHitArea } from '../utils/PhaserUtils';
 
 export class HUDRenderer {
   private scene: Phaser.Scene;
@@ -79,7 +80,7 @@ export class HUDRenderer {
     this.opponentNameText.setText(snap.opponentName);
     this.updatePlayerHP(snap.playerKingHP, snap.playerKingMaxHP);
     this.updateOpponentHP(snap.opponentKingHP, snap.opponentKingMaxHP);
-    this.updatePlayerLEG(snap.playerLEG, snap.playerLEGRate);
+    this.updatePlayerLEG(snap.playerLEG, snap.playerCrown);
     this.updateOpponentLEG(snap.opponentLEGCount);
     this.updatePhaseLabel(snap.currentPhase, snap.turnNumber);
     this.playerWinLossText.setText(`${snap.playerWins}W / ${snap.playerLosses}L`);
@@ -130,20 +131,24 @@ updatePhaseLabel(phase: string, turn: number): void {
   this.phaseLabelText.setColor(color);
 }
 
-  setEndTurnEnabled(enabled: boolean): void {
-    const btn = this.endTurnBtn;
-    if (!btn) return;
-    const style = this.theme.buttons.endTurn;
-    btn.setAlpha(enabled ? 1.0 : 0.4);
-    btn.setInteractive(enabled);
+// AFTER:
+setEndTurnEnabled(enabled: boolean): void {
+  const btn = this.endTurnBtn;
+  if (!btn) return;
+  btn.setAlpha(enabled ? 1.0 : 0.4);
+  if (btn.input) {
+    btn.input.enabled = enabled;
   }
+}
 
-  setPassEnabled(enabled: boolean): void {
-    const btn = this.passBtnObj;
-    if (!btn) return;
-    btn.setAlpha(enabled ? 1.0 : 0.4);
-    btn.setInteractive(enabled);
+setPassEnabled(enabled: boolean): void {
+  const btn = this.passBtnObj;
+  if (!btn) return;
+  btn.setAlpha(enabled ? 1.0 : 0.4);
+  if (btn.input) {
+    btn.input.enabled = enabled;
   }
+}
 
   /** Register callbacks for button presses. Called by BattleScene. */
   onEndTurnClick(fn: () => void): void { this.onEndTurn = fn; }
@@ -358,8 +363,7 @@ updatePhaseLabel(phase: string, turn: number): void {
     }).setOrigin(0.5, 0.5);
 
     container.add([bg, txt]);
-    container.setSize(w, h);
-    container.setInteractive();
+setContainerHitArea(container, w, h);
 
     container.on('pointerover', () => {
       bg.clear();

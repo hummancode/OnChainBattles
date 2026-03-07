@@ -430,49 +430,38 @@ export function getCard(id: string): CardDefinition {
 // Both players use identical deck, independently shuffled.
 // ─────────────────────────────────────────────
 
-export const DEMO_DECK_IDS: string[] = [
-  // Standard units — 3 copies
-  'foot_soldier', 'foot_soldier', 'foot_soldier',
-  // Standard units — 2 copies
-  'pikeman', 'pikeman',
-  'archer', 'archer',
-  'assassin', 'assassin',
-  'militia', 'militia',
-  'scout', 'scout',
-  'lancer', 'lancer',
-  'messenger', 'messenger',
-  // Standard units — 1 copy
-  'mystic',
-  // Royal units — 2 copies
-  'swordsman', 'swordsman',
-  'priest', 'priest',
-  'inquisitor', 'inquisitor',
-  'knight', 'knight',
-  'scribe', 'scribe',
-  // Royal units — 1 copy
-  'princess',
-  'commander',
-  'knights_guard',
-  // Structures — 2 copies
-  'temple', 'temple',
-  'village', 'village',
-  // Structures — 1 copy
-  'castle',
-  // Spells — 2 copies
-  'disease', 'disease',
-  'reform', 'reform',
-  'war_horn', 'war_horn',
-  'treason', 'treason',
-  // Spells — 1 copy
-  'casus_belli',
-  'civil_war',
-  'earthquake',
-  'motherland',
-  'coup',
-  'peasant_revolt',
+// ─────────────────────────────────────────────
+// UNITS-ONLY DECK — 31 cards (King pre-placed, not included)
+// No spells or structures. Focused on unit combat for MVP playtesting.
+// Both players use identical pool, each gets an independently shuffled copy.
+// ─────────────────────────────────────────────
+
+export const UNITS_ONLY_DECK_IDS: string[] = [
+  // Standard units
+  'foot_soldier', 'foot_soldier', 'foot_soldier',  // 3 copies — cheap backbone
+  'pikeman',      'pikeman',                        // 2 — anti-cavalry
+  'archer',       'archer',                         // 2 — ranged
+  'assassin',     'assassin',                       // 2 — fast striker
+  'militia',      'militia',                        // 2 — expendable
+  'scout',        'scout',                          // 2 — board info
+  'lancer',       'lancer',                         // 2 — cavalry charge
+  'messenger',    'messenger',                      // 2 — utility
+  'mystic',                                         // 1 — revive wildcard
+  // Royal units
+  'swordsman',    'swordsman',                      // 2 — reliable fighter
+  'priest',       'priest',                         // 2 — healer
+  'inquisitor',   'inquisitor',                     // 2 — LEG drain threat
+  'knight',       'knight',                         // 2 — heavy cavalry
+  'scribe',       'scribe',                         // 2 — deck utility
+  'princess',                                       // 1 — CROWN boost
+  'commander',                                      // 1 — aura leader
+  'knights_guard',                                  // 1 — defensive elite
 ];
 
-// Sanity check — 31 cards
-if (DEMO_DECK_IDS.length !== 31) {
-  console.error(`[CardDefinitions] DEMO_DECK_IDS has ${DEMO_DECK_IDS.length} entries, expected 31`);
+// Sanity check — must be exactly 31
+if (UNITS_ONLY_DECK_IDS.length !== 31) {
+  console.error(`[CardDefinitions] UNITS_ONLY_DECK_IDS has ${UNITS_ONLY_DECK_IDS.length} entries, expected 31`);
 }
+
+// Keep old name as alias so nothing else breaks during transition
+export const DEMO_DECK_IDS = UNITS_ONLY_DECK_IDS;

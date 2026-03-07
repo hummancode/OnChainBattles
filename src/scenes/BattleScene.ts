@@ -392,7 +392,7 @@ const refreshHUD = () => {
     opponentKingHP:    opponentKing.current,
     opponentKingMaxHP: opponentKing.max,
     playerLEG:         playerMod?.legPool     ?? 0,
-    playerLEGRate:     playerMod ? computeLEGRate(playerMod) : 1,
+    playerCrown:    playerMod ? computeLEGRate(playerMod) : 1,
     opponentLEGCount:  opponentMod?.legPool   ?? 0,
     currentPhase:      state.turn?.phase       ?? 'DRAW',
     turnNumber:        state.turn?.turnNumber  ?? 1,
@@ -416,12 +416,13 @@ this.hudUnsubs.push(EventBus.on('TURN_STARTED',     refreshHUD));
 this.hudUnsubs.push(EventBus.on(EV.CARD_PLAYED,     refreshHUD));
 this.hudUnsubs.push(EventBus.on('OPPONENT_CARD_DRAWN', refreshHUD));
     // Init renderers
-this.boardRenderer   = new BoardRenderer(this, layout, theme);
+this.boardRenderer = new BoardRenderer(this, layout, theme, localPlayerIndex);
+
 this.handRenderer    = new HandRenderer(this, layout, theme);
 this.hudRenderer     = new HUDRenderer(this, layout, theme);
 this.overlayRenderer = new OverlayRenderer(this, layout, theme);
 
-this.boardRenderer.setLocalPlayer(localPlayerIndex);
+//this.boardRenderer.setLocalPlayer(localPlayerIndex);
 this.hudRenderer.setLocalPlayer(localPlayerIndex);
 
   
@@ -495,7 +496,7 @@ isPlayerUnit: (col: number, row: number) => {
       opponentName,
       playerKingHP: 30,    playerKingMaxHP: 30,
       opponentKingHP: 30,  opponentKingMaxHP: 30,
-      playerLEG: 1,        playerLEGRate: 1,
+      playerLEG: 1,        playerCrown: 1,  
       opponentLEGCount: 1,
       currentPhase: 'DRAW',
       turnNumber: 1,
@@ -506,8 +507,11 @@ isPlayerUnit: (col: number, row: number) => {
     });
 
     // Wire End Turn / Pass buttons
+// AFTER:
 this.hudRenderer.onEndTurnClick(() => {
-  const phase = this.engine.getState().turn?.phase;
+  const state = this.engine.getState();
+  if (state.turn?.activePlayer !== localPlayerIndex) return;  // not your turn
+  const phase = state.turn?.phase;
   if (phase === 'PLAY') {
     this.engine.endPlayPhase();
     SocketManager.sendGameAction({ type: 'END_PLAY_PHASE' });
@@ -516,42 +520,55 @@ this.hudRenderer.onEndTurnClick(() => {
     SocketManager.sendGameAction({ type: 'END_ACT_PHASE' });
   }
 });
+// AFTER:
 this.hudRenderer.onPassClick(() => {
+  const state = this.engine.getState();
+  if (state.turn?.activePlayer !== localPlayerIndex) return;  // not your turn
   this.engine.endActPhase();
   SocketManager.sendGameAction({ type: 'END_ACT_PHASE' });
 });
 
     // Game over → ResultScene
-   EventBus.on(EV.GAME_OVER, (ev: any) => {
-  const result    = ev.result ?? ev;   // engine wraps in .result on some versions
+EventBus.on(EV.GAME_OVER, (ev: any) => {
+  if (!this.scene.isActive('BattleScene')) return;
+
+  const result    = ev.result ?? ev;
   const turnCount = result?.turns ?? this.engine.getState().turn?.turnNumber ?? 0;
   const reason    = result?.reason ?? 'KING_DESTROYED';
   const playerWon = (result?.winner ?? ev.winner) === localPlayerIndex;
-      if (playerWon) GameState.recordWin();
-      else GameState.recordLoss();
-GameState.setLastMatch({
-  playerName,
-  opponentName,
-  playerRoll: 0,
-  opponentRoll: 0,
-  playerWon,
-  isTie: false,
-  stakeAmount: GameState.currentStake,
-  payout: playerWon ? GameState.currentStake * 2 * 0.95 : 0,
+
+  if (playerWon) GameState.recordWin();
+  else           GameState.recordLoss();
+
+  GameState.setLastMatch({
+    playerName,
+    opponentName,
+    playerRoll:   0,
+    opponentRoll: 0,
+    playerWon,
+    isTie:        false,
+    stakeAmount:  GameState.currentStake,
+    payout:       playerWon ? GameState.currentStake * 2 * 0.95 : 0,
+  });
+
+  (GameState as any).lastMatchExtra = {
+    reason,
+    turnCount,
+    winnerName: playerWon ? playerName : opponentName,
+  };
+
+  // ── NEW: Tell server who won (server triggers contract payout) ──
+  if (this.sceneData.isCryptoMode) {
+    SocketManager.sendGameOver(localPlayerIndex, playerWon);
+  }
+
+  this.time.delayedCall(1500, () => {
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () =>
+      this.scene.start('ResultScene')
+    );
+  });
 });
-
-// Store extra match data for ResultScene
-(GameState as any).lastMatchExtra = {
-  reason,
-  turnCount,
-  winnerName: playerWon ? playerName : opponentName,
-};
-      this.time.delayedCall(2000, () => {
-        this.cameras.main.fadeOut(300, 0, 0, 0);
-        this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('ResultScene'));
-      });
-    });
-
     // Start!
 
   // REPLACE SocketManager.connect({...}) in BattleScene.create() WITH:
@@ -563,6 +580,8 @@ SocketManager.setCallbacks({
   onOpponentDisconnected: () => this.handleOpponentDisconnect(),
   onOpponentRollReceived: () => {},
   onError: (msg) => console.error('[BattleScene] Socket error:', msg),
+  onPayoutResult: () => {},
+
 });
  // WITH:
 this.engine.startGame();

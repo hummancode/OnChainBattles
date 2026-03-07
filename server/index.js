@@ -66,7 +66,23 @@ async function refundTie(roomCode) {
 const rooms = {};
 
 io.on('connection', (socket) => {
+socket.on('game_over', async ({ roomCode, winnerIndex }) => {
+  const room = rooms[roomCode];
+  if (!room || room.settled) return;   // prevent double-settle
+  room.settled = true;
 
+  const winner = room.players[winnerIndex];
+  if (!winner?.wallet) {
+    console.log(`[Server] game_over in ${roomCode} but winner has no wallet (free mode)`);
+    return;
+  }
+
+  console.log(`[Server] game_over: ${winner.name} wins room ${roomCode}`);
+  const result = await payoutWinner(roomCode, winner.wallet);
+
+  // Notify both clients
+  io.to(roomCode).emit('payout_result', result);
+});
   // Game action relay — forward to opponent only
 socket.on('game_action', ({ roomCode, action }) => {
     socket.to(roomCode).emit('opponent_action', action);
@@ -116,16 +132,20 @@ socket.on('game_action', ({ roomCode, action }) => {
   });
 
   // Player signals their escrow deposit is confirmed on-chain
-  socket.on('cryptoReady', ({ roomCode }) => {
+socket.on('cryptoReady', ({ roomCode }) => {
     const room = rooms[roomCode];
     if (!room) return;
     room.cryptoReady.count = (room.cryptoReady.count || 0) + 1;
     console.log(`[Server] cryptoReady: ${room.cryptoReady.count}/2 in room ${roomCode}`);
 
-    if (room.cryptoReady.count >= 2) {
-      // Both players locked funds — enable rolling
+    if (room.cryptoReady.count === 1) {
+      // Host deposit confirmed — tell joiner to deposit now
+      socket.to(roomCode).emit('hostDepositConfirmed');
+      console.log(`[Server] Told opponent to deposit in room ${roomCode}`);
+    } else if (room.cryptoReady.count >= 2) {
+      // Both deposits confirmed — start game
       io.to(roomCode).emit('bothCryptoReady');
-      console.log(`[Server] Both players crypto-ready in room ${roomCode}, enabling dice roll`);
+      console.log(`[Server] Both players crypto-ready in room ${roomCode}`);
     }
   });
 
@@ -184,17 +204,33 @@ socket.on('game_action', ({ roomCode, action }) => {
     }
   });
 
-  socket.on('disconnect', () => {
+ socket.on('disconnect', () => {
     for (const code in rooms) {
       const room = rooms[code];
       const idx = room.players.findIndex(p => p.id === socket.id);
-      if (idx !== -1) {
-        room.players.splice(idx, 1);
-        io.to(code).emit('opponentDisconnected');
-        if (room.players.length === 0) delete rooms[code];
-        console.log(`[Server] Player left room: ${code}`);
-        break;
+      if (idx === -1) continue;
+
+      const disconnectedPlayer = room.players[idx];
+      console.log(`[Server] ${disconnectedPlayer.name} left room: ${code}`);
+
+      // Notify remaining player
+      socket.to(code).emit('opponentDisconnected');
+
+      // Crypto: if both deposited and not yet settled, pay remaining player
+      if (room.cryptoReady?.count >= 2 && !room.settled) {
+        room.settled = true;
+        const remainingIdx = idx === 0 ? 1 : 0;
+        const remaining = room.players[remainingIdx];
+        if (remaining?.wallet) {
+          console.log(`[Server] Disconnect payout to ${remaining.name} (${remaining.wallet})`);
+          payoutWinner(code, remaining.wallet).then(result => {
+            io.to(code).emit('payout_result', result);
+          });
+        }
       }
+
+      delete rooms[code];
+      break;
     }
   });
 });

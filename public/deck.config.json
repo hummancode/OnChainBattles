@@ -1,0 +1,22 @@
+{
+  "_comment": "Edit card IDs here to change the deck. Must be exactly 31 valid card IDs. King is pre-placed and must NOT be included.",
+  "deckIds": [
+    "foot_soldier", "foot_soldier", "foot_soldier",
+    "pikeman",      "pikeman",
+    "archer",       "archer",
+    "assassin",     "assassin",
+    "militia",      "militia",
+    "scout",        "scout",
+    "lancer",       "lancer",
+    "messenger",    "messenger",
+    "mystic",
+    "swordsman",    "swordsman",
+    "priest",       "priest",
+    "inquisitor",   "inquisitor",
+    "knight",       "knight",
+    "scribe",       "scribe",
+    "princess",
+    "commander",
+    "knights_guard"
+  ]
+}

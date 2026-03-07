@@ -438,7 +438,7 @@ export interface HUDSnapshot {
   opponentKingHP: number;
   opponentKingMaxHP: number;
   playerLEG: number;
-  playerLEGRate: number;
+  playerCrown: number;  
   opponentLEGCount: number;   // number of cards (hidden)
   currentPhase: string;
   turnNumber: number;

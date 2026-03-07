@@ -19,13 +19,14 @@ import {
   applyDamage, applyFullHeal, applyAutoHeal, applyReform, applyEarthquakeDamage,
 } from './CombatResolver';
 import { getValidMoves, getValidAttacks, getValidDeploySquares, isMoveValid, isAttackValid, isLancerForwardMove } from './MovementRules';
-import { getCard, DEMO_DECK_IDS } from './data/CardDefinitions';
+import { DeckLoader } from '../config/DeckLoader'; 
 import { Player, TurnPhase, EngineStatus } from './types/GameTypes';
 import type { Unit, Position, GameStateSnapshot } from './types/GameTypes';
 import type { GameEvent, EvGameOver } from './types/EventTypes';
 import type { PendingInteraction } from './types/AbilityTypes';
 import { Allegiance, CardClass, CardFlag, SubType } from './types/CardTypes';
-
+import { UNITS_ONLY_DECK_IDS, getCard } from './data/CardDefinitions';
+//import { getCard, DEMO_DECK_IDS } from './data/CardDefinitions';
 // ─────────────────────────────────────────────
 // PUBLIC API INTERFACE (consumed by SelectionManager)
 // ─────────────────────────────────────────────
@@ -95,26 +96,21 @@ export class GameEngine implements IGameEngineAPI {
   }
 
   /** Start a new game. Deals opening hands and pre-places Kings. */
-  startGame(): void {
-    // Load decks
-    this.players[Player.P1].loadDeck([...DEMO_DECK_IDS]);
-    this.players[Player.P2].loadDeck([...DEMO_DECK_IDS]);
+startGame(): void {
+  const deck = DeckLoader.get();  // reads cached result from PreloadScene load
 
-    // Pre-place Kings
-    this.prePlaceKing(Player.P1);
-    this.prePlaceKing(Player.P2);
+this.players[Player.P1].loadDeck([...deck], Player.P1);  // uses seed + 0
+this.players[Player.P2].loadDeck([...deck], Player.P2);  // uses seed + 1
 
-    // Draw opening hands (4 cards each)
-    this.drawOpeningHand(Player.P1);
-    this.drawOpeningHand(Player.P2);
-
-    // Recalculate modifiers (Kings on board)
-    this.auras.recalculateModifiers(this.board, this.mods);
-
-    // Start turn 1 for P1
-    this.status = EngineStatus.IDLE;
-    this.startTurn();
-  }
+  // rest unchanged...
+  this.prePlaceKing(Player.P1);
+  this.prePlaceKing(Player.P2);
+  this.drawOpeningHand(Player.P1);
+  this.drawOpeningHand(Player.P2);
+  this.auras.recalculateModifiers(this.board, this.mods);
+  this.status = EngineStatus.IDLE;
+  this.startTurn();
+}
 
   // ─────────────────────────────────────────────
   // PUBLIC API — QUERIES (no state change)
@@ -458,6 +454,14 @@ export class GameEngine implements IGameEngineAPI {
     this.advancePhase(TurnPhase.LEG);
     const ap = this.activePlayer;
     const mod = this.mods[ap];
+  // ── CROWN grows +1 each turn ──────────────────────────────
+  // legRateBase starts at 1 (Turn 1), becomes 2 on Turn 2, etc.
+  // Cap it so late game doesn't spiral — adjust cap to taste.
+  const CROWN_CAP = 10;
+  if (mod.legRateBase < CROWN_CAP) {
+    mod.legRateBase += 1;
+  }
+  // ─────────────────────────────────────────────────────────
 
     // 1. Gain LEG
     const gained = mod.gainLEG();
@@ -607,8 +611,10 @@ export class GameEngine implements IGameEngineAPI {
     // On-kill ability: Inquisitor LEG drain
     const killedTarget = events.find(e => e.type === 'UNIT_DIED');
     if (killedTarget && killedTarget.type === 'UNIT_DIED') {
-      const killEvents = resolveOnKill(attacker, killedTarget.cardId, this.board, this.players, this.mods);
-      this.applyEvents(killEvents);
+      // AFTER:
+      const killEvents = resolveOnKill(attacker, defender, this.board, this.players, this.mods);
+      // AFTER:
+this.applyEvents(killEvents.events);
     }
 
     // King death = game over

@@ -19,13 +19,16 @@ export interface RoomCallbacks {
   onRoomCreated: (code: string) => void;
   onRoomJoined: (code: string) => void;
   onOpponentJoined: (opponentName: string) => void;
-  onOpponentAction: (action: GameAction) => void;   // ← ADD
+  onOpponentAction: (action: GameAction) => void;
   onOpponentDisconnected: () => void;
   onOpponentRollReceived: (roll: number, opponentName: string) => void;
   onError: (message: string) => void;
   onBothCryptoReady?: () => void;
   onCryptoMatchResult?: (result: CryptoMatchResult) => void;
   onTieReroll?: () => void;
+  onPayoutResult?: (result: { success: boolean; txHash?: string; error?: string }) => void;
+  onHostDepositConfirmed?: () => void;
+  // ← ADD
 }
 
 export interface CryptoMatchResult {
@@ -127,6 +130,10 @@ class SocketManagerClass {
   GameState.setPlayerIndex(data.playerIndex ?? 0);
   this.callbacks?.onRoomCreated(data.roomCode);
 });
+this.socket.on("hostDepositConfirmed", () => {
+  console.log("[SocketManager] Host deposit confirmed — my turn to deposit");
+  this.callbacks?.onHostDepositConfirmed?.();
+});
     this.socket.on("roomJoined", (data: { roomCode: string; playerIndex: number }) => {
   console.log(`[SocketManager] Room joined: ${data.roomCode}, playerIndex: ${data.playerIndex ?? 1}`);
   GameState.setPlayerIndex(data.playerIndex ?? 1);
@@ -169,7 +176,11 @@ this.socket.on("game_seed", (data: { seed: number }) => {
       console.log("[SocketManager] Crypto match result:", result);
       this.callbacks?.onCryptoMatchResult?.(result);
     });
-
+this.socket.on('payout_result', (data: { success: boolean; txHash?: string; error?: string }) => {
+  console.log('[SocketManager] Payout result:', data);
+  (GameState as any).payoutResult = data;
+  this.callbacks?.onPayoutResult?.(data);
+});
     this.socket.on("tieReroll", () => {
       console.log("[SocketManager] Tie — re-rolling");
       this.callbacks?.onTieReroll?.();
@@ -186,6 +197,13 @@ sendGameAction(action: GameAction): void {
     action,
   });
   console.log('[SocketManager] Sent game_action:', action.type);
+}
+sendGameOver(localPlayerIndex: number, localPlayerWon: boolean): void {
+  console.log(`[SocketManager] Sending game_over, won: ${localPlayerWon}`);
+  this.socket?.emit('game_over', {
+    roomCode: GameState.roomCode,
+    winnerIndex: localPlayerWon ? localPlayerIndex : (localPlayerIndex === 0 ? 1 : 0),
+  });
 }
 // ADD this method to SocketManagerClass, before disconnect():
 setCallbacks(callbacks: RoomCallbacks): void {

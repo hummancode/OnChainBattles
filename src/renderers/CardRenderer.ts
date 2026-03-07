@@ -125,9 +125,11 @@ export class CardRenderer {
     // a separate variable. It's removed from the children.push() call below.
 
     // — Art area —
+  // — Art area —
+// — Art area —
     const artY = bandH;
     const artH = L.artAreaHeight;
-    const artKey = `art_${data.id}`;
+    const artKey = data.artKey ?? `art_${data.id}`;
     let artObj: Phaser.GameObjects.GameObject;
 
     if (this.scene.textures.exists(artKey)) {
@@ -229,11 +231,18 @@ export class CardRenderer {
 
     const w = L.width;
     const h = L.height;
+// — Art: prefer dedicated thumb (200×200, closer to display size = sharper)
+    // Falls back to full art, then grey rectangle.
+    // Use data.artKey (set correctly by toCardRenderData as "art_<cardId>")
+    // and derive thumb key from it, since data.id is instanceId not cardId.
+    const baseArtKey = data.artKey ?? `art_${data.id}`;
+    const thumbKey = baseArtKey.replace(/^art_/, 'thumb_');
+    const textureKey = this.scene.textures.exists(thumbKey) ? thumbKey
+                     : this.scene.textures.exists(baseArtKey) ? baseArtKey
+                     : null;
 
-    // — Art fills entire thumbnail — already has correct fallback, unchanged
-    const artKey = `art_${data.id}`;
-    if (this.scene.textures.exists(artKey)) {
-      const art = this.scene.add.image(0, 0, artKey).setOrigin(0, 0).setDisplaySize(w, h);
+    if (textureKey) {
+      const art = this.scene.add.image(0, 0, textureKey).setOrigin(0, 0).setDisplaySize(w, h);
       container.add(art);
     } else {
       const ph = this.scene.add.graphics();

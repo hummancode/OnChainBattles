@@ -4,11 +4,13 @@
 // Must be the FIRST scene in main.ts scene array.
 //
 // Asset key naming conventions (must match CardRenderer/BoardRenderer):
-//   art_<cardId>          → card artwork
+//   art_<cardId>          → card artwork (full 440×320)
+//   thumb_<cardId>        → card thumbnail (200×200) ← NEW
 //   card_frame_<type>     → card frame overlays
-//   icon_<name>           → stat icons
+//   icon_<n>              → stat icons
 //   icon_type_<allegiance>→ allegiance type icons
 //   marker_<type>         → board highlight markers
+//   bg_<scene>            → scene backgrounds
 //
 // All loads use silent error handling — missing files fall through
 // to CardRenderer's built-in fallback (grey rectangle).
@@ -16,10 +18,17 @@
 // ============================================================
 
 import Phaser from 'phaser';
+import { DeckLoader } from '../config/DeckLoader';
+import { MipmapHelper } from '../ui/MipmapHelper';
+
 
 export default class PreLoadScene extends Phaser.Scene {
   constructor() {
     super({ key: 'PreLoadScene' });
+  }
+
+  async init(): Promise<void> {
+    await DeckLoader.load();
   }
 
   // ─── preload() is called automatically by Phaser before create() ──────────
@@ -28,12 +37,10 @@ export default class PreLoadScene extends Phaser.Scene {
     const H = this.scale.height;  // 720
 
     // ── Loading bar UI ────────────────────────────────────────────────────────
-    // Dark background so bar is readable before any assets load
     const bg = this.add.graphics();
     bg.fillStyle(0x1a1a2e, 1);
     bg.fillRect(0, 0, W, H);
 
-    // Logo / title text (no texture needed — pure text)
     this.add.text(W / 2, H / 2 - 80, 'OnChainBattles', {
       fontFamily: 'Arial',
       fontSize: '36px',
@@ -56,17 +63,14 @@ export default class PreLoadScene extends Phaser.Scene {
     barTrack.lineStyle(1, 0x444466, 1);
     barTrack.strokeRect(barX, barY, barW, barH);
 
-    // Progress bar fill (updates on 'progress' event)
     const barFill = this.add.graphics();
 
-    // Percent text
     const pctText = this.add.text(W / 2, barY + barH + 12, '0%', {
       fontFamily: 'Arial',
       fontSize: '13px',
       color: '#aaaaaa',
     }).setOrigin(0.5, 0);
 
-    // File name text (shows what's loading)
     const fileText = this.add.text(W / 2, barY + barH + 32, '', {
       fontFamily: 'Arial',
       fontSize: '11px',
@@ -85,14 +89,14 @@ export default class PreLoadScene extends Phaser.Scene {
       fileText.setText(file.key);
     });
 
-    // Silent fail — CardRenderer already draws grey rect for missing textures.
-    // Log to console so developer can see what's missing, but never crash.
+    // Silent fail — CardRenderer draws grey rect for missing textures.
     this.load.on('loaderror', (file: Phaser.Loader.File) => {
       console.warn(`[PreloadScene] Asset not found (ok — fallback active): ${file.key}  →  ${file.url}`);
     });
 
     // ── Now queue all assets ──────────────────────────────────────────────────
     this.loadCardArt();
+    this.loadCardThumbnails();   // ← NEW: loads 200×200 thumb images
     this.loadCardFrames();
     this.loadIcons();
     this.loadBoardMarkers();
@@ -100,101 +104,144 @@ export default class PreLoadScene extends Phaser.Scene {
     this.loadUI();
   }
 
-  create(): void {
+create(): void {
     console.log('[PreloadScene] All assets loaded. Starting MainMenuScene.');
+    MipmapHelper.enableAll(this);
     this.scene.start('MainMenuScene');
   }
 
+  /** Generate mipmaps for a texture (drastically improves downscale quality). */
+  /** Generate mipmaps for a texture (improves downscale quality). */
+  private enableMipmaps(key: string, gl: WebGLRenderingContext): void {
+    if (!this.textures.exists(key)) return;
+
+    const texture = this.textures.get(key);
+    const source = texture.source?.[0];
+    if (!source) return;
+
+    // Phaser 4 stores the WebGL texture in varying paths — find it
+    const glTex = (source as any).glTexture
+      ?? (source as any).texture
+      ?? (source as any).webGLTexture;
+
+    if (!glTex || !(glTex instanceof WebGLTexture)) {
+      // Log once so we can find the right path
+      if (key === 'art_king') {
+        console.log('[Mipmap] source keys:', Object.keys(source));
+        console.log('[Mipmap] source:', source);
+      }
+      return;
+    }
+
+    gl.bindTexture(gl.TEXTURE_2D, glTex);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+
+  // ─── ALL CARD IDS (shared by art + thumb loaders) ─────────────────────────
+  // Union of DEMO_DECK_IDS (unique) + 'king'.
+  // Kept inline so PreloadScene has no import from game logic.
+  // If you add a card to CardDefinitions, add its id here too.
+  private static readonly ALL_CARD_IDS: string[] = [
+    // King (pre-placed, not in deck)
+    'king',
+    // Standard units
+    'foot_soldier',   // 3 copies
+    'pikeman',        // 2
+    'archer',         // 2
+    'assassin',       // 2
+    'militia',        // 2
+    'scout',          // 2
+    'lancer',         // 2
+    'mystic',         // 1
+    'messenger',      // 2
+    // Royal units
+    'swordsman',      // 2
+    'princess',       // 1
+    'priest',         // 2
+    'commander',      // 1
+    'inquisitor',     // 2
+    'knight',         // 2
+    'knights_guard',  // 1
+    'scribe',         // 2
+    // Structures
+    'castle',         // 1
+    'temple',         // 2
+    'village',        // 2
+    // Spells
+    'disease',        // 2
+    'casus_belli',    // 1
+    'reform',         // 2
+    'civil_war',      // 1
+    'earthquake',     // 1
+    'war_horn',       // 2
+    'coup',           // 1
+    'treason',        // 2
+    'motherland',     // 1
+    'peasant_revolt', // 1
+  ];
+
   // ─── CARD ART ─────────────────────────────────────────────────────────────
-  // Sourced from DEMO_DECK_IDS + king (pre-placed, not in deck).
+  // Full card art (440×320) used in hand display and detail overlay.
   // Key pattern: art_<cardId>   Path: assets/cards/art/<cardId>.png
-  // Any missing file falls through to CardRenderer grey-rect fallback.
+  //
+  // NOTE: The file on disk for "knights_guard" is named "kings_guard.png".
+  // We handle this mismatch explicitly below.
   private loadCardArt(): void {
     const BASE = 'assets/cards/art/';
 
-    // ── All card IDs used in the game ────────────────────────────────────────
-    // This list is the union of DEMO_DECK_IDS (unique) + 'king'.
-    // Kept inline here so PreloadScene has no import from game logic.
-    // If you add a card to CardDefinitions, add its id here too.
-    const ALL_CARD_IDS: string[] = [
-      // King (pre-placed, not in deck)
-      'king',
-      // Standard units
-      'foot_soldier',   // 3 copies
-      'pikeman',        // 2
-      'archer',         // 2
-      'assassin',       // 2
-      'militia',        // 2
-      'scout',          // 2
-      'lancer',         // 2
-      'mystic',         // 1
-      'messenger',      // 2
-      // Royal units
-      'swordsman',      // 2
-      'princess',       // 1
-      'priest',         // 2
-      'commander',      // 1
-      'inquisitor',     // 2
-      'knight',         // 2
-      'knights_guard',  // 1
-      'scribe',         // 2
-      // Structures
-      'castle',         // 1
-      'temple',         // 2
-      'village',        // 2
-      // Spells
-      'disease',        // 2
-      'casus_belli',    // 1
-      'reform',         // 2
-      'civil_war',      // 1
-      'earthquake',     // 1
-      'war_horn',       // 2
-      'coup',           // 1
-      'treason',        // 2
-      'motherland',     // 1
-      'peasant_revolt', // 1
-    ];
+    PreLoadScene.ALL_CARD_IDS.forEach(id => {
+      // ── Filename mismatch fix ──────────────────────────
+      // CardDefinitions uses id "knights_guard" but the art
+      // file on disk is "kings_guard.png".
+      const filename = id === 'knights_guard' ? 'kings_guard' : id;
+      this.load.image(`art_${id}`, `${BASE}${filename}.png`);
+    });
+  }
 
-    ALL_CARD_IDS.forEach(id => {
-      this.load.image(`art_${id}`, `${BASE}${id}.png`);
+  // ─── CARD THUMBNAILS (NEW) ────────────────────────────────────────────────
+  // Dedicated 200×200 thumbnail images for board unit rendering.
+  // Using these instead of downscaling 440×320 full art to 100×100
+  // eliminates the blurriness on board units.
+  //
+  // Key pattern: thumb_<cardId>   Path: assets/cards/thumb/<cardId>_thumb.png
+  // If thumb is missing, CardRenderer falls back to art_<cardId>.
+  private loadCardThumbnails(): void {
+    const BASE = 'assets/cards/thumb/';
+
+    PreLoadScene.ALL_CARD_IDS.forEach(id => {
+      // Thumb files use the consistent naming: <id>_thumb.png
+      // knights_guard → knights_guard_thumb.png (correct on disk)
+      this.load.image(`thumb_${id}`, `${BASE}${id}_thumb.png`);
     });
   }
 
   // ─── CARD FRAMES ──────────────────────────────────────────────────────────
-  // Used by CardRenderer as frame overlay on full cards.
-  // Keys must match theme.cards.STANDARD/ROYAL/STATIC/SPELL.frameAsset
   private loadCardFrames(): void {
     const BASE = 'assets/cards/';
 
-    // Frame overlays — one per allegiance/class combo
     ['standard', 'royal', 'static', 'spell'].forEach(type => {
       this.load.image(`card_frame_${type}`, `${BASE}card_frame_${type}.png`);
     });
 
-    // Card back — used for opponent hand face-down cards
     this.load.image('card_back', `${BASE}card_back_pattern.png`);
   }
 
   // ─── ICONS ────────────────────────────────────────────────────────────────
-  // Stat icons (atk/def/leg/move) and allegiance type icons.
-  // Missing icons simply don't render — no crash.
   private loadIcons(): void {
     const BASE = 'assets/icons/';
 
-    // Stat icons — shown on card stat rows and board thumbnails
     ['atk', 'def', 'leg', 'move', 'cavalry', 'clock', 'ranged'].forEach(name => {
       this.load.image(`icon_${name}`, `${BASE}icon_${name}.png`);
     });
 
-    // Allegiance type icons — top-right corner of full cards
     ['standard', 'royal', 'static', 'spell'].forEach(type => {
       this.load.image(`icon_type_${type}`, `${BASE}icon_type_${type}.png`);
     });
   }
 
   // ─── BOARD MARKERS ────────────────────────────────────────────────────────
-  // Semi-transparent overlay tiles used for move/attack/aura highlights.
-  // BoardRenderer falls back to fillStyle graphics if these are missing.
   private loadBoardMarkers(): void {
     const BASE = 'assets/fx/';
 
@@ -204,12 +251,22 @@ export default class PreLoadScene extends Phaser.Scene {
   }
 
   // ─── BACKGROUNDS ──────────────────────────────────────────────────────────
+  // Load ALL background images from assets/backgrounds/.
+  // Scenes check textures.exists() before using — missing is safe.
   private loadBackgrounds(): void {
     const BASE = 'assets/backgrounds/';
 
+    // Scene backgrounds
     this.load.image('bg_main_menu', `${BASE}bg_main_menu.png`);
     this.load.image('bg_battle',    `${BASE}bg_battle.png`);
     this.load.image('bg_result',    `${BASE}bg_result.png`);
+
+    // Additional backgrounds available on disk
+    this.load.image('bg_board',     `${BASE}bg_board.png`);
+    this.load.image('bg_lobby',     `${BASE}bg_lobby.png`);
+    this.load.image('bg_menu',      `${BASE}bg_menu.png`);
+
+    // Board skin overlay
     this.load.image('board_skin',   'assets/board/board_skin.png');
   }
 

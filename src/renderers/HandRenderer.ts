@@ -16,6 +16,7 @@ import Phaser from 'phaser';
 import type { BattleLayoutJSON, ThemeJSON, CardRenderData } from '../game/types/UITypes';
 import { EventBus, EV } from '../events/EventBus';
 import { CardRenderer } from './CardRenderer';
+import { setContainerHitArea } from '../utils/PhaserUtils';
 
 export class HandRenderer {
   private scene: Phaser.Scene;
@@ -161,10 +162,9 @@ export class HandRenderer {
       cardContainer.setRotation(Phaser.Math.DegToRad(pos.angle));
 
       // Interactivity
-      const cardW = H.cardWidth;
-      const cardH = H.cardHeight;
-      cardContainer.setSize(cardW, cardH);
-      cardContainer.setInteractive();
+const fullW = this.layout.cards.full.width;
+const fullH = this.layout.cards.full.height;
+setContainerHitArea(cardContainer, fullW, fullH);
 
       const idx = i; // capture for closure
       cardContainer.on('pointerover',  () => this.onCardHover(idx));
@@ -358,17 +358,18 @@ export class HandRenderer {
         this.addCard(card);
       }),
 
-      EventBus.on(EV.CARD_PLAYED, ({ handIndex }) => {
-        this.removeCard(handIndex);
-        if (this.selectedIndex === handIndex) {
-              this.setSelected(null);
+      EventBus.on(EV.CARD_PLAYED, ({ handIndex, isLocal }) => {
+  if (!isLocal) return;  // ← opponent played — opponent hand is count-based via HUD_REFRESH
+  this.removeCard(handIndex);
+  if (this.selectedIndex === handIndex) {
+    this.setSelected(null);
+  }
+}),
 
-        }
-      }),
-
-      EventBus.on(EV.CARD_DISCARDED, ({ handIndex }) => {
-        this.removeCard(handIndex);
-      }),
+EventBus.on(EV.CARD_DISCARDED, ({ handIndex, isLocal }) => {
+  if (!isLocal) return;
+  this.removeCard(handIndex);
+}),
 
       // Update selected state from SelectionManager
 EventBus.on(EV.INPUT_BOARD_CLICK, () => {

@@ -3,18 +3,21 @@
 // Per-player LEG economy and timed effect management.
 // Pure TypeScript — no Phaser, no EventBus.
 // GameEngine owns two instances: [P1, P2].
+//
+// CROWN = CROWN determines both LEG gained AND LEG cap each turn.
+// LEG pool can never exceed current CROWN value (unless Motherland overflow).
+// This keeps the economy tight: turn 3 → CROWN 3, cap 3. No hoarding.
 // ============================================================
 
 import type { GameModifiers as IGameModifiers, TimedEffect } from './types/GameTypes';
 import { Player } from './types/GameTypes';
 
-const LEG_CAP = 10;
 const LEG_RATE_MIN = 1;
 
 export class GameModifiers {
   readonly player: Player;
 
-  legRateBase: number   = 1;   // King always 1
+  legRateBase: number   = 0;   // Grows +1 each turn via GameEngine.runLEGPhase
   legRateBonus: number  = 0;   // Princess +1 per copy on board
   legRatePenalty: number = 0;  // Permanent drains (Casus Belli, Mystic, Inquisitor, Revolt)
   legRateFrozen: boolean = false; // Civil War
@@ -23,7 +26,7 @@ export class GameModifiers {
   royalCostPenalty: number  = 0; // Peasant Revolt +2 (no floor)
 
   legPool: number = 0;
-  legOverflow: boolean = false;  // Motherland: allow >10 for this turn only
+  legOverflow: boolean = false;  // Motherland: allow exceeding CROWN cap for this turn only
 
   timedEffects: TimedEffect[] = [];
 
@@ -35,10 +38,23 @@ export class GameModifiers {
   // COMPUTED RATES
   // ─────────────────────────────────────────────
 
-  /** Effective LEG gained per turn. Minimum 1 unless frozen by Civil War. */
+  /** Effective LEG gained per turn (= CROWN). Minimum 1 unless frozen by Civil War. */
   getEffectiveLEGRate(): number {
     if (this.legRateFrozen) return 0;
     return Math.max(LEG_RATE_MIN, this.legRateBase + this.legRateBonus - this.legRatePenalty);
+  }
+
+  /**
+   * Dynamic LEG pool cap = current CROWN value.
+   * Pool can never exceed this unless Motherland overflow is active.
+   * When Civil War freezes CROWN to 0, cap is still based on the
+   * unfrozen rate so existing LEG isn't wiped — only gain is blocked.
+   */
+  getLEGCap(): number {
+    if (this.legOverflow) return Infinity;
+    // Use the unfrozen rate for cap so Civil War doesn't destroy existing pool
+    const unfrozenRate = Math.max(LEG_RATE_MIN, this.legRateBase + this.legRateBonus - this.legRatePenalty);
+    return unfrozenRate;
   }
 
   /** Effective cost for a card. Royal cards get discount applied, floor 0. */
@@ -51,10 +67,15 @@ export class GameModifiers {
   // LEG POOL OPERATIONS
   // ─────────────────────────────────────────────
 
-  /** Apply LEG gain at start of LEG phase. Returns amount actually gained. */
+  /**
+   * Apply LEG gain at start of LEG phase. Returns amount actually gained.
+   * Cap = CROWN (effective rate), so pool tops out at CROWN value.
+   * Example: CROWN 5, pool was 2 → gain 5 → pool = min(7, 5) = 5.
+   * Effectively you always refill to CROWN each turn.
+   */
   gainLEG(): number {
     const rate = this.getEffectiveLEGRate();
-    const cap = this.legOverflow ? Infinity : LEG_CAP;
+    const cap = this.getLEGCap();
     const before = this.legPool;
     this.legPool = Math.min(this.legPool + rate, cap);
     return this.legPool - before;
@@ -67,9 +88,9 @@ export class GameModifiers {
     return true;
   }
 
-  /** Forcibly add LEG (steal, bonus effects). Does not exceed cap unless overflow. */
+  /** Forcibly add LEG (steal, bonus effects). Does not exceed CROWN cap unless overflow. */
   addLEG(amount: number): void {
-    const cap = this.legOverflow ? Infinity : LEG_CAP;
+    const cap = this.getLEGCap();
     this.legPool = Math.min(this.legPool + amount, cap);
   }
 
@@ -90,6 +111,8 @@ export class GameModifiers {
   /** Add permanent LEG rate penalty. Minimum effective rate always enforced. */
   addLEGRatePenalty(amount: number): void {
     this.legRatePenalty += amount;
+    // Clamp pool to new (lower) cap immediately
+    this.clampPool();
   }
 
   /** Recalculate Royal discount based on structures/units on board. */
@@ -99,7 +122,12 @@ export class GameModifiers {
 
   /** Set bonus LEG rate from Princess count on board. */
   setLEGRateBonus(princessCount: number): void {
+    const oldBonus = this.legRateBonus;
     this.legRateBonus = princessCount;
+    // If Princess died and bonus dropped, cap may have lowered — clamp pool
+    if (princessCount < oldBonus) {
+      this.clampPool();
+    }
   }
 
   // ─────────────────────────────────────────────
@@ -143,9 +171,28 @@ export class GameModifiers {
     this.timedEffects = this.timedEffects.filter(e => e.type !== type);
   }
 
-  /** Clear the one-turn overflow flag. Called at END phase. */
+  /**
+   * Clear the one-turn overflow flag. Called at END phase.
+   * After clearing, clamp pool back to CROWN cap.
+   */
   clearOverflow(): void {
     this.legOverflow = false;
+    this.clampPool();
+  }
+
+  // ─────────────────────────────────────────────
+  // INTERNAL HELPERS
+  // ─────────────────────────────────────────────
+
+  /**
+   * Clamp legPool to current cap.
+   * Called whenever cap might have decreased (penalty added, Princess died, overflow cleared).
+   */
+  private clampPool(): void {
+    const cap = this.getLEGCap();
+    if (this.legPool > cap) {
+      this.legPool = cap;
+    }
   }
 
   // ─────────────────────────────────────────────

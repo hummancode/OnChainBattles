@@ -16,6 +16,7 @@ import type { BattleLayoutJSON, ThemeJSON, CellRenderData, CardRenderData } from
 import { EventBus, EV } from '../events/EventBus';
 import { ThemeLoader } from '../config/ThemeLoader';
 import { CardRenderer } from './CardRenderer';
+import { setContainerHitArea } from '../utils/PhaserUtils';
 
 type HighlightType = 'none' | 'move' | 'attack' | 'aura' | 'selected' | 'hover';
 
@@ -42,7 +43,8 @@ export class BoardRenderer {
 
   private unsubs: Array<() => void> = [];
 
-  constructor(scene: Phaser.Scene, layout: BattleLayoutJSON, theme: ThemeJSON) {
+  constructor(scene: Phaser.Scene, layout: BattleLayoutJSON, theme: ThemeJSON, localPlayerIndex: number) {
+    this.localPlayerIndex = localPlayerIndex; 
     this.scene = scene;
     this.layout = layout;
     this.theme = theme;
@@ -79,18 +81,19 @@ setLocalPlayer(index: number): void {
 }
 
 // Add private helper:
+// AFTER (correct):
 private mirrorRow(row: number): number {
-  if (this.localPlayerIndex === 1) {
+  if (this.localPlayerIndex === 0) {   // P1 needs flip: their King is row 0, should show at bottom
     return (this.layout.grid.rows - 1) - row;
   }
-  return row;
+  return row;  // P2 needs no flip: their King is row 5, already at bottom naturally
 }
   // ─────────────────────────────────────────────
   // PUBLIC API
   // ─────────────────────────────────────────────
 
   /** Place a unit thumbnail on the board at (col, row). */
-  renderUnit(data: CardRenderData, col: number, row: number): void {
+ renderUnit(data: CardRenderData, col: number, row: number): void {
     const key = this.cellKey(col, row);
     this.clearUnit(col, row);
 
@@ -103,18 +106,15 @@ private mirrorRow(row: number): number {
     const unit = this.cardRenderer.render(data, 'thumbnail', cx, cy);
     unit.setName(key);
 
-    // Add interactivity for selection
-    unit.setSize(L.width, L.height);
-    unit.setInteractive();
+    // Interactivity — single call, no setSize needed
+    setContainerHitArea(unit, L.width, L.height);
     unit.on('pointerover', () => this.onCellHover(col, row));
     unit.on('pointerout',  () => this.onCellHoverEnd(col, row));
     unit.on('pointerdown', () => EventBus.emit(EV.INPUT_BOARD_CLICK, { col, row }));
 
-
     this.unitContainer.add(unit);
     this.unitContainers.set(key, unit);
-  }
-
+}
   /** Remove a unit thumbnail from a cell. */
   clearUnit(col: number, row: number): void {
     const key = this.cellKey(col, row);
@@ -304,19 +304,33 @@ private mirrorRow(row: number): number {
   // PRIVATE — GRID BUILD
   // ─────────────────────────────────────────────
 
-  private buildGrid(): void {
+private buildGrid(): void {
     const g = this.layout.grid;
     const T = this.theme.board;
 
+    // Board skin texture behind the grid (if loaded)
+    const boardW = g.cols * g.cellSize;
+    const boardH = g.rows * g.cellSize;
+    if (this.scene.textures.exists('board_skin')) {
+      const skin = this.scene.add.image(
+        g.originX + boardW / 2,
+        g.originY + boardH / 2,
+        'board_skin'
+      ).setDisplaySize(boardW, boardH);
+      this.cellContainer.add(skin);
+    }
+
     for (let row = 0; row < g.rows; row++) {
       for (let col = 0; col < g.cols; col++) {
-        const px = g.originX + col * g.cellSize;
-        const py = g.originY + row * g.cellSize;
+      const px = g.originX + col * g.cellSize;
+      const displayRow = this.mirrorRow(row);
+      const py = g.originY + displayRow * g.cellSize;
         const isEven = (col + row) % 2 === 0;
 
         const cell = this.scene.add.graphics();
         const fillHex = isEven ? T.cellEvenFill : T.cellOddFill;
-        cell.fillStyle(ThemeLoader.hexToNum(fillHex), 1);
+        cell.fillStyle(ThemeLoader.hexToNum(fillHex), 0.6);
+
         cell.fillRect(px, py, g.cellSize, g.cellSize);
 
         // Grid line
@@ -333,6 +347,7 @@ private mirrorRow(row: number): number {
         cell.on('pointerdown', () => EventBus.emit(EV.INPUT_BOARD_CLICK, { col, row }));
 
 
+
         this.cellContainer.add(cell);
         this.cellGraphics.set(this.cellKey(col, row), cell);
       }
@@ -340,38 +355,25 @@ private mirrorRow(row: number): number {
   }
 
   /** Player / enemy half tints — subtle color overlay on each half */
-  private buildHalfTints(): void {
-    const g = this.layout.grid;
-    const T = this.theme.board;
+ // BEFORE:
+private buildHalfTints(): void {
+  const g = this.layout.grid;
+  const T = this.theme.board;
+  const playerHalf = ThemeLoader.hexToColorAlpha(T.playerHalfTint);
+  const enemyHalf  = ThemeLoader.hexToColorAlpha(T.enemyHalfTint);
+  const halfRows = Math.floor(g.rows / 2);
 
-    const playerHalf = ThemeLoader.hexToColorAlpha(T.playerHalfTint);
-    const enemyHalf  = ThemeLoader.hexToColorAlpha(T.enemyHalfTint);
+  // Player half always at bottom visually (both P1 and P2 see their side at bottom)
+  const playerTint = this.scene.add.graphics();
+  playerTint.fillStyle(playerHalf.color, playerHalf.alpha);
+  playerTint.fillRect(g.originX, g.originY + halfRows * g.cellSize, g.cols * g.cellSize, halfRows * g.cellSize);
 
-    const halfRows = Math.floor(g.rows / 2);
+  const enemyTint = this.scene.add.graphics();
+  enemyTint.fillStyle(enemyHalf.color, enemyHalf.alpha);
+  enemyTint.fillRect(g.originX, g.originY, g.cols * g.cellSize, halfRows * g.cellSize);
 
-    // Player half = bottom rows (own side)
-    const playerTint = this.scene.add.graphics();
-    playerTint.fillStyle(playerHalf.color, playerHalf.alpha);
-    playerTint.fillRect(
-      g.originX,
-      g.originY + halfRows * g.cellSize,
-      g.cols * g.cellSize,
-      halfRows * g.cellSize
-    );
-
-    // Enemy half = top rows
-    const enemyTint = this.scene.add.graphics();
-    enemyTint.fillStyle(enemyHalf.color, enemyHalf.alpha);
-    enemyTint.fillRect(
-      g.originX,
-      g.originY,
-      g.cols * g.cellSize,
-      halfRows * g.cellSize
-    );
-
-    // Insert tints above cell graphics but below highlights
-    this.cellContainer.add([playerTint, enemyTint]);
-  }
+  this.cellContainer.add([playerTint, enemyTint]);
+}
 
   private buildCoords(): void {
     if (!this.layout.grid.coordsVisible) return;
@@ -396,12 +398,14 @@ private mirrorRow(row: number): number {
     }
 
     // Row labels (1-6) left of the grid
-    for (let row = 0; row < g.rows; row++) {
-      const rx = g.originX - g.coordsFontSize - 2;
-      const ry = g.originY + row * g.cellSize + g.cellSize / 2;
-      const lbl = this.scene.add.text(rx, ry, String(row + 1), fontConfig).setOrigin(0.5, 0.5);
-      this.coordContainer.add(lbl);
-    }
+// Row labels (1-6) left of the grid — mirrored for P2
+for (let row = 0; row < g.rows; row++) {
+  const displayRow = this.mirrorRow(row);
+  const rx = g.originX - g.coordsFontSize - 2;
+  const ry = g.originY + displayRow * g.cellSize + g.cellSize / 2;
+  const lbl = this.scene.add.text(rx, ry, String(row + 1), fontConfig).setOrigin(0.5, 0.5);
+  this.coordContainer.add(lbl);
+}
   }
 
   // ─────────────────────────────────────────────
@@ -416,7 +420,8 @@ private mirrorRow(row: number): number {
     const T = this.theme.board;
 
     const px = g.originX + col * g.cellSize;
-    const py = g.originY + row * g.cellSize;
+const displayRow = this.mirrorRow(row);
+const py = g.originY + displayRow * g.cellSize;
 
     const gfx = this.scene.add.graphics();
 

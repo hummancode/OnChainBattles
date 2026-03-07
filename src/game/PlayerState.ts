@@ -27,13 +27,26 @@ export class PlayerState {
   // ─────────────────────────────────────────────
 
   /** Load and shuffle a deck from an array of card IDs. */
-  loadDeck(cardIds: string[]): void {
-    this.deck = [...cardIds];
-    this.shuffle(this.deck);
-    this.hand    = [];
-    this.discard = [];
-    this.graveyard = [];
+/** Load and shuffle a deck from an array of card IDs. */
+loadDeck(cardIds: string[], playerIndex: number = 0): void {
+  this.deck = [...cardIds];
+  
+  // Temporarily offset the seed so P1 and P2 get different shuffles.
+  // reshuffleDiscard() calls shuffle() normally and is unaffected.
+  const gs = GameState as any;
+  const originalSeed = gs.gameSeed;
+  if (originalSeed && originalSeed > 0) {
+    gs.gameSeed = originalSeed + playerIndex;
   }
+  
+  this.shuffle(this.deck);          // existing shuffle — unchanged
+  
+  gs.gameSeed = originalSeed;       // restore immediately after
+  
+  this.hand      = [];
+  this.discard   = [];
+  this.graveyard = [];
+}
 
   // ─────────────────────────────────────────────
   // DRAW

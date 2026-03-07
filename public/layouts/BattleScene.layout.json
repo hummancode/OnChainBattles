@@ -49,7 +49,7 @@
       "cardHeight": 95,
       "spacing": 10,
       "maxVisible": 10,
-      "fanAngle": 3,
+      "fanAngle": 0,
       "selectedScale": 1.15
     }
   },
@@ -79,7 +79,7 @@
       "cardHeight": 95,
       "spacing": 10,
       "maxVisible": 10,
-      "fanAngle": 0,
+      "fanAngle": 4,
       "selectedScale": 1
     }
   },
