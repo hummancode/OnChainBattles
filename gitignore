@@ -1,0 +1,53 @@
+# ── Dependencies ──
+/node_modules
+
+# ── Build / Compilation ──
+/dist
+/bundle
+
+# ── Hardhat ──
+/artifacts
+/cache
+/coverage
+/typechain-types
+
+# ── Environment ──
+.env
+.env.local
+.env.*.local
+
+# ── OS junk ──
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE / Editor ──
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Generated / Temp files ──
+codebase.md
+src/codebase.md
+folder_structure.txt
+events.txt
+
+# ── Image files (use Git LFS later if versioning needed) ──
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.svg
+*.ico
+*.bmp
+
+# ── Logs ──
+*.log
+npm-debug.log*
+
+# ── Misc ──
+*.tgz
+*.tsbuildinfo
