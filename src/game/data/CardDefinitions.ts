@@ -73,7 +73,15 @@ export const CARD_DEFINITIONS: CardDefinition[] = [
     id: 'archer', name: 'Archer',
     flavorText: 'Precision over brute force.',
     class: U, allegiance: STD, subtypes: [], cost: 3, copies: 2,
-    stats: { atk: 3, def: 1, movement: MovementType.OMNI_1, attackPattern: AtkPattern.DIAGONAL_RANGED_2 },
+    stats: { atk: 3, def: 1, movement: MovementType.OMNI_1, attackPattern: AtkPattern.DIAGONAL_RANGED_2,
+    customAttack : {
+        offsets: [{dx:1, dy:-1}, {dx:-1, dy:-1}, {dx:1, dy:1}, {dx:-1, dy:1}, {dx:2, dy:-2}, {dx:-2, dy:-2}, {dx:2, dy:2}, {dx:-2, dy:2}],  
+        range: 1,
+      },
+
+      },
+
+     
     flags: [],
     abilities: [],
     abilityText: 'Ranged attack: targets any unit diagonally within 2 squares. Ignores adjacency.',

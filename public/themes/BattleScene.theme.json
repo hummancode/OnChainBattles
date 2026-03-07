@@ -139,7 +139,7 @@
     "cellHover":        "#4FC3F733",
     "cellSelected":     "#F5A62366",
     "cellValidMove":    "#00FF8833",
-    "cellValidAtk":     "#FF444433",
+    "cellValidAtk":     "#FF444466",
     "cellAura":         "#4FC3F722",
     "unitBandPlayer":   "#00FF88",
     "unitBandEnemy":    "#FF4444",

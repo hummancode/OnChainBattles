@@ -60,9 +60,22 @@ export enum AtkPattern {
 
 export interface UnitStats {
   atk: number;
-  def: number;                 // Also serves as max HP
+  def: number;
   movement: MovementType;
   attackPattern: AtkPattern;
+  // NEW: optional custom overrides — if present, these replace the enum logic
+  customMove?: CustomPattern;
+  customAttack?: CustomPattern;
+}
+export interface PatternOffset {
+  dx: number;   // column offset (-1 = left, +1 = right)
+  dy: number;   // row offset (-1 = toward enemy, +1 = toward own half)
+}
+export interface CustomPattern {
+  offsets: PatternOffset[];   // which squares relative to unit
+  range?: number;             // max steps per direction (default 1)
+  canJump?: boolean;          // ignore blocking units (default false)
+  requiresEnemy?: boolean;    // only valid if enemy present (for attacks)
 }
 
 // ─────────────────────────────────────────────

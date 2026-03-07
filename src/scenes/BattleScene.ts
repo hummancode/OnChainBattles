@@ -429,6 +429,13 @@ this.hudRenderer.setLocalPlayer(localPlayerIndex);
     // SelectionManager bridges col/row clicks → unitId-based engine API.
     // Uses getBoardUnit() helper because board is an Array, not a keyed object.
     this.selectionManager = new SelectionManager(layout, {
+
+      getAttackRange: (col: number, row: number) => {
+  const unit = this.getBoardUnit(col, row);
+  if (!unit) return [];
+  return this.engine.getAttackRange(unit.instanceId)
+    .map((p: any) => ({ col: p.col, row: p.row }));
+},
       getValidMoves: (col: number, row: number) => {
         const unit = this.getBoardUnit(col, row);
         if (!unit) return [];

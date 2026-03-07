@@ -18,7 +18,7 @@ import { ThemeLoader } from '../config/ThemeLoader';
 import { CardRenderer } from './CardRenderer';
 import { setContainerHitArea } from '../utils/PhaserUtils';
 
-type HighlightType = 'none' | 'move' | 'attack' | 'aura' | 'selected' | 'hover';
+type HighlightType = 'none' | 'move' | 'attack' | 'attackRange' | 'aura' | 'selected' | 'hover';
 
 export class BoardRenderer {
   private scene: Phaser.Scene;
@@ -44,6 +44,10 @@ export class BoardRenderer {
   private unsubs: Array<() => void> = [];
 
   constructor(scene: Phaser.Scene, layout: BattleLayoutJSON, theme: ThemeJSON, localPlayerIndex: number) {
+
+
+
+
     this.localPlayerIndex = localPlayerIndex; 
     this.scene = scene;
     this.layout = layout;
@@ -51,21 +55,28 @@ export class BoardRenderer {
     this.cardRenderer = new CardRenderer(scene, layout, theme);
 
     // Build container hierarchy
-    this.rootContainer      = scene.add.container(0, 0);
-    this.cellContainer      = scene.add.container(0, 0);
-    this.highlightContainer = scene.add.container(0, 0);
-    this.unitContainer      = scene.add.container(0, 0);
-    this.overlayContainer   = scene.add.container(0, 0);
-    this.coordContainer     = scene.add.container(0, 0);
-    this.cellContainer.setDepth(1);
-this.unitContainer.setDepth(5);  // units above cells, below HUD hand
-    this.rootContainer.add([
-      this.cellContainer,
-      this.highlightContainer,
-      this.unitContainer,
-      this.overlayContainer,
-      this.coordContainer,
-    ]);
+ this.rootContainer      = scene.add.container(0, 0);
+this.cellContainer      = scene.add.container(0, 0);
+this.highlightContainer = scene.add.container(0, 0);
+this.unitContainer      = scene.add.container(0, 0);
+this.attackMarkerContainer = scene.add.container(0, 0);  // ← ADD
+this.overlayContainer   = scene.add.container(0, 0);
+this.coordContainer     = scene.add.container(0, 0);
+
+this.cellContainer.setDepth(1);
+this.highlightContainer.setDepth(3);   // move highlights below units
+this.unitContainer.setDepth(5);
+this.attackMarkerContainer.setDepth(7); // ← attack markers ABOVE units
+this.overlayContainer.setDepth(8);
+
+this.rootContainer.add([
+  this.cellContainer,
+  this.highlightContainer,
+  this.unitContainer,
+  this.attackMarkerContainer,   // ← ADD
+  this.overlayContainer,
+  this.coordContainer,
+]);
 
     this.buildGrid();
     this.buildCoords();
@@ -74,6 +85,7 @@ this.unitContainer.setDepth(5);  // units above cells, below HUD hand
   }
   // Add field to BoardRenderer class:
 private localPlayerIndex: number = 0;
+private attackMarkerContainer: Phaser.GameObjects.Container;
 
 // Add public setter:
 setLocalPlayer(index: number): void {
@@ -265,7 +277,10 @@ private mirrorRow(row: number): number {
       },
     });
   }
-
+highlightAttackRange(positions: Array<{ col: number; row: number }>): void {
+  this.clearHighlightType('attackRange');
+  positions.forEach(p => this.addHighlight(p.col, p.row, 'attackRange'));
+}
   /** Show floating damage number above a cell. */
   showDamageNumber(col: number, row: number, amount: number, isHeal = false): void {
     const g = this.layout.grid;
@@ -295,10 +310,10 @@ private mirrorRow(row: number): number {
     });
   }
 
-  destroy(): void {
-    this.unsubs.forEach(fn => fn());
-    this.rootContainer.destroy();
-  }
+destroy(): void {
+  this.unsubs.forEach(fn => fn());
+  this.rootContainer.destroy();
+}
 
   // ─────────────────────────────────────────────
   // PRIVATE — GRID BUILD
@@ -432,16 +447,44 @@ const py = g.originY + displayRow * g.cellSize;
         gfx.fillRect(px, py, g.cellSize, g.cellSize);
         break;
       }
-      case 'attack': {
-        const { color, alpha } = ThemeLoader.hexToColorAlpha(T.cellValidAtk);
-        gfx.fillStyle(color, alpha);
-        gfx.fillRect(px, py, g.cellSize, g.cellSize);
-        // Inner X marker
-        gfx.lineStyle(2, ThemeLoader.hexToNum('#FF4444'), 0.6);
-        gfx.lineBetween(px + 8, py + 8, px + g.cellSize - 8, py + g.cellSize - 8);
-        gfx.lineBetween(px + g.cellSize - 8, py + 8, px + 8, py + g.cellSize - 8);
-        break;
-      }
+case 'attackRange': {
+  // Subtle crosshair on any square in attack range (empty or friendly-occupied move square)
+  const cx = px + g.cellSize / 2;
+  const cy = py + g.cellSize / 2;
+  const s = g.cellSize * 0.2;
+
+  const marker = this.scene.add.graphics();
+  // Thin crosshair lines
+  marker.lineStyle(1.5, 0xFF4444, 0.4);
+  marker.lineBetween(cx - s, cy - s, cx + s, cy + s);
+  marker.lineBetween(cx + s, cy - s, cx - s, cy + s);
+  marker.lineStyle(1, 0xFF4444, 0.3);
+  marker.strokeCircle(cx, cy, s * 0.8);
+
+  this.attackMarkerContainer.add(marker);
+  this.highlights.set(`${this.cellKey(col, row)}_attackRange_marker`, marker);
+  break;
+}
+
+case 'attack': {
+  // Bold crosshair on enemy targets — high contrast above unit art
+  const cx = px + g.cellSize / 2;
+  const cy = py + g.cellSize / 2;
+  const s = g.cellSize * 0.3;
+
+  const marker = this.scene.add.graphics();
+  marker.fillStyle(0x000000, 0.6);
+  marker.fillCircle(cx, cy, s * 0.7);
+  marker.lineStyle(3, 0xFF4444, 1.0);
+  marker.lineBetween(cx - s * 0.5, cy - s * 0.5, cx + s * 0.5, cy + s * 0.5);
+  marker.lineBetween(cx + s * 0.5, cy - s * 0.5, cx - s * 0.5, cy + s * 0.5);
+  marker.lineStyle(2, 0xFF4444, 0.9);
+  marker.strokeCircle(cx, cy, s * 0.7);
+
+  this.attackMarkerContainer.add(marker);
+  this.highlights.set(`${this.cellKey(col, row)}_attack_marker`, marker);
+  break;
+}
       case 'aura': {
         const { color, alpha } = ThemeLoader.hexToColorAlpha(T.cellAura);
         gfx.fillStyle(color, alpha);
@@ -515,12 +558,13 @@ const py = g.originY + displayRow * g.cellSize;
         this.showDamageNumber(col, row, amount, true);
       }),
 
-      EventBus.on(EV.HIGHLIGHTS_CHANGED, ({ moves, attacks, auras }) => {
-        this.clearAllHighlights();
-        if (moves)   this.highlightMoves(moves);
-        if (attacks) this.highlightAttacks(attacks);
-        if (auras)   this.highlightAuras(auras);
-      }),
+    EventBus.on(EV.HIGHLIGHTS_CHANGED, ({ moves, attacks, attackRange, auras }) => {
+  this.clearAllHighlights();
+  if (attackRange) this.highlightAttackRange(attackRange);  // render first (below move)
+  if (moves)       this.highlightMoves(moves);
+  if (attacks)     this.highlightAttacks(attacks);
+  if (auras)       this.highlightAuras(auras);
+}),
 
       EventBus.on(EV.UNIT_EXHAUSTED, ({ col, row, data }) => {
         this.updateUnitState(col, row, { ...data, isExhausted: true });

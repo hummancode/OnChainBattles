@@ -18,14 +18,14 @@ import {
   resolveAttack, resolveCastleAreaAttack,
   applyDamage, applyFullHeal, applyAutoHeal, applyReform, applyEarthquakeDamage,
 } from './CombatResolver';
-import { getValidMoves, getValidAttacks, getValidDeploySquares, isMoveValid, isAttackValid, isLancerForwardMove } from './MovementRules';
-import { DeckLoader } from '../config/DeckLoader'; 
+import { getValidMoves, getValidAttacks, getAttackRange, getValidDeploySquares, isMoveValid, isAttackValid, isLancerForwardMove } from './MovementRules';import { DeckLoader } from '../config/DeckLoader'; 
 import { Player, TurnPhase, EngineStatus } from './types/GameTypes';
 import type { Unit, Position, GameStateSnapshot } from './types/GameTypes';
 import type { GameEvent, EvGameOver } from './types/EventTypes';
 import type { PendingInteraction } from './types/AbilityTypes';
 import { Allegiance, CardClass, CardFlag, SubType } from './types/CardTypes';
 import { UNITS_ONLY_DECK_IDS, getCard } from './data/CardDefinitions';
+
 //import { getCard, DEMO_DECK_IDS } from './data/CardDefinitions';
 // ─────────────────────────────────────────────
 // PUBLIC API INTERFACE (consumed by SelectionManager)
@@ -127,7 +127,11 @@ this.players[Player.P2].loadDeck([...deck], Player.P2);  // uses seed + 1
     if (!unit || unit.owner !== this.activePlayer) return [];
     return getValidAttacks(unit, this.board);
   }
-
+getAttackRange(unitId: string): Position[] {
+  const unit = this.board.getUnitById(unitId);
+  if (!unit) return [];
+  return getAttackRange(unit, this.board);
+}
   getValidDeployPositions(): Position[] {
     return getValidDeploySquares(this.activePlayer, this.board);
   }
@@ -172,6 +176,7 @@ this.players[Player.P2].loadDeck([...deck], Player.P2);  // uses seed + 1
    * Units/Structures require col+row. Spells do not.
    * Returns false if illegal (wrong phase, can't afford, wrong position).
    */
+  
   playCard(handIndex: number, col?: number, row?: number): boolean {
     if (this.status === EngineStatus.AWAITING_INPUT) return false;
     if (this.phase !== TurnPhase.PLAY) return false;

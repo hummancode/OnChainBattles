@@ -4,34 +4,48 @@
 // Returns valid squares for movement and attack.
 // Called by GameEngine to validate player actions and by
 // SelectionManager (via IGameEngineAPI) for UI highlights.
+//
+// HYBRID PATTERN SYSTEM:
+//   - Cards can use enum-based presets (MovementType, AtkPattern)
+//   - Cards can also define customMove / customAttack overrides
+//   - Custom patterns are checked FIRST; if absent, enum logic runs
+//   - This allows new movement/attack shapes without new switch cases
 // ============================================================
 
 import { MovementType, AtkPattern, CardFlag } from './types/CardTypes';
+import type { CustomPattern, PatternOffset } from './types/CardTypes';
 import type { Unit, Position } from './types/GameTypes';
 import { Player } from './types/GameTypes';
 import type { Board } from './Board';
+import { getCard } from './data/CardDefinitions';
 
-// ─────────────────────────────────────────────
-// MOVEMENT
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// PUBLIC API
+// ═══════════════════════════════════════════════════════
 
 /**
  * Returns all squares a unit can legally move to this turn.
- * Respects: movement type, occupied squares, board bounds,
- * hasMoved flag, isActive (BUILD_DELAY), Village slow.
+ * Checks customMove first, then falls back to enum-based movement.
  */
 export function getValidMoves(unit: Unit, board: Board): Position[] {
   if (unit.hasMoved || unit.hasActed || !unit.isActive || unit.isExhausted) return [];
 
   const movDist = unit.currentMovement;
-  if (movDist <= 0) return []; // Village-slowed to 0 = immobilized
+  if (movDist <= 0) return [];
 
+  const def = getCard(unit.cardId);
+
+  // ── Custom pattern override ──
+  if (def.stats?.customMove) {
+    return resolveCustomPattern(unit, def.stats.customMove, board, false);
+  }
+
+  // ── Enum-based fallback ──
   const { col, row } = unit.position;
-  const results: Position[] = [];
 
   switch (unit.baseMovementType) {
     case MovementType.STATIC:
-      return []; // Structures never move
+      return [];
 
     case MovementType.OMNI_1:
     case MovementType.OMNI_2:
@@ -54,13 +68,19 @@ export function getValidMoves(unit: Unit, board: Board): Position[] {
 
 /**
  * Returns all squares a unit can legally attack this turn.
- * Respects: attack pattern, hasActed flag, TAUNT_ROW filter.
- * Lancer: can attack even if it moved this turn (LANCER_CHARGE handled by caller).
+ * Checks customAttack first, then falls back to enum-based attacks.
  */
 export function getValidAttacks(unit: Unit, board: Board): Position[] {
-  // Unit must not have already attacked (hasActed)
-  // Lancer exception: can move first, then attack (checked by GameEngine)
   if (unit.hasActed || !unit.isActive || unit.isExhausted) return [];
+
+  const def = getCard(unit.cardId);
+
+  // ── Custom pattern override ──
+  if (def.stats?.customAttack) {
+    return resolveCustomPattern(unit, def.stats.customAttack, board, true);
+  }
+
+  // ── Enum-based fallback ──
   if (unit.baseAtkPattern === AtkPattern.NONE) return [];
 
   const { col, row } = unit.position;
@@ -80,11 +100,11 @@ export function getValidAttacks(unit: Unit, board: Board): Position[] {
       break;
 
     case AtkPattern.ON_JUMP:
-      // Assassin: attack = the jump destination (same as movement targets)
-      return []; // Handled as part of the jump move in GameEngine
+      // Assassin: attack = the jump destination (handled as part of jump move)
+      return [];
 
     case AtkPattern.AREA_ADJ:
-      // Castle: attacks all adjacent enemies simultaneously — handled in LEG phase
+      // Castle: attacks all adjacent enemies simultaneously (also used in LEG phase)
       targets = getOmniAdjacent(col, row, board, unit.owner, true);
       break;
 
@@ -104,7 +124,103 @@ export function getValidAttacks(unit: Unit, board: Board): Position[] {
   // must attack that unit instead (future expansion hook)
   return targets;
 }
+/**
+ * Returns ALL squares in a unit's attack range — occupied or empty.
+ * Used for UI only (shows threat zone). Not used for action validation.
+ */
+export function getAttackRange(unit: Unit, board: Board): Position[] {
+  if (!unit.isActive || unit.isExhausted) return [];
 
+  const def = getCard(unit.cardId);
+
+  // Custom pattern override
+  if (def.stats?.customAttack) {
+    return resolvePatternRange(unit, def.stats.customAttack, board);
+  }
+
+  if (unit.baseAtkPattern === AtkPattern.NONE) return [];
+
+  const { col, row } = unit.position;
+
+  switch (unit.baseAtkPattern) {
+    case AtkPattern.HV:
+      return getAdjacentRange(col, row, [[0,-1],[0,1],[-1,0],[1,0]], board);
+    case AtkPattern.OMNI:
+    case AtkPattern.AREA_ADJ:
+      return getAdjacentRange(col, row, [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]], board);
+    case AtkPattern.DIAGONAL_RANGED_2:
+      return getRangedRange(col, row, [[-1,-1],[1,-1],[-1,1],[1,1]], 2, board);
+    case AtkPattern.STRAIGHT_RANGED_3:
+      return getRangedRange(col, row, [[0,-1],[0,1],[-1,0],[1,0]], 3, board);
+    case AtkPattern.ON_JUMP:
+      return [];
+    case AtkPattern.FWD_VERTICAL: {
+      const dr = unit.owner === Player.P1 ? 1 : -1;
+      const nr = row + dr;
+      if (board.isInBounds(col, nr)) return [{ col, row: nr }];
+      return [];
+    }
+    default:
+      return [];
+  }
+}
+
+/** All adjacent squares in given directions (range 1, ignores occupancy). */
+function getAdjacentRange(
+  col: number, row: number,
+  dirs: number[][],
+  board: Board
+): Position[] {
+  const result: Position[] = [];
+  for (const [dc, dr] of dirs) {
+    const nc = col + dc, nr = row + dr;
+    if (board.isInBounds(nc, nr)) result.push({ col: nc, row: nr });
+  }
+  return result;
+}
+
+/** Ranged squares up to maxRange — stops at any unit but includes that square. */
+function getRangedRange(
+  col: number, row: number,
+  dirs: number[][],
+  maxRange: number,
+  board: Board
+): Position[] {
+  const result: Position[] = [];
+  for (const [dc, dr] of dirs) {
+    for (let d = 1; d <= maxRange; d++) {
+      const nc = col + dc * d, nr = row + dr * d;
+      if (!board.isInBounds(nc, nr)) break;
+      result.push({ col: nc, row: nr });
+      if (board.getUnit(nc, nr) !== null) break; // blocked but included
+    }
+  }
+  return result;
+}
+
+/** Custom pattern range — all reachable squares regardless of occupancy. */
+function resolvePatternRange(
+  unit: Unit,
+  pattern: CustomPattern,
+  board: Board
+): Position[] {
+  const results: Position[] = [];
+  const range = pattern.range ?? 1;
+  const canJump = pattern.canJump ?? false;
+  const { col, row } = unit.position;
+
+  for (const offset of pattern.offsets) {
+    for (let step = 1; step <= range; step++) {
+      const nc = col + offset.dx * step;
+      const nr = row + offset.dy * step;
+      if (!board.isInBounds(nc, nr)) break;
+      results.push({ col: nc, row: nr });
+      const occupant = board.getUnit(nc, nr);
+      if (occupant && !canJump) break;
+    }
+  }
+  return results;
+}
 /**
  * Returns valid deploy squares for a card being played.
  * Unit: must be placed in own half on a free square.
@@ -114,11 +230,112 @@ export function getValidDeploySquares(player: Player, board: Board): Position[] 
   return board.getFreeSquaresInHalf(player);
 }
 
-// ─────────────────────────────────────────────
-// MOVEMENT HELPERS
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// CUSTOM PATTERN RESOLVER
+// ═══════════════════════════════════════════════════════
 
-/** Omni movement up to maxDist squares. BFS — stops at friendly, passes through nothing. */
+/**
+ * Resolve a CustomPattern into valid board positions.
+ * Works for both movement and attack patterns.
+ *
+ * For movement (isAttack=false):
+ *   - Target square must be empty (unless canJump, then skip over occupied)
+ *   - Blocked by any unit unless canJump is true
+ *
+ * For attack (isAttack=true):
+ *   - Target square must have an enemy unit
+ *   - Ranged: can pass through empty squares but blocked by occupied (unless canJump)
+ */
+function resolveCustomPattern(
+  unit: Unit,
+  pattern: CustomPattern,
+  board: Board,
+  isAttack: boolean,
+): Position[] {
+  const results: Position[] = [];
+  const range = pattern.range ?? 1;
+  const canJump = pattern.canJump ?? false;
+  const { col, row } = unit.position;
+
+  for (const offset of pattern.offsets) {
+    for (let step = 1; step <= range; step++) {
+      const nc = col + offset.dx * step;
+      const nr = row + offset.dy * step;
+
+      // Out of bounds — stop this direction
+      if (!board.isInBounds(nc, nr)) break;
+
+      const occupant = board.getUnit(nc, nr);
+
+      if (isAttack) {
+        // Attack mode: looking for enemy targets
+        if (occupant) {
+          if (occupant.owner !== unit.owner) {
+            results.push({ col: nc, row: nr });
+          }
+          // Blocked by any unit (friend or enemy) unless canJump
+          if (!canJump) break;
+        }
+        // Empty square — ranged can continue through
+      } else {
+        // Movement mode: looking for empty squares
+        if (occupant) {
+          if (!canJump) break;  // blocked
+          // canJump: skip over occupied, don't add as valid
+          continue;
+        }
+        results.push({ col: nc, row: nr });
+      }
+    }
+  }
+
+  return results;
+}
+
+// ═══════════════════════════════════════════════════════
+// PRESET OFFSET TABLES
+// Use these when defining customMove/customAttack on cards.
+// ═══════════════════════════════════════════════════════
+
+/** All 8 surrounding squares */
+export const OFFSETS_OMNI: PatternOffset[] = [
+  { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
+  { dx: -1, dy:  0 },                     { dx: 1, dy:  0 },
+  { dx: -1, dy:  1 }, { dx: 0, dy:  1 }, { dx: 1, dy:  1 },
+];
+
+/** Horizontal + Vertical only (4 squares) */
+export const OFFSETS_HV: PatternOffset[] = [
+  { dx: 0, dy: -1 },
+  { dx: 0, dy:  1 },
+  { dx: -1, dy: 0 },
+  { dx:  1, dy: 0 },
+];
+
+/** Diagonal only (4 squares) */
+export const OFFSETS_DIAGONAL: PatternOffset[] = [
+  { dx: -1, dy: -1 }, { dx: 1, dy: -1 },
+  { dx: -1, dy:  1 }, { dx: 1, dy:  1 },
+];
+
+/** Forward only (toward enemy) */
+export const OFFSETS_FORWARD: PatternOffset[] = [
+  { dx: 0, dy: -1 },
+];
+
+/** L-shaped knight jump (chess-style) */
+export const OFFSETS_L_JUMP: PatternOffset[] = [
+  { dx: -1, dy: -2 }, { dx: 1, dy: -2 },
+  { dx: -2, dy: -1 }, { dx: 2, dy: -1 },
+  { dx: -2, dy:  1 }, { dx: 2, dy:  1 },
+  { dx: -1, dy:  2 }, { dx: 1, dy:  2 },
+];
+
+// ═══════════════════════════════════════════════════════
+// ENUM-BASED MOVEMENT HELPERS (existing logic, unchanged)
+// ═══════════════════════════════════════════════════════
+
+/** Omni movement up to maxDist squares. BFS — stops at occupied. */
 function getOmniMoves(
   col: number, row: number,
   maxDist: number,
@@ -151,7 +368,7 @@ function getOmniMoves(
         result.push({ col: nc, row: nr });
         queue.push({ col: nc, row: nr, dist: curr.dist + 1 });
       }
-      // Friendly or enemy: blocked — don't expand further in that direction
+      // Friendly or enemy: blocked — don't expand further
     }
   }
 
@@ -166,7 +383,7 @@ function getVerticalMoves(
   board: Board
 ): Position[] {
   const result: Position[] = [];
-  const dirs = [-1, 1]; // up and down
+  const dirs = [-1, 1];
   for (const dr of dirs) {
     for (let d = 1; d <= maxDist; d++) {
       const nr = row + dr * d;
@@ -175,7 +392,7 @@ function getVerticalMoves(
       if (occupant === null) {
         result.push({ col, row: nr });
       } else {
-        break; // Blocked
+        break;
       }
     }
   }
@@ -208,16 +425,16 @@ function getForwardVerticalMove(
   owner: Player,
   board: Board
 ): Position[] {
-  const dr = owner === Player.P1 ? 1 : -1; // P1 moves down (toward P2 half)
+  const dr = owner === Player.P1 ? 1 : -1;
   const nr = row + dr;
   if (!board.isInBounds(col, nr)) return [];
   if (board.getUnit(col, nr) !== null) return [];
   return [{ col, row: nr }];
 }
 
-// ─────────────────────────────────────────────
-// ATTACK HELPERS
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// ENUM-BASED ATTACK HELPERS (existing logic, unchanged)
+// ═══════════════════════════════════════════════════════
 
 function getHVAdjacent(
   col: number, row: number,
@@ -279,7 +496,7 @@ function getDiagonalRanged(
       const u = board.getUnit(nc, nr);
       if (u !== null) {
         if (u.owner !== owner) result.push({ col: nc, row: nr });
-        break; // Blocked by any unit (friendly or enemy)
+        break; // Blocked by any unit
       }
     }
   }
@@ -330,9 +547,9 @@ function getForwardVertical(
   return [];
 }
 
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
 // VALIDATION HELPERS (used by GameEngine)
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
 
 /** Check if a specific move is legal. */
 export function isMoveValid(unit: Unit, toCol: number, toRow: number, board: Board): boolean {

@@ -39,6 +39,8 @@ export interface IGameEngineAPI {
   isPlayerUnit(col: number, row: number): boolean;
   isOccupied(col: number, row: number): boolean;
   getPhase(): string;
+  getAttackRange(col: number, row: number): Array<{ col: number; row: number }>;
+
 }
 
 export class SelectionManager {
@@ -158,6 +160,7 @@ export class SelectionManager {
     EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
       moves: [],
       attacks: [],
+      attackRange: [],
       auras: [],
     });
 
@@ -202,19 +205,20 @@ export class SelectionManager {
     }
 
     // Select this unit
-    const moves   = this.engine.getValidMoves(col, row);
-    const attacks = this.engine.getValidAttacks(col, row);
+   const moves       = this.engine.getValidMoves(col, row);
+const attacks     = this.engine.getValidAttacks(col, row);
+const attackRange = this.engine.getAttackRange(col, row);
 
-    this.state = {
-      ...this.state,
-      mode: 'unit_selected',
-      selectedBoardCol: col,
-      selectedBoardRow: row,
-      selectedHandIndex: null,
-      validMoves: moves,
-      validAttacks: attacks,
-      validDeploy: [],
-    };
+this.state = {
+  ...this.state,
+  mode: 'unit_selected',
+  selectedBoardCol: col,
+  selectedBoardRow: row,
+  selectedHandIndex: null,
+  validMoves: moves,
+  validAttacks: attacks,
+  validDeploy: [],
+};
 
     this.publishHighlights();
     EventBus.emit(EV.SELECTION_CHANGED, {
@@ -245,57 +249,83 @@ export class SelectionManager {
     }
   }
 
-  private handleUnitActionClick(col: number, row: number): void {
-    const fromCol = this.state.selectedBoardCol;
-    const fromRow = this.state.selectedBoardRow;
-    if (fromCol === null || fromRow === null) { this.clearSelection(); return; }
-
-    // Clicking the selected unit again → deselect
-    if (col === fromCol && row === fromRow) {
-      this.clearSelection();
-      return;
-    }
-
-    // Is this a valid move?
-    const isMoveTarget = this.state.validMoves.some(p => p.col === col && p.row === row);
-    if (isMoveTarget) {
-      this.engine.moveUnit(fromCol, fromRow, col, row);
-      this.clearSelection();
-      return;
-    }
-
-    // Is this a valid attack?
-    const isAttackTarget = this.state.validAttacks.some(p => p.col === col && p.row === row);
-    if (isAttackTarget) {
-      this.engine.attackUnit(fromCol, fromRow, col, row);
-      this.clearSelection();
-      return;
-    }
-
-    // Click on a different own unit → switch selection to that unit
-    if (this.engine.isOccupied(col, row) && this.engine.isPlayerUnit(col, row)) {
-      this.clearSelection();
-      this.handleIdleBoardClick(col, row, this.engine.getPhase());
-      return;
-    }
-
-    // Click on empty or invalid cell → deselect
+ private handleUnitActionClick(col: number, row: number): void {
+  // Clicking the same unit again → deselect
+  if (col === this.state.selectedBoardCol && row === this.state.selectedBoardRow) {
     this.clearSelection();
+    return;
   }
+
+  // Priority 1: ATTACK — if this cell is a valid attack target, attack it
+  const isAttackTarget = this.state.validAttacks.some(p => p.col === col && p.row === row);
+  if (isAttackTarget) {
+    this.engine.attackUnit(
+      this.state.selectedBoardCol!, this.state.selectedBoardRow!,
+      col, row
+    );
+    this.clearSelection();
+    return;
+  }
+
+  // Priority 2: MOVE — if this cell is a valid move target, move there
+  const isMoveTarget = this.state.validMoves.some(p => p.col === col && p.row === row);
+  if (isMoveTarget) {
+    this.engine.moveUnit(
+      this.state.selectedBoardCol!, this.state.selectedBoardRow!,
+      col, row
+    );
+    this.clearSelection();
+    return;
+  }
+
+  // Priority 3: SELECT ANOTHER UNIT — if clicking own unit, switch selection
+  if (this.engine.isPlayerUnit(col, row) && this.engine.canAct(col, row)) {
+    const moves   = this.engine.getValidMoves(col, row);
+    const attacks = this.engine.getValidAttacks(col, row);
+
+    this.state = {
+      ...this.state,
+      mode: 'unit_selected',
+      selectedBoardCol: col,
+      selectedBoardRow: row,
+      selectedHandIndex: null,
+      validMoves: moves,
+      validAttacks: attacks,
+      validDeploy: [],
+    };
+
+    this.publishHighlights();
+    EventBus.emit(EV.SELECTION_CHANGED, {
+      source: 'board',
+      col, row,
+      validMoves: moves,
+      validAttacks: attacks,
+    });
+    return;
+  }
+
+  // Clicked nothing useful — deselect
+  this.clearSelection();
+}
 
   // ─────────────────────────────────────────────
   // PRIVATE — HELPERS
   // ─────────────────────────────────────────────
 
   /** Publish current highlights to EventBus so BoardRenderer reacts. */
-  private publishHighlights(): void {
-    EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
-      moves:   this.state.validMoves,
-      attacks: this.state.validAttacks,
-      deploy:  this.state.validDeploy,
-      auras:   [],
-    });
-  }
+private publishHighlights(): void {
+  const attackRange = (this.state.selectedBoardCol !== null && this.state.selectedBoardRow !== null)
+    ? this.engine.getAttackRange(this.state.selectedBoardCol, this.state.selectedBoardRow)
+    : [];
+
+  EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
+    moves:       this.state.validMoves,
+    attacks:     this.state.validAttacks,
+    attackRange: attackRange,
+    deploy:      this.state.validDeploy,
+    auras:       [],
+  });
+}
 
   // ─────────────────────────────────────────────
   // PRIVATE — EVENT BUS SUBSCRIPTIONS
