@@ -44,7 +44,8 @@ export interface CryptoMatchResult {
 class SocketManagerClass {
   private socket: Socket | null = null;
   private callbacks: RoomCallbacks | null = null;
-  private serverUrl: string = "http://localhost:3001";
+  // NEW:
+  private serverUrl: string = import.meta.env.VITE_SOCKET_URL || "http://localhost:3001";
 
   connect(callbacks: RoomCallbacks): void {
     this.callbacks = callbacks;
