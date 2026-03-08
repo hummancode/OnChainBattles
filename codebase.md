@@ -1372,115 +1372,63 @@ pause
 
 ```
 
-# git_push.bat
+# gitignore
 
-```bat
-@echo off
-title OnChainBattles - Auto Commit & Push
-color 0B
+```
+# ── Dependencies ──
+/node_modules
 
-REM ── Set your project root ─────────────────────────────────────
-set PROJECT_DIR=D:\OnChainBattles
-cd /d "%PROJECT_DIR%" || (
-    echo [ERROR] Project directory not found: %PROJECT_DIR%
-    pause
-    exit /b 1
-)
+# ── Build / Compilation ──
+/dist
+/bundle
 
-REM ── Get current date and time for commit message ──────────────
-for /f "tokens=2 delims==" %%a in ('wmic os get localdatetime /value') do set datetime=%%a
-set YEAR=%datetime:~0,4%
-set MONTH=%datetime:~4,2%
-set DAY=%datetime:~6,2%
-set HOUR=%datetime:~8,2%
-set MIN=%datetime:~10,2%
-set TIMESTAMP=%YEAR%-%MONTH%-%DAY% %HOUR%:%MIN%
+# ── Hardhat ──
+/artifacts
+/cache
+/coverage
+/typechain-types
 
-echo.
-echo  ==========================================
-echo   OnChainBattles - Auto Commit
-echo   Time: %TIMESTAMP%
-echo  ==========================================
-echo.
+# ── Environment ──
+.env
+.env.local
+.env.*.local
 
-REM ── Check Git is installed ────────────────────────────────────
-where git >nul 2>nul
-if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Git not found. Please install Git first.
-    pause
-    exit /b 1
-)
+# ── OS junk ──
+.DS_Store
+Thumbs.db
+desktop.ini
 
-REM ── Check if there is anything to commit ─────────────────────
-git status --porcelain > temp_status.txt
-set /p STATUS=<temp_status.txt
-del temp_status.txt
+# ── IDE / Editor ──
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-if "%STATUS%"=="" (
-    echo  [INFO] Nothing to commit - working tree clean.
-    echo.
-    pause
-    exit /b 0
-)
+# ── Generated / Temp files ──
+codebase.md
+src/codebase.md
+folder_structure.txt
+events.txt
 
-REM ── Optional: let user type a short message ───────────────────
-echo.
-echo Add a short note (or press ENTER to use auto message):
-set /p USER_MSG="Note: "
+# ── Image files (use Git LFS later if versioning needed) ──
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.svg
+*.ico
+*.bmp
 
-if "%USER_MSG%"=="" (
-    set COMMIT_MSG=Auto-update: %TIMESTAMP%
-) else (
-    set COMMIT_MSG=%USER_MSG% [%TIMESTAMP%]
-)
+# ── Logs ──
+*.log
+npm-debug.log*
 
-echo.
-echo [1/3] Staging all changes...
-git add .
-if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Git add failed.
-    pause
-    exit /b 1
-)
-echo        Done.
+# ── Misc ──
+*.tgz
+*.tsbuildinfo
 
-echo.
-echo [2/3] Committing: "%COMMIT_MSG%"
-git commit -m "%COMMIT_MSG%"
-if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Commit failed.
-    pause
-    exit /b 1
-)
-echo        Done.
-
-echo.
-echo [3/3] Pushing to GitHub...
-git push origin main
-if %ERRORLEVEL% NEQ 0 (
-    echo.
-    echo [ERROR] Push failed. Possible reasons:
-    echo   - No internet connection
-    echo   - Remote not set (run: git remote add origin [URL])
-    echo   - Authentication issue
-    echo   - Branch name might be 'master' instead of 'main'
-    echo.
-    echo Attempting to push with current branch name...
-    git push origin HEAD
-    if %ERRORLEVEL% NEQ 0 (
-        echo [ERROR] Push failed again.
-        pause
-        exit /b 1
-    )
-)
-
-echo.
-echo  ==========================================
-echo   [SUCCESS] Pushed to GitHub!
-echo   Commit: %COMMIT_MSG%
-echo  ==========================================
-echo.
-pause
 ```
 
 # hardhat.config.ts
@@ -1635,290 +1583,6 @@ endlocal
     "type": "module"
 }
 ```
-
-# public\_originals\assets\backgrounds\bg_menu.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\backgrounds\bg_result.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\archer.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\assassin.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\castle.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\casus_belli.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\civil_war.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\commander.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\coup.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\disease.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\earthquake.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\foot_soldier.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\inquisitor.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\king.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\kings_guard.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\knight.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\lancer.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\messenger.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\militia.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\motherland.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\mystic.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\peasant_revolt.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\pikeman.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\priest.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\princess.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\reform.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\scout.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\scribe.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\swordsman.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\temple.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\treason.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\village.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\art\war_horn.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\card_back_pattern.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\card_frame_royal.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\card_frame_spell.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\card_frame_standard.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\card_frame_static.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\archer (1).png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\assassin_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\castle_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\casus_belli_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\commander_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\disease_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\foot_soldier_thumb-2.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\inquisitor_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\king_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\kings_guard_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\knight_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\lancer_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\messenger_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\mystic_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\pikeman_thumb-2.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\priest_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\princess_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\scout_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\scribe_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\swordsman_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\temple_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\cards\thumb\village_thumb.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\icons\icon_atk.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\icons\icon_cavalry.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\icons\icon_clock.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\icons\icon_def.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\icons\icon_leg.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\icons\icon_move.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\icons\icon_ranged.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\icons\icon_type_royal.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\icons\icon_type_spell.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\icons\icon_type_standard.png
-
-This is a binary file of the type: Image
-
-# public\_originals\assets\icons\icon_type_static.png
-
-This is a binary file of the type: Image
 
 # public\assetsy\asset-pack.json
 
@@ -3595,7 +3259,7 @@ body {
     "cellHover":        "#4FC3F733",
     "cellSelected":     "#F5A62366",
     "cellValidMove":    "#00FF8833",
-    "cellValidAtk":     "#FF444433",
+    "cellValidAtk":     "#FF444466",
     "cellAura":         "#4FC3F722",
     "unitBandPlayer":   "#00FF88",
     "unitBandEnemy":    "#FF4444",
@@ -4696,16 +4360,20 @@ socket.on('game_action', ({ roomCode, action }) => {
   });
 
   // Player signals their escrow deposit is confirmed on-chain
-  socket.on('cryptoReady', ({ roomCode }) => {
+socket.on('cryptoReady', ({ roomCode }) => {
     const room = rooms[roomCode];
     if (!room) return;
     room.cryptoReady.count = (room.cryptoReady.count || 0) + 1;
     console.log(`[Server] cryptoReady: ${room.cryptoReady.count}/2 in room ${roomCode}`);
 
-    if (room.cryptoReady.count >= 2) {
-      // Both players locked funds — enable rolling
+    if (room.cryptoReady.count === 1) {
+      // Host deposit confirmed — tell joiner to deposit now
+      socket.to(roomCode).emit('hostDepositConfirmed');
+      console.log(`[Server] Told opponent to deposit in room ${roomCode}`);
+    } else if (room.cryptoReady.count >= 2) {
+      // Both deposits confirmed — start game
       io.to(roomCode).emit('bothCryptoReady');
-      console.log(`[Server] Both players crypto-ready in room ${roomCode}, enabling dice roll`);
+      console.log(`[Server] Both players crypto-ready in room ${roomCode}`);
     }
   });
 
@@ -4764,17 +4432,33 @@ socket.on('game_action', ({ roomCode, action }) => {
     }
   });
 
-  socket.on('disconnect', () => {
+ socket.on('disconnect', () => {
     for (const code in rooms) {
       const room = rooms[code];
       const idx = room.players.findIndex(p => p.id === socket.id);
-      if (idx !== -1) {
-        room.players.splice(idx, 1);
-        io.to(code).emit('opponentDisconnected');
-        if (room.players.length === 0) delete rooms[code];
-        console.log(`[Server] Player left room: ${code}`);
-        break;
+      if (idx === -1) continue;
+
+      const disconnectedPlayer = room.players[idx];
+      console.log(`[Server] ${disconnectedPlayer.name} left room: ${code}`);
+
+      // Notify remaining player
+      socket.to(code).emit('opponentDisconnected');
+
+      // Crypto: if both deposited and not yet settled, pay remaining player
+      if (room.cryptoReady?.count >= 2 && !room.settled) {
+        room.settled = true;
+        const remainingIdx = idx === 0 ? 1 : 0;
+        const remaining = room.players[remainingIdx];
+        if (remaining?.wallet) {
+          console.log(`[Server] Disconnect payout to ${remaining.name} (${remaining.wallet})`);
+          payoutWinner(code, remaining.wallet).then(result => {
+            io.to(code).emit('payout_result', result);
+          });
+        }
       }
+
+      delete rooms[code];
+      break;
     }
   });
 });
@@ -7201,7 +6885,15 @@ export const CARD_DEFINITIONS: CardDefinition[] = [
     id: 'archer', name: 'Archer',
     flavorText: 'Precision over brute force.',
     class: U, allegiance: STD, subtypes: [], cost: 3, copies: 2,
-    stats: { atk: 3, def: 1, movement: MovementType.OMNI_1, attackPattern: AtkPattern.DIAGONAL_RANGED_2 },
+    stats: { atk: 3, def: 1, movement: MovementType.OMNI_1, attackPattern: AtkPattern.DIAGONAL_RANGED_2,
+    customAttack : {
+        offsets: [{dx:1, dy:-1}, {dx:-1, dy:-1}, {dx:1, dy:1}, {dx:-1, dy:1}, {dx:2, dy:-2}, {dx:-2, dy:-2}, {dx:2, dy:2}, {dx:-2, dy:2}],  
+        range: 1,
+      },
+
+      },
+
+     
     flags: [],
     abilities: [],
     abilityText: 'Ranged attack: targets any unit diagonally within 2 squares. Ignores adjacency.',
@@ -7618,14 +7310,14 @@ import {
   resolveAttack, resolveCastleAreaAttack,
   applyDamage, applyFullHeal, applyAutoHeal, applyReform, applyEarthquakeDamage,
 } from './CombatResolver';
-import { getValidMoves, getValidAttacks, getValidDeploySquares, isMoveValid, isAttackValid, isLancerForwardMove } from './MovementRules';
-import { DeckLoader } from '../config/DeckLoader'; 
+import { getValidMoves, getValidAttacks, getAttackRange, getValidDeploySquares, isMoveValid, isAttackValid, isLancerForwardMove } from './MovementRules';import { DeckLoader } from '../config/DeckLoader'; 
 import { Player, TurnPhase, EngineStatus } from './types/GameTypes';
 import type { Unit, Position, GameStateSnapshot } from './types/GameTypes';
 import type { GameEvent, EvGameOver } from './types/EventTypes';
 import type { PendingInteraction } from './types/AbilityTypes';
 import { Allegiance, CardClass, CardFlag, SubType } from './types/CardTypes';
 import { UNITS_ONLY_DECK_IDS, getCard } from './data/CardDefinitions';
+
 //import { getCard, DEMO_DECK_IDS } from './data/CardDefinitions';
 // ─────────────────────────────────────────────
 // PUBLIC API INTERFACE (consumed by SelectionManager)
@@ -7727,7 +7419,11 @@ this.players[Player.P2].loadDeck([...deck], Player.P2);  // uses seed + 1
     if (!unit || unit.owner !== this.activePlayer) return [];
     return getValidAttacks(unit, this.board);
   }
-
+getAttackRange(unitId: string): Position[] {
+  const unit = this.board.getUnitById(unitId);
+  if (!unit) return [];
+  return getAttackRange(unit, this.board);
+}
   getValidDeployPositions(): Position[] {
     return getValidDeploySquares(this.activePlayer, this.board);
   }
@@ -7772,6 +7468,7 @@ this.players[Player.P2].loadDeck([...deck], Player.P2);  // uses seed + 1
    * Units/Structures require col+row. Spells do not.
    * Returns false if illegal (wrong phase, can't afford, wrong position).
    */
+  
   playCard(handIndex: number, col?: number, row?: number): boolean {
     if (this.status === EngineStatus.AWAITING_INPUT) return false;
     if (this.phase !== TurnPhase.PLAY) return false;
@@ -8782,34 +8479,48 @@ export class GameModifiers {
 // Returns valid squares for movement and attack.
 // Called by GameEngine to validate player actions and by
 // SelectionManager (via IGameEngineAPI) for UI highlights.
+//
+// HYBRID PATTERN SYSTEM:
+//   - Cards can use enum-based presets (MovementType, AtkPattern)
+//   - Cards can also define customMove / customAttack overrides
+//   - Custom patterns are checked FIRST; if absent, enum logic runs
+//   - This allows new movement/attack shapes without new switch cases
 // ============================================================
 
 import { MovementType, AtkPattern, CardFlag } from './types/CardTypes';
+import type { CustomPattern, PatternOffset } from './types/CardTypes';
 import type { Unit, Position } from './types/GameTypes';
 import { Player } from './types/GameTypes';
 import type { Board } from './Board';
+import { getCard } from './data/CardDefinitions';
 
-// ─────────────────────────────────────────────
-// MOVEMENT
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// PUBLIC API
+// ═══════════════════════════════════════════════════════
 
 /**
  * Returns all squares a unit can legally move to this turn.
- * Respects: movement type, occupied squares, board bounds,
- * hasMoved flag, isActive (BUILD_DELAY), Village slow.
+ * Checks customMove first, then falls back to enum-based movement.
  */
 export function getValidMoves(unit: Unit, board: Board): Position[] {
   if (unit.hasMoved || unit.hasActed || !unit.isActive || unit.isExhausted) return [];
 
   const movDist = unit.currentMovement;
-  if (movDist <= 0) return []; // Village-slowed to 0 = immobilized
+  if (movDist <= 0) return [];
 
+  const def = getCard(unit.cardId);
+
+  // ── Custom pattern override ──
+  if (def.stats?.customMove) {
+    return resolveCustomPattern(unit, def.stats.customMove, board, false);
+  }
+
+  // ── Enum-based fallback ──
   const { col, row } = unit.position;
-  const results: Position[] = [];
 
   switch (unit.baseMovementType) {
     case MovementType.STATIC:
-      return []; // Structures never move
+      return [];
 
     case MovementType.OMNI_1:
     case MovementType.OMNI_2:
@@ -8832,13 +8543,19 @@ export function getValidMoves(unit: Unit, board: Board): Position[] {
 
 /**
  * Returns all squares a unit can legally attack this turn.
- * Respects: attack pattern, hasActed flag, TAUNT_ROW filter.
- * Lancer: can attack even if it moved this turn (LANCER_CHARGE handled by caller).
+ * Checks customAttack first, then falls back to enum-based attacks.
  */
 export function getValidAttacks(unit: Unit, board: Board): Position[] {
-  // Unit must not have already attacked (hasActed)
-  // Lancer exception: can move first, then attack (checked by GameEngine)
   if (unit.hasActed || !unit.isActive || unit.isExhausted) return [];
+
+  const def = getCard(unit.cardId);
+
+  // ── Custom pattern override ──
+  if (def.stats?.customAttack) {
+    return resolveCustomPattern(unit, def.stats.customAttack, board, true);
+  }
+
+  // ── Enum-based fallback ──
   if (unit.baseAtkPattern === AtkPattern.NONE) return [];
 
   const { col, row } = unit.position;
@@ -8858,11 +8575,11 @@ export function getValidAttacks(unit: Unit, board: Board): Position[] {
       break;
 
     case AtkPattern.ON_JUMP:
-      // Assassin: attack = the jump destination (same as movement targets)
-      return []; // Handled as part of the jump move in GameEngine
+      // Assassin: attack = the jump destination (handled as part of jump move)
+      return [];
 
     case AtkPattern.AREA_ADJ:
-      // Castle: attacks all adjacent enemies simultaneously — handled in LEG phase
+      // Castle: attacks all adjacent enemies simultaneously (also used in LEG phase)
       targets = getOmniAdjacent(col, row, board, unit.owner, true);
       break;
 
@@ -8882,7 +8599,103 @@ export function getValidAttacks(unit: Unit, board: Board): Position[] {
   // must attack that unit instead (future expansion hook)
   return targets;
 }
+/**
+ * Returns ALL squares in a unit's attack range — occupied or empty.
+ * Used for UI only (shows threat zone). Not used for action validation.
+ */
+export function getAttackRange(unit: Unit, board: Board): Position[] {
+  if (!unit.isActive || unit.isExhausted) return [];
 
+  const def = getCard(unit.cardId);
+
+  // Custom pattern override
+  if (def.stats?.customAttack) {
+    return resolvePatternRange(unit, def.stats.customAttack, board);
+  }
+
+  if (unit.baseAtkPattern === AtkPattern.NONE) return [];
+
+  const { col, row } = unit.position;
+
+  switch (unit.baseAtkPattern) {
+    case AtkPattern.HV:
+      return getAdjacentRange(col, row, [[0,-1],[0,1],[-1,0],[1,0]], board);
+    case AtkPattern.OMNI:
+    case AtkPattern.AREA_ADJ:
+      return getAdjacentRange(col, row, [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]], board);
+    case AtkPattern.DIAGONAL_RANGED_2:
+      return getRangedRange(col, row, [[-1,-1],[1,-1],[-1,1],[1,1]], 2, board);
+    case AtkPattern.STRAIGHT_RANGED_3:
+      return getRangedRange(col, row, [[0,-1],[0,1],[-1,0],[1,0]], 3, board);
+    case AtkPattern.ON_JUMP:
+      return [];
+    case AtkPattern.FWD_VERTICAL: {
+      const dr = unit.owner === Player.P1 ? 1 : -1;
+      const nr = row + dr;
+      if (board.isInBounds(col, nr)) return [{ col, row: nr }];
+      return [];
+    }
+    default:
+      return [];
+  }
+}
+
+/** All adjacent squares in given directions (range 1, ignores occupancy). */
+function getAdjacentRange(
+  col: number, row: number,
+  dirs: number[][],
+  board: Board
+): Position[] {
+  const result: Position[] = [];
+  for (const [dc, dr] of dirs) {
+    const nc = col + dc, nr = row + dr;
+    if (board.isInBounds(nc, nr)) result.push({ col: nc, row: nr });
+  }
+  return result;
+}
+
+/** Ranged squares up to maxRange — stops at any unit but includes that square. */
+function getRangedRange(
+  col: number, row: number,
+  dirs: number[][],
+  maxRange: number,
+  board: Board
+): Position[] {
+  const result: Position[] = [];
+  for (const [dc, dr] of dirs) {
+    for (let d = 1; d <= maxRange; d++) {
+      const nc = col + dc * d, nr = row + dr * d;
+      if (!board.isInBounds(nc, nr)) break;
+      result.push({ col: nc, row: nr });
+      if (board.getUnit(nc, nr) !== null) break; // blocked but included
+    }
+  }
+  return result;
+}
+
+/** Custom pattern range — all reachable squares regardless of occupancy. */
+function resolvePatternRange(
+  unit: Unit,
+  pattern: CustomPattern,
+  board: Board
+): Position[] {
+  const results: Position[] = [];
+  const range = pattern.range ?? 1;
+  const canJump = pattern.canJump ?? false;
+  const { col, row } = unit.position;
+
+  for (const offset of pattern.offsets) {
+    for (let step = 1; step <= range; step++) {
+      const nc = col + offset.dx * step;
+      const nr = row + offset.dy * step;
+      if (!board.isInBounds(nc, nr)) break;
+      results.push({ col: nc, row: nr });
+      const occupant = board.getUnit(nc, nr);
+      if (occupant && !canJump) break;
+    }
+  }
+  return results;
+}
 /**
  * Returns valid deploy squares for a card being played.
  * Unit: must be placed in own half on a free square.
@@ -8892,11 +8705,112 @@ export function getValidDeploySquares(player: Player, board: Board): Position[] 
   return board.getFreeSquaresInHalf(player);
 }
 
-// ─────────────────────────────────────────────
-// MOVEMENT HELPERS
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// CUSTOM PATTERN RESOLVER
+// ═══════════════════════════════════════════════════════
 
-/** Omni movement up to maxDist squares. BFS — stops at friendly, passes through nothing. */
+/**
+ * Resolve a CustomPattern into valid board positions.
+ * Works for both movement and attack patterns.
+ *
+ * For movement (isAttack=false):
+ *   - Target square must be empty (unless canJump, then skip over occupied)
+ *   - Blocked by any unit unless canJump is true
+ *
+ * For attack (isAttack=true):
+ *   - Target square must have an enemy unit
+ *   - Ranged: can pass through empty squares but blocked by occupied (unless canJump)
+ */
+function resolveCustomPattern(
+  unit: Unit,
+  pattern: CustomPattern,
+  board: Board,
+  isAttack: boolean,
+): Position[] {
+  const results: Position[] = [];
+  const range = pattern.range ?? 1;
+  const canJump = pattern.canJump ?? false;
+  const { col, row } = unit.position;
+
+  for (const offset of pattern.offsets) {
+    for (let step = 1; step <= range; step++) {
+      const nc = col + offset.dx * step;
+      const nr = row + offset.dy * step;
+
+      // Out of bounds — stop this direction
+      if (!board.isInBounds(nc, nr)) break;
+
+      const occupant = board.getUnit(nc, nr);
+
+      if (isAttack) {
+        // Attack mode: looking for enemy targets
+        if (occupant) {
+          if (occupant.owner !== unit.owner) {
+            results.push({ col: nc, row: nr });
+          }
+          // Blocked by any unit (friend or enemy) unless canJump
+          if (!canJump) break;
+        }
+        // Empty square — ranged can continue through
+      } else {
+        // Movement mode: looking for empty squares
+        if (occupant) {
+          if (!canJump) break;  // blocked
+          // canJump: skip over occupied, don't add as valid
+          continue;
+        }
+        results.push({ col: nc, row: nr });
+      }
+    }
+  }
+
+  return results;
+}
+
+// ═══════════════════════════════════════════════════════
+// PRESET OFFSET TABLES
+// Use these when defining customMove/customAttack on cards.
+// ═══════════════════════════════════════════════════════
+
+/** All 8 surrounding squares */
+export const OFFSETS_OMNI: PatternOffset[] = [
+  { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
+  { dx: -1, dy:  0 },                     { dx: 1, dy:  0 },
+  { dx: -1, dy:  1 }, { dx: 0, dy:  1 }, { dx: 1, dy:  1 },
+];
+
+/** Horizontal + Vertical only (4 squares) */
+export const OFFSETS_HV: PatternOffset[] = [
+  { dx: 0, dy: -1 },
+  { dx: 0, dy:  1 },
+  { dx: -1, dy: 0 },
+  { dx:  1, dy: 0 },
+];
+
+/** Diagonal only (4 squares) */
+export const OFFSETS_DIAGONAL: PatternOffset[] = [
+  { dx: -1, dy: -1 }, { dx: 1, dy: -1 },
+  { dx: -1, dy:  1 }, { dx: 1, dy:  1 },
+];
+
+/** Forward only (toward enemy) */
+export const OFFSETS_FORWARD: PatternOffset[] = [
+  { dx: 0, dy: -1 },
+];
+
+/** L-shaped knight jump (chess-style) */
+export const OFFSETS_L_JUMP: PatternOffset[] = [
+  { dx: -1, dy: -2 }, { dx: 1, dy: -2 },
+  { dx: -2, dy: -1 }, { dx: 2, dy: -1 },
+  { dx: -2, dy:  1 }, { dx: 2, dy:  1 },
+  { dx: -1, dy:  2 }, { dx: 1, dy:  2 },
+];
+
+// ═══════════════════════════════════════════════════════
+// ENUM-BASED MOVEMENT HELPERS (existing logic, unchanged)
+// ═══════════════════════════════════════════════════════
+
+/** Omni movement up to maxDist squares. BFS — stops at occupied. */
 function getOmniMoves(
   col: number, row: number,
   maxDist: number,
@@ -8929,7 +8843,7 @@ function getOmniMoves(
         result.push({ col: nc, row: nr });
         queue.push({ col: nc, row: nr, dist: curr.dist + 1 });
       }
-      // Friendly or enemy: blocked — don't expand further in that direction
+      // Friendly or enemy: blocked — don't expand further
     }
   }
 
@@ -8944,7 +8858,7 @@ function getVerticalMoves(
   board: Board
 ): Position[] {
   const result: Position[] = [];
-  const dirs = [-1, 1]; // up and down
+  const dirs = [-1, 1];
   for (const dr of dirs) {
     for (let d = 1; d <= maxDist; d++) {
       const nr = row + dr * d;
@@ -8953,7 +8867,7 @@ function getVerticalMoves(
       if (occupant === null) {
         result.push({ col, row: nr });
       } else {
-        break; // Blocked
+        break;
       }
     }
   }
@@ -8986,16 +8900,16 @@ function getForwardVerticalMove(
   owner: Player,
   board: Board
 ): Position[] {
-  const dr = owner === Player.P1 ? 1 : -1; // P1 moves down (toward P2 half)
+  const dr = owner === Player.P1 ? 1 : -1;
   const nr = row + dr;
   if (!board.isInBounds(col, nr)) return [];
   if (board.getUnit(col, nr) !== null) return [];
   return [{ col, row: nr }];
 }
 
-// ─────────────────────────────────────────────
-// ATTACK HELPERS
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// ENUM-BASED ATTACK HELPERS (existing logic, unchanged)
+// ═══════════════════════════════════════════════════════
 
 function getHVAdjacent(
   col: number, row: number,
@@ -9057,7 +8971,7 @@ function getDiagonalRanged(
       const u = board.getUnit(nc, nr);
       if (u !== null) {
         if (u.owner !== owner) result.push({ col: nc, row: nr });
-        break; // Blocked by any unit (friendly or enemy)
+        break; // Blocked by any unit
       }
     }
   }
@@ -9108,9 +9022,9 @@ function getForwardVertical(
   return [];
 }
 
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
 // VALIDATION HELPERS (used by GameEngine)
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
 
 /** Check if a specific move is legal. */
 export function isMoveValid(unit: Unit, toCol: number, toRow: number, board: Board): boolean {
@@ -9127,7 +9041,82 @@ export function isLancerForwardMove(unit: Unit, toRow: number): boolean {
   const dr = unit.owner === Player.P1 ? 1 : -1;
   return (toRow - unit.position.row) * dr > 0;
 }
+```
 
+# src\game\PatternResolver.ts
+
+```ts
+import type { CustomPattern, PatternOffset } from './types/CardTypes';
+import type { Unit } from './types/GameTypes';
+import type { Board } from './Board';
+
+/**
+ * Resolve a custom pattern into valid board positions.
+ * Works for both movement and attack patterns.
+ */
+export function resolveCustomPattern(
+  unit: Unit,
+  pattern: CustomPattern,
+  board: Board,
+  isAttack: boolean,
+): Array<{ col: number; row: number }> {
+  const results: Array<{ col: number; row: number }> = [];
+  const range = pattern.range ?? 1;
+
+  for (const offset of pattern.offsets) {
+    for (let step = 1; step <= range; step++) {
+      const col = unit.position.col + offset.dx * step;
+      const row = unit.position.row + offset.dy * step;
+
+      // Out of bounds
+      if (!board.isInBounds(col, row)) break;
+
+      const occupant = board.getUnit(col, row);
+
+      if (isAttack) {
+        // Attack: target must have an enemy
+        if (occupant && occupant.owner !== unit.owner) {
+          results.push({ col, row });
+        }
+        // Ranged: can pass through empty squares but not friendlies
+        if (occupant && !pattern.canJump) break;
+      } else {
+        // Movement: cell must be empty (unless canJump)
+        if (occupant) {
+          if (!pattern.canJump) break;  // blocked
+          continue;  // jump over
+        }
+        results.push({ col, row });
+      }
+    }
+  }
+
+  return results;
+}
+
+// ─── Preset offset tables (derived from existing enums) ─────
+
+export const OFFSETS_OMNI: PatternOffset[] = [
+  { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
+  { dx: -1, dy:  0 },                     { dx: 1, dy:  0 },
+  { dx: -1, dy:  1 }, { dx: 0, dy:  1 }, { dx: 1, dy:  1 },
+];
+
+export const OFFSETS_HV: PatternOffset[] = [
+  { dx: 0, dy: -1 },  // up
+  { dx: 0, dy:  1 },  // down
+  { dx: -1, dy: 0 },  // left
+  { dx: 1,  dy: 0 },  // right
+];
+
+export const OFFSETS_DIAGONAL: PatternOffset[] = [
+  { dx: -1, dy: -1 }, { dx: 1, dy: -1 },
+  { dx: -1, dy:  1 }, { dx: 1, dy:  1 },
+];
+
+export const OFFSETS_FORWARD_ONLY: PatternOffset[] = [
+  { dx: 0, dy: -1 },  // toward enemy
+];
 ```
 
 # src\game\PlayerState.ts
@@ -9558,9 +9547,22 @@ export enum AtkPattern {
 
 export interface UnitStats {
   atk: number;
-  def: number;                 // Also serves as max HP
+  def: number;
   movement: MovementType;
   attackPattern: AtkPattern;
+  // NEW: optional custom overrides — if present, these replace the enum logic
+  customMove?: CustomPattern;
+  customAttack?: CustomPattern;
+}
+export interface PatternOffset {
+  dx: number;   // column offset (-1 = left, +1 = right)
+  dy: number;   // row offset (-1 = toward enemy, +1 = toward own half)
+}
+export interface CustomPattern {
+  offsets: PatternOffset[];   // which squares relative to unit
+  range?: number;             // max steps per direction (default 1)
+  canJump?: boolean;          // ignore blocking units (default false)
+  requiresEnemy?: boolean;    // only valid if enemy present (for attacks)
 }
 
 // ─────────────────────────────────────────────
@@ -10789,6 +10791,8 @@ export interface IGameEngineAPI {
   isPlayerUnit(col: number, row: number): boolean;
   isOccupied(col: number, row: number): boolean;
   getPhase(): string;
+  getAttackRange(col: number, row: number): Array<{ col: number; row: number }>;
+
 }
 
 export class SelectionManager {
@@ -10908,6 +10912,7 @@ export class SelectionManager {
     EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
       moves: [],
       attacks: [],
+      attackRange: [],
       auras: [],
     });
 
@@ -10952,19 +10957,20 @@ export class SelectionManager {
     }
 
     // Select this unit
-    const moves   = this.engine.getValidMoves(col, row);
-    const attacks = this.engine.getValidAttacks(col, row);
+   const moves       = this.engine.getValidMoves(col, row);
+const attacks     = this.engine.getValidAttacks(col, row);
+const attackRange = this.engine.getAttackRange(col, row);
 
-    this.state = {
-      ...this.state,
-      mode: 'unit_selected',
-      selectedBoardCol: col,
-      selectedBoardRow: row,
-      selectedHandIndex: null,
-      validMoves: moves,
-      validAttacks: attacks,
-      validDeploy: [],
-    };
+this.state = {
+  ...this.state,
+  mode: 'unit_selected',
+  selectedBoardCol: col,
+  selectedBoardRow: row,
+  selectedHandIndex: null,
+  validMoves: moves,
+  validAttacks: attacks,
+  validDeploy: [],
+};
 
     this.publishHighlights();
     EventBus.emit(EV.SELECTION_CHANGED, {
@@ -10995,57 +11001,83 @@ export class SelectionManager {
     }
   }
 
-  private handleUnitActionClick(col: number, row: number): void {
-    const fromCol = this.state.selectedBoardCol;
-    const fromRow = this.state.selectedBoardRow;
-    if (fromCol === null || fromRow === null) { this.clearSelection(); return; }
-
-    // Clicking the selected unit again → deselect
-    if (col === fromCol && row === fromRow) {
-      this.clearSelection();
-      return;
-    }
-
-    // Is this a valid move?
-    const isMoveTarget = this.state.validMoves.some(p => p.col === col && p.row === row);
-    if (isMoveTarget) {
-      this.engine.moveUnit(fromCol, fromRow, col, row);
-      this.clearSelection();
-      return;
-    }
-
-    // Is this a valid attack?
-    const isAttackTarget = this.state.validAttacks.some(p => p.col === col && p.row === row);
-    if (isAttackTarget) {
-      this.engine.attackUnit(fromCol, fromRow, col, row);
-      this.clearSelection();
-      return;
-    }
-
-    // Click on a different own unit → switch selection to that unit
-    if (this.engine.isOccupied(col, row) && this.engine.isPlayerUnit(col, row)) {
-      this.clearSelection();
-      this.handleIdleBoardClick(col, row, this.engine.getPhase());
-      return;
-    }
-
-    // Click on empty or invalid cell → deselect
+ private handleUnitActionClick(col: number, row: number): void {
+  // Clicking the same unit again → deselect
+  if (col === this.state.selectedBoardCol && row === this.state.selectedBoardRow) {
     this.clearSelection();
+    return;
   }
+
+  // Priority 1: ATTACK — if this cell is a valid attack target, attack it
+  const isAttackTarget = this.state.validAttacks.some(p => p.col === col && p.row === row);
+  if (isAttackTarget) {
+    this.engine.attackUnit(
+      this.state.selectedBoardCol!, this.state.selectedBoardRow!,
+      col, row
+    );
+    this.clearSelection();
+    return;
+  }
+
+  // Priority 2: MOVE — if this cell is a valid move target, move there
+  const isMoveTarget = this.state.validMoves.some(p => p.col === col && p.row === row);
+  if (isMoveTarget) {
+    this.engine.moveUnit(
+      this.state.selectedBoardCol!, this.state.selectedBoardRow!,
+      col, row
+    );
+    this.clearSelection();
+    return;
+  }
+
+  // Priority 3: SELECT ANOTHER UNIT — if clicking own unit, switch selection
+  if (this.engine.isPlayerUnit(col, row) && this.engine.canAct(col, row)) {
+    const moves   = this.engine.getValidMoves(col, row);
+    const attacks = this.engine.getValidAttacks(col, row);
+
+    this.state = {
+      ...this.state,
+      mode: 'unit_selected',
+      selectedBoardCol: col,
+      selectedBoardRow: row,
+      selectedHandIndex: null,
+      validMoves: moves,
+      validAttacks: attacks,
+      validDeploy: [],
+    };
+
+    this.publishHighlights();
+    EventBus.emit(EV.SELECTION_CHANGED, {
+      source: 'board',
+      col, row,
+      validMoves: moves,
+      validAttacks: attacks,
+    });
+    return;
+  }
+
+  // Clicked nothing useful — deselect
+  this.clearSelection();
+}
 
   // ─────────────────────────────────────────────
   // PRIVATE — HELPERS
   // ─────────────────────────────────────────────
 
   /** Publish current highlights to EventBus so BoardRenderer reacts. */
-  private publishHighlights(): void {
-    EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
-      moves:   this.state.validMoves,
-      attacks: this.state.validAttacks,
-      deploy:  this.state.validDeploy,
-      auras:   [],
-    });
-  }
+private publishHighlights(): void {
+  const attackRange = (this.state.selectedBoardCol !== null && this.state.selectedBoardRow !== null)
+    ? this.engine.getAttackRange(this.state.selectedBoardCol, this.state.selectedBoardRow)
+    : [];
+
+  EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
+    moves:       this.state.validMoves,
+    attacks:     this.state.validAttacks,
+    attackRange: attackRange,
+    deploy:      this.state.validDeploy,
+    auras:       [],
+  });
+}
 
   // ─────────────────────────────────────────────
   // PRIVATE — EVENT BUS SUBSCRIPTIONS
@@ -11101,7 +11133,7 @@ import BattleScene     from './scenes/BattleScene';
 import ResultScene     from './scenes/ResultScene';
 
 const config: Phaser.Types.Core.GameConfig = {
-    type: Phaser.AUTO,
+    type: Phaser.WEBGL, 
     width: 1280,
     height: 720,
     backgroundColor: '#1A1A2E',
@@ -11161,7 +11193,9 @@ export interface RoomCallbacks {
   onBothCryptoReady?: () => void;
   onCryptoMatchResult?: (result: CryptoMatchResult) => void;
   onTieReroll?: () => void;
-  onPayoutResult?: (result: { success: boolean; txHash?: string; error?: string }) => void;  // ← ADD
+  onPayoutResult?: (result: { success: boolean; txHash?: string; error?: string }) => void;
+  onHostDepositConfirmed?: () => void;
+  // ← ADD
 }
 
 export interface CryptoMatchResult {
@@ -11262,6 +11296,10 @@ class SocketManagerClass {
   console.log(`[SocketManager] Room created: ${data.roomCode}, playerIndex: ${data.playerIndex ?? 0}`);
   GameState.setPlayerIndex(data.playerIndex ?? 0);
   this.callbacks?.onRoomCreated(data.roomCode);
+});
+this.socket.on("hostDepositConfirmed", () => {
+  console.log("[SocketManager] Host deposit confirmed — my turn to deposit");
+  this.callbacks?.onHostDepositConfirmed?.();
 });
     this.socket.on("roomJoined", (data: { roomCode: string; playerIndex: number }) => {
   console.log(`[SocketManager] Room joined: ${data.roomCode}, playerIndex: ${data.playerIndex ?? 1}`);
@@ -11373,7 +11411,7 @@ import { ThemeLoader } from '../config/ThemeLoader';
 import { CardRenderer } from './CardRenderer';
 import { setContainerHitArea } from '../utils/PhaserUtils';
 
-type HighlightType = 'none' | 'move' | 'attack' | 'aura' | 'selected' | 'hover';
+type HighlightType = 'none' | 'move' | 'attack' | 'attackRange' | 'aura' | 'selected' | 'hover';
 
 export class BoardRenderer {
   private scene: Phaser.Scene;
@@ -11399,6 +11437,10 @@ export class BoardRenderer {
   private unsubs: Array<() => void> = [];
 
   constructor(scene: Phaser.Scene, layout: BattleLayoutJSON, theme: ThemeJSON, localPlayerIndex: number) {
+
+
+
+
     this.localPlayerIndex = localPlayerIndex; 
     this.scene = scene;
     this.layout = layout;
@@ -11406,21 +11448,28 @@ export class BoardRenderer {
     this.cardRenderer = new CardRenderer(scene, layout, theme);
 
     // Build container hierarchy
-    this.rootContainer      = scene.add.container(0, 0);
-    this.cellContainer      = scene.add.container(0, 0);
-    this.highlightContainer = scene.add.container(0, 0);
-    this.unitContainer      = scene.add.container(0, 0);
-    this.overlayContainer   = scene.add.container(0, 0);
-    this.coordContainer     = scene.add.container(0, 0);
-    this.cellContainer.setDepth(1);
-this.unitContainer.setDepth(5);  // units above cells, below HUD hand
-    this.rootContainer.add([
-      this.cellContainer,
-      this.highlightContainer,
-      this.unitContainer,
-      this.overlayContainer,
-      this.coordContainer,
-    ]);
+ this.rootContainer      = scene.add.container(0, 0);
+this.cellContainer      = scene.add.container(0, 0);
+this.highlightContainer = scene.add.container(0, 0);
+this.unitContainer      = scene.add.container(0, 0);
+this.attackMarkerContainer = scene.add.container(0, 0);  // ← ADD
+this.overlayContainer   = scene.add.container(0, 0);
+this.coordContainer     = scene.add.container(0, 0);
+
+this.cellContainer.setDepth(1);
+this.highlightContainer.setDepth(3);   // move highlights below units
+this.unitContainer.setDepth(5);
+this.attackMarkerContainer.setDepth(7); // ← attack markers ABOVE units
+this.overlayContainer.setDepth(8);
+
+this.rootContainer.add([
+  this.cellContainer,
+  this.highlightContainer,
+  this.unitContainer,
+  this.attackMarkerContainer,   // ← ADD
+  this.overlayContainer,
+  this.coordContainer,
+]);
 
     this.buildGrid();
     this.buildCoords();
@@ -11429,6 +11478,7 @@ this.unitContainer.setDepth(5);  // units above cells, below HUD hand
   }
   // Add field to BoardRenderer class:
 private localPlayerIndex: number = 0;
+private attackMarkerContainer: Phaser.GameObjects.Container;
 
 // Add public setter:
 setLocalPlayer(index: number): void {
@@ -11620,7 +11670,10 @@ private mirrorRow(row: number): number {
       },
     });
   }
-
+highlightAttackRange(positions: Array<{ col: number; row: number }>): void {
+  this.clearHighlightType('attackRange');
+  positions.forEach(p => this.addHighlight(p.col, p.row, 'attackRange'));
+}
   /** Show floating damage number above a cell. */
   showDamageNumber(col: number, row: number, amount: number, isHeal = false): void {
     const g = this.layout.grid;
@@ -11650,10 +11703,10 @@ private mirrorRow(row: number): number {
     });
   }
 
-  destroy(): void {
-    this.unsubs.forEach(fn => fn());
-    this.rootContainer.destroy();
-  }
+destroy(): void {
+  this.unsubs.forEach(fn => fn());
+  this.rootContainer.destroy();
+}
 
   // ─────────────────────────────────────────────
   // PRIVATE — GRID BUILD
@@ -11787,16 +11840,44 @@ const py = g.originY + displayRow * g.cellSize;
         gfx.fillRect(px, py, g.cellSize, g.cellSize);
         break;
       }
-      case 'attack': {
-        const { color, alpha } = ThemeLoader.hexToColorAlpha(T.cellValidAtk);
-        gfx.fillStyle(color, alpha);
-        gfx.fillRect(px, py, g.cellSize, g.cellSize);
-        // Inner X marker
-        gfx.lineStyle(2, ThemeLoader.hexToNum('#FF4444'), 0.6);
-        gfx.lineBetween(px + 8, py + 8, px + g.cellSize - 8, py + g.cellSize - 8);
-        gfx.lineBetween(px + g.cellSize - 8, py + 8, px + 8, py + g.cellSize - 8);
-        break;
-      }
+case 'attackRange': {
+  // Subtle crosshair on any square in attack range (empty or friendly-occupied move square)
+  const cx = px + g.cellSize / 2;
+  const cy = py + g.cellSize / 2;
+  const s = g.cellSize * 0.2;
+
+  const marker = this.scene.add.graphics();
+  // Thin crosshair lines
+  marker.lineStyle(1.5, 0xFF4444, 0.4);
+  marker.lineBetween(cx - s, cy - s, cx + s, cy + s);
+  marker.lineBetween(cx + s, cy - s, cx - s, cy + s);
+  marker.lineStyle(1, 0xFF4444, 0.3);
+  marker.strokeCircle(cx, cy, s * 0.8);
+
+  this.attackMarkerContainer.add(marker);
+  this.highlights.set(`${this.cellKey(col, row)}_attackRange_marker`, marker);
+  break;
+}
+
+case 'attack': {
+  // Bold crosshair on enemy targets — high contrast above unit art
+  const cx = px + g.cellSize / 2;
+  const cy = py + g.cellSize / 2;
+  const s = g.cellSize * 0.3;
+
+  const marker = this.scene.add.graphics();
+  marker.fillStyle(0x000000, 0.6);
+  marker.fillCircle(cx, cy, s * 0.7);
+  marker.lineStyle(3, 0xFF4444, 1.0);
+  marker.lineBetween(cx - s * 0.5, cy - s * 0.5, cx + s * 0.5, cy + s * 0.5);
+  marker.lineBetween(cx + s * 0.5, cy - s * 0.5, cx - s * 0.5, cy + s * 0.5);
+  marker.lineStyle(2, 0xFF4444, 0.9);
+  marker.strokeCircle(cx, cy, s * 0.7);
+
+  this.attackMarkerContainer.add(marker);
+  this.highlights.set(`${this.cellKey(col, row)}_attack_marker`, marker);
+  break;
+}
       case 'aura': {
         const { color, alpha } = ThemeLoader.hexToColorAlpha(T.cellAura);
         gfx.fillStyle(color, alpha);
@@ -11870,12 +11951,13 @@ const py = g.originY + displayRow * g.cellSize;
         this.showDamageNumber(col, row, amount, true);
       }),
 
-      EventBus.on(EV.HIGHLIGHTS_CHANGED, ({ moves, attacks, auras }) => {
-        this.clearAllHighlights();
-        if (moves)   this.highlightMoves(moves);
-        if (attacks) this.highlightAttacks(attacks);
-        if (auras)   this.highlightAuras(auras);
-      }),
+    EventBus.on(EV.HIGHLIGHTS_CHANGED, ({ moves, attacks, attackRange, auras }) => {
+  this.clearAllHighlights();
+  if (attackRange) this.highlightAttackRange(attackRange);  // render first (below move)
+  if (moves)       this.highlightMoves(moves);
+  if (attacks)     this.highlightAttacks(attacks);
+  if (auras)       this.highlightAuras(auras);
+}),
 
       EventBus.on(EV.UNIT_EXHAUSTED, ({ col, row, data }) => {
         this.updateUnitState(col, row, { ...data, isExhausted: true });
@@ -14245,6 +14327,13 @@ this.hudRenderer.setLocalPlayer(localPlayerIndex);
     // SelectionManager bridges col/row clicks → unitId-based engine API.
     // Uses getBoardUnit() helper because board is an Array, not a keyed object.
     this.selectionManager = new SelectionManager(layout, {
+
+      getAttackRange: (col: number, row: number) => {
+  const unit = this.getBoardUnit(col, row);
+  if (!unit) return [];
+  return this.engine.getAttackRange(unit.instanceId)
+    .map((p: any) => ({ col: p.col, row: p.row }));
+},
       getValidMoves: (col: number, row: number) => {
         const unit = this.getBoardUnit(col, row);
         if (!unit) return [];
@@ -14722,6 +14811,8 @@ export default class MainMenuScene extends Phaser.Scene {
 
 import Phaser from 'phaser';
 import { DeckLoader } from '../config/DeckLoader';
+import { MipmapHelper } from '../ui/MipmapHelper';
+
 
 export default class PreLoadScene extends Phaser.Scene {
   constructor() {
@@ -14807,6 +14898,7 @@ export default class PreLoadScene extends Phaser.Scene {
 
 create(): void {
     console.log('[PreloadScene] All assets loaded. Starting MainMenuScene.');
+    MipmapHelper.enableAll(this);
     this.scene.start('MainMenuScene');
   }
 
@@ -15480,9 +15572,15 @@ export default class RoomScene extends Phaser.Scene {
   onOpponentRollReceived: () => {},
   onCryptoMatchResult: () => {},
   onTieReroll: () => {},
+  onHostDepositConfirmed: () => this.onHostDepositConfirmed(),
+
 });
   }
-
+private onHostDepositConfirmed(): void {
+  // Host's createMatch is confirmed on-chain — now joiner can safely call joinMatch
+  this.statusText.setText('Host locked funds! Your turn...').setColor('#f5a623');
+  this.handleCryptoDeposit();
+}
   private onRoomCreated(code: string): void {
     this.currentRoomCode = code;
     GameState.setRoomCode(code);
@@ -15513,19 +15611,40 @@ export default class RoomScene extends Phaser.Scene {
     }
   }
 
-  private onOpponentJoined(opponentName: string): void {
-    this.opponentName = opponentName;
-    GameState.setOpponentName(opponentName);
-    this.opponentNameText.setText(opponentName).setColor('#ff6666');
+ private onOpponentJoined(opponentName: string): void {
+  this.opponentName = opponentName;
+  GameState.setOpponentName(opponentName);
+  this.opponentNameText.setText(opponentName).setColor('#ff6666');
 
-    if (this.isCryptoMode) {
-      this.handleCryptoDeposit();
+  if (this.isCryptoMode) {
+    const isHost = GameState.roomAction === RoomAction.Create;
+    if (isHost) {
+      // Show button — user clicks to deposit (required for Brave Wallet focus)
+      this.statusText.setText('Opponent joined! Click to lock funds').setColor('#00ff88');
+      this.subStatusText.setText('');
+
+      const depositBtn = this.add.text(CX, 510, '[ LOCK FUNDS ]', {
+        fontSize: '24px',
+        fontFamily: '"Courier New", monospace',
+        color: '#f5a623',
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+      depositBtn.on('pointerover', () => depositBtn.setColor('#ffffff'));
+      depositBtn.on('pointerout', () => depositBtn.setColor('#f5a623'));
+      depositBtn.on('pointerdown', () => {
+        depositBtn.destroy();
+        this.handleCryptoDeposit();
+      });
     } else {
-      this.statusText.setText('Opponent joined! Entering battle...');
-      this.time.delayedCall(800, () => this.enterBattle());
+      // Joiner waits for host deposit to be confirmed on-chain
+      this.statusText.setText('Waiting for host to lock funds...').setColor('#f5a623');
+      this.subStatusText.setText('You will deposit after host confirms');
     }
+  } else {
+    this.statusText.setText('Opponent joined! Entering battle...');
+    this.time.delayedCall(800, () => this.enterBattle());
   }
-
+}
   private onOpponentDisconnected(): void {
     this.statusText.setText('Opponent disconnected.').setColor('#ff4444');
     this.time.delayedCall(3000, () => this.scene.start('MainMenuScene'));
@@ -15868,6 +15987,223 @@ export class MenuButton {
 
 ```
 
+# src\ui\MipmapHelper.ts
+
+```ts
+// ============================================================
+// MipmapHelper.ts
+// Enables GPU mipmaps on Phaser textures for clean downscaling.
+//
+// WHY: WebGL LINEAR filter samples only 4 pixels when downscaling.
+//      At 3× downscale (440px → 140px), most pixel data is skipped → blur.
+//      Mipmaps pre-compute half-size versions on the GPU (440→220→110→55...)
+//      so the GPU always has a close-to-display-size version to sample from.
+//      This is exactly what Pillow LANCZOS does, but on the GPU.
+//
+// USAGE:
+//      import { MipmapHelper } from '../ui/MipmapHelper';
+//      // In PreloadScene.create():
+//      MipmapHelper.enableAll(this);
+// ============================================================
+
+export class MipmapHelper {
+
+  /**
+   * Attempt to enable mipmaps on all loaded image textures.
+   * Call this once in PreloadScene.create() after all assets are loaded.
+   */
+  static enableAll(scene: Phaser.Scene): void {
+    const renderer = scene.game.renderer;
+
+    // Only works with WebGL renderer
+    if (!(renderer instanceof Phaser.Renderer.WebGL.WebGLRenderer)) {
+      console.log('[MipmapHelper] Canvas renderer — mipmaps not applicable.');
+      return;
+    }
+
+    const gl = renderer.gl;
+    if (!gl) {
+      console.warn('[MipmapHelper] No WebGL context found.');
+      return;
+    }
+
+    // First, discover the GL texture path on one known texture
+    const glTexturePath = MipmapHelper.findGLTexturePath(scene);
+    if (!glTexturePath) {
+      console.warn('[MipmapHelper] Could not find GL texture path. Mipmaps disabled.');
+      return;
+    }
+
+    console.log(`[MipmapHelper] GL texture path found: "${glTexturePath}"`);
+
+    // Now enable mipmaps on all loaded textures
+    let count = 0;
+    const textureManager = scene.textures;
+
+    textureManager.getTextureKeys().forEach((key: string) => {
+      // Skip Phaser internal textures
+      if (key === '__DEFAULT' || key === '__MISSING' || key === '__WHITE') return;
+
+      const ok = MipmapHelper.enableForKey(scene, key, gl, glTexturePath);
+      if (ok) count++;
+    });
+
+    console.log(`[MipmapHelper] Mipmaps enabled on ${count} textures.`);
+  }
+
+  /**
+   * Enable mipmaps on a single texture by key.
+   */
+ static enableForKey(
+    scene: Phaser.Scene,
+    key: string,
+    gl: WebGLRenderingContext,
+    glTexturePath: string,
+  ): boolean {
+    if (!scene.textures.exists(key)) return false;
+
+    // WebGL 1 requires power-of-two textures for mipmaps.
+    // Only proceed if we have WebGL 2.
+    if (!(gl instanceof WebGL2RenderingContext)) return false;
+
+    const texture = scene.textures.get(key);
+    const source = texture.source?.[0];
+    if (!source) return false;
+
+    const glTex = MipmapHelper.getNestedProp(source, glTexturePath);
+    if (!glTex || !(glTex instanceof WebGLTexture)) return false;
+
+    const srcImage = (source as any).image ?? (source as any).source ?? source;
+    const width = (srcImage as any)?.width ?? 0;
+    const height = (srcImage as any)?.height ?? 0;
+    if (!width || !height) return false;
+
+    gl.bindTexture(gl.TEXTURE_2D, glTex);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    return true;
+  }
+
+  /**
+   * Discover the property path to the WebGLTexture object inside a Phaser texture source.
+   * Tries multiple known paths for Phaser 3.x and 4.x.
+   */
+  private static findGLTexturePath(scene: Phaser.Scene): string | null {
+    // Find any loaded texture to inspect
+    const keys = scene.textures.getTextureKeys().filter(
+      (k: string) => k !== '__DEFAULT' && k !== '__MISSING' && k !== '__WHITE'
+    );
+    if (keys.length === 0) return null;
+
+    const texture = scene.textures.get(keys[0]);
+    const source = texture.source?.[0];
+    if (!source) return null;
+
+    // Known paths across Phaser versions
+    const candidates = [
+      'glTexture',
+      'texture',
+      'webGLTexture',
+      'glTexture.texture',
+      'image.texture',
+      'texture.glTexture',
+    ];
+
+    for (const path of candidates) {
+      const val = MipmapHelper.getNestedProp(source, path);
+      if (val instanceof WebGLTexture) {
+        return path;
+      }
+    }
+
+    // Deep search: walk all own properties up to 3 levels deep
+    const found = MipmapHelper.deepFindWebGLTexture(source, 3);
+    if (found) {
+      console.log(`[MipmapHelper] Found WebGLTexture at: source.${found}`);
+      return found;
+    }
+
+    // Log structure for debugging
+    console.log('[MipmapHelper] Could not find WebGLTexture. Source structure:');
+    MipmapHelper.logStructure(source, 'source', 2);
+
+    return null;
+  }
+
+  /**
+   * Recursively search an object for a WebGLTexture instance.
+   */
+  private static deepFindWebGLTexture(obj: any, maxDepth: number, path: string = ''): string | null {
+    if (maxDepth <= 0 || !obj || typeof obj !== 'object') return null;
+
+    for (const key of Object.getOwnPropertyNames(obj)) {
+      // Skip known huge/circular properties
+      if (key === 'manager' || key === 'scene' || key === 'game' || key === 'renderer') continue;
+      if (key.startsWith('_') && key !== '_glTexture') continue;
+
+      try {
+        const val = obj[key];
+        const currentPath = path ? `${path}.${key}` : key;
+
+        if (val instanceof WebGLTexture) {
+          return currentPath;
+        }
+
+        // Recurse into plain objects (not DOM elements, not arrays)
+        if (val && typeof val === 'object' && !(val instanceof HTMLElement) && !Array.isArray(val)) {
+          const found = MipmapHelper.deepFindWebGLTexture(val, maxDepth - 1, currentPath);
+          if (found) return found;
+        }
+      } catch {
+        // Skip accessor errors
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Log object structure for debugging.
+   */
+  private static logStructure(obj: any, prefix: string, depth: number): void {
+    if (depth <= 0 || !obj || typeof obj !== 'object') return;
+
+    for (const key of Object.getOwnPropertyNames(obj)) {
+      if (key === 'manager' || key === 'scene' || key === 'game') continue;
+      try {
+        const val = obj[key];
+        const type = val === null ? 'null'
+          : val === undefined ? 'undefined'
+          : val instanceof WebGLTexture ? '★ WebGLTexture ★'
+          : val instanceof HTMLElement ? 'HTMLElement'
+          : Array.isArray(val) ? `Array(${val.length})`
+          : typeof val;
+        console.log(`  ${prefix}.${key}: ${type}`);
+
+        if (type === 'object' && depth > 1) {
+          MipmapHelper.logStructure(val, `${prefix}.${key}`, depth - 1);
+        }
+      } catch {
+        console.log(`  ${prefix}.${key}: [accessor error]`);
+      }
+    }
+  }
+
+  private static isPOT(n: number): boolean {
+    return n > 0 && (n & (n - 1)) === 0;
+  }
+
+  private static getNestedProp(obj: any, path: string): any {
+    return path.split('.').reduce((o, k) => o?.[k], obj);
+  }
+}
+
+```
+
 # src\ui\ShareHelper.ts
 
 ```ts
@@ -16081,7 +16417,21 @@ export function setContainerHitArea(
 # src\web3\EscrowManager.ts
 
 ```ts
-import { Contract, parseEther } from "ethers";
+// ============================================================
+// EscrowManager.ts
+// Handles all Escrow smart contract interactions.
+//
+// Functions:
+//   createMatch  — Host deposits AVAX to create a match on-chain
+//   joinMatch    — Joiner deposits matching AVAX to join
+//   getMatchInfo — Read match state from contract (debug helper)
+//
+// Error handling:
+//   All contract calls log detailed errors to console for debugging
+//   but throw clean short messages for UI display.
+// ============================================================
+
+import { Contract, parseEther, formatEther } from "ethers";
 import WalletManager from "./WalletManager";
 
 export const STAKE_AVAX = 0.01; // Hardcoded stake for Phase 1
@@ -16097,45 +16447,163 @@ const ESCROW_ABI = [
   "event MatchFinished(bytes32 matchId, address winner, uint256 payout)",
 ];
 
+// Human-readable error codes for known revert reasons
+const REVERT_MESSAGES: Record<string, string> = {
+  "Match exists":         "Match already created for this room",
+  "Stake required":       "Stake amount must be > 0",
+  "Match not found":      "No match found — host hasn't deposited yet",
+  "Match full":           "Match already has two players",
+  "Wrong stake amount":   "Stake doesn't match host's deposit",
+  "Cannot join own match": "You can't join your own match",
+};
+
 class EscrowManagerClass {
+
   private getContract(): Contract {
     const signer = WalletManager.getSigner();
     if (!signer) throw new Error("Wallet not connected");
     return new Contract(ESCROW_ADDRESS, ESCROW_ABI, signer);
   }
 
-  // Generate matchId from room code — MUST match server logic
-  // Server uses: Buffer.from(roomCode, 'utf8').toString('hex').padStart(64, '0')
+  /**
+   * Generate matchId from room code.
+   * MUST match server logic exactly:
+   *   Buffer.from(roomCode, 'utf8').toString('hex').padStart(64, '0')
+   */
   matchIdFromCode(roomCode: string): string {
     const hex = Array.from(new TextEncoder().encode(roomCode))
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
-    const padded = hex.padStart(64, '0');
-    return '0x' + padded;
+    return '0x' + hex.padStart(64, '0');
   }
 
+  /**
+   * Host creates a match on-chain by depositing AVAX.
+   * Returns the transaction hash on success.
+   */
   async createMatch(roomCode: string): Promise<string> {
     const contract = this.getContract();
     const matchId = this.matchIdFromCode(roomCode);
     const value = parseEther(STAKE_AVAX.toString());
 
-    console.log(`[EscrowManager] Creating match: ${roomCode} (matchId: ${matchId}), stake: ${STAKE_AVAX} AVAX`);
-    const tx = await contract.createMatch(matchId, { value });
-    const receipt = await tx.wait();
-    console.log(`[EscrowManager] Match created, tx: ${tx.hash}`);
-    return tx.hash;
+    console.log(`[EscrowManager] createMatch — room: ${roomCode}, matchId: ${matchId}, stake: ${STAKE_AVAX} AVAX`);
+
+    try {
+      const tx = await contract.createMatch(matchId, { value });
+      console.log(`[EscrowManager] createMatch tx sent: ${tx.hash}`);
+
+      const receipt = await tx.wait();
+      console.log(`[EscrowManager] createMatch confirmed — block: ${receipt.blockNumber}, tx: ${tx.hash}`);
+
+      return tx.hash;
+    } catch (err: any) {
+      throw this.handleContractError(err, 'createMatch');
+    }
   }
 
+  /**
+   * Joiner matches the host's deposit to join the match.
+   * Returns the transaction hash on success.
+   */
   async joinMatch(roomCode: string): Promise<string> {
     const contract = this.getContract();
     const matchId = this.matchIdFromCode(roomCode);
     const value = parseEther(STAKE_AVAX.toString());
 
-    console.log(`[EscrowManager] Joining match: ${roomCode} (matchId: ${matchId}), stake: ${STAKE_AVAX} AVAX`);
-    const tx = await contract.joinMatch(matchId, { value });
-    await tx.wait();
-    console.log(`[EscrowManager] Match joined, tx: ${tx.hash}`);
-    return tx.hash;
+    console.log(`[EscrowManager] joinMatch — room: ${roomCode}, matchId: ${matchId}, stake: ${STAKE_AVAX} AVAX`);
+
+    try {
+      const tx = await contract.joinMatch(matchId, { value });
+      console.log(`[EscrowManager] joinMatch tx sent: ${tx.hash}`);
+
+      const receipt = await tx.wait();
+      console.log(`[EscrowManager] joinMatch confirmed — block: ${receipt.blockNumber}, tx: ${tx.hash}`);
+
+      return tx.hash;
+    } catch (err: any) {
+      throw this.handleContractError(err, 'joinMatch');
+    }
+  }
+
+  /**
+   * Read match state from contract — useful for debugging.
+   * Returns null if match doesn't exist.
+   */
+  async getMatchInfo(roomCode: string): Promise<{
+    playerA: string;
+    playerB: string;
+    stake: string;
+    status: number;
+  } | null> {
+    try {
+      const contract = this.getContract();
+      const matchId = this.matchIdFromCode(roomCode);
+      const [playerA, playerB, stake, status] = await contract.matches(matchId);
+
+      if (playerA === '0x0000000000000000000000000000000000000000') {
+        return null; // match doesn't exist
+      }
+
+      return {
+        playerA,
+        playerB,
+        stake: formatEther(stake),
+        status: Number(status),
+      };
+    } catch (err) {
+      console.warn('[EscrowManager] getMatchInfo failed:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Parse contract errors into clean, UI-friendly messages.
+   * Logs full details to console for debugging.
+   */
+  private handleContractError(err: any, method: string): Error {
+    const code = err?.code ?? 'UNKNOWN';
+    const reason = err?.reason ?? '';
+    const shortMsg = err?.shortMessage ?? '';
+    const revertData = err?.data ?? '';
+
+    // Log full details for developer debugging
+    console.error(`[EscrowManager] ${method} FAILED`, {
+      code,
+      reason,
+      shortMessage: shortMsg,
+      revertData,
+      message: err?.message?.slice(0, 200),
+    });
+
+    // User rejected the wallet popup
+    if (code === 'ACTION_REJECTED' || code === 4001 || shortMsg.includes('rejected')) {
+      return new Error('Transaction rejected in wallet');
+    }
+
+    // Wrong network
+    if (code === 'NETWORK_ERROR' || shortMsg.includes('network')) {
+      return new Error('Wrong network — switch to Avalanche Fuji');
+    }
+
+    // Insufficient funds
+    if (shortMsg.includes('insufficient funds') || reason.includes('insufficient')) {
+      return new Error('Insufficient AVAX — get test tokens from faucet');
+    }
+
+    // Contract revert — try to extract readable reason
+    if (code === 'CALL_EXCEPTION' || reason) {
+      const revertReason = reason || shortMsg;
+      for (const [key, friendly] of Object.entries(REVERT_MESSAGES)) {
+        if (revertReason.includes(key)) {
+          return new Error(friendly);
+        }
+      }
+      return new Error(revertReason.length > 60 ? revertReason.slice(0, 60) + '...' : revertReason || 'Contract call failed');
+    }
+
+    // Fallback
+    const fallback = shortMsg || reason || err?.message || 'Unknown wallet error';
+    return new Error(fallback.length > 80 ? fallback.slice(0, 80) + '...' : fallback);
   }
 }
 
