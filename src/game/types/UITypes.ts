@@ -474,9 +474,10 @@ export interface CardRenderData {
   currentHP?: number;
   maxHP?: number;
   abilityText?: string;
-  isExhausted?: boolean;
+isExhausted?: boolean;
   isSelected?: boolean;
   isEnemy?: boolean;
+  canAct?: boolean;    // true = unit can still move/attack this turn (yellow glow indicator)
 }
 
 /** Data for a single board cell passed to BoardRenderer */

@@ -2,9 +2,13 @@
 // GameTypes.ts
 // Runtime game state types. These are NOT card definitions —
 // these are the live state objects that change during play.
+//
+// PATCH v0.3:
+//   - Added isJustPlaced to Unit (can't act on deploy turn)
+//   - Added combatTag to Unit (MELEE/RANGED for counter-attack)
 // ============================================================
 
-import type { MovementType, AtkPattern } from './CardTypes';
+import type { MovementType, AtkPattern, CombatTag } from './CardTypes';
 
 // ─────────────────────────────────────────────
 // PRIMITIVES
@@ -83,6 +87,7 @@ export interface Unit {
   // Turn flags — reset at START of each owner turn
   hasMoved: boolean;
   hasActed: boolean;
+  isJustPlaced: boolean;     // true on the turn deployed — can't move/attack (except exception cards)
 
   // Persistent state
   isActive: boolean;         // false during BUILD_DELAY
@@ -94,6 +99,15 @@ export interface Unit {
 
   // Castle-specific
   spawnCounter: number;      // Increments each turn; spawns at interval
+
+    // ── Status effects (all default false) ──────────────
+  isStunned: boolean;         // Cannot move or attack this turn
+  isRooted: boolean;          // Cannot move, CAN still attack
+  isSilenced: boolean;     
+
+   // ── Computed capability (set at creation by UnitFactory) ──
+  canAttackAfterMove: boolean; // Lancer charge, future: Berserker, Swift Strike
+  combatTag: CombatTag | null; // MELEE or RANGED — derived or overridden. null = no attack.
 }
 
 // ─────────────────────────────────────────────

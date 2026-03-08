@@ -1,13 +1,23 @@
 // ============================================================
 // Board.ts
-// 6×6 (or any cols×rows) grid state.
+// 7×7 (or any cols×rows) grid state.
 // Pure TypeScript — zero Phaser imports.
 // Stores Unit objects on a 2D grid.
 // All mutations go through Board methods.
+//
+// PATCH v0.3:
+//   - Default 7×7 (was 6×6)
+//   - Exported DEPLOY_ROWS = 3 constant
+//   - Deploy zone uses explicit DEPLOY_ROWS, not half-board
+//   - Middle row(s) act as neutral buffer zone
+//   - resetTurnFlags clears isJustPlaced
 // ============================================================
 
 import type { Unit, BoardCell, Position } from './types/GameTypes';
 import { Player } from './types/GameTypes';
+
+/** Number of rows each player can deploy into (from their back edge). */
+export const DEPLOY_ROWS = 3;
 
 export class Board {
   readonly cols: number;
@@ -15,7 +25,7 @@ export class Board {
   private cells: BoardCell[][];
   private unitIndex: Map<string, Unit> = new Map(); // instanceId → Unit
 
-  constructor(cols = 6, rows = 6) {
+  constructor(cols = 7, rows = 7) {
     this.cols = cols;
     this.rows = rows;
     this.cells = [];
@@ -52,10 +62,15 @@ export class Board {
     return col >= 0 && col < this.cols && row >= 0 && row < this.rows;
   }
 
-  /** P1 owns rows 0..(halfRows-1). P2 owns halfRows..(rows-1). */
+  /**
+   * P1 deploy zone: rows 0..(DEPLOY_ROWS-1).
+   * P2 deploy zone: rows (rows-DEPLOY_ROWS)..(rows-1).
+   * Middle rows are neutral — no player can deploy there.
+   */
   isOwnHalf(col: number, row: number, player: Player): boolean {
-    const half = Math.floor(this.rows / 2);
-    return player === Player.P1 ? row < half : row >= half;
+    return player === Player.P1
+      ? row < DEPLOY_ROWS
+      : row >= this.rows - DEPLOY_ROWS;
   }
 
   /** Returns all units belonging to a player. */
@@ -123,12 +138,14 @@ export class Board {
     return units;
   }
 
-  /** Get all free squares in a player's half. */
+  /**
+   * Get all free squares in a player's deploy zone.
+   * P1: rows 0..(DEPLOY_ROWS-1).  P2: rows (rows-DEPLOY_ROWS)..(rows-1).
+   */
   getFreeSquaresInHalf(player: Player): Position[] {
-    const half = Math.floor(this.rows / 2);
     const result: Position[] = [];
-    const startRow = player === Player.P1 ? 0 : half;
-    const endRow   = player === Player.P1 ? half : this.rows;
+    const startRow = player === Player.P1 ? 0 : this.rows - DEPLOY_ROWS;
+    const endRow   = player === Player.P1 ? DEPLOY_ROWS : this.rows;
     for (let r = startRow; r < endRow; r++) {
       for (let c = 0; c < this.cols; c++) {
         if (this.cells[r][c].unit === null) {
@@ -206,11 +223,15 @@ export class Board {
     Object.assign(unit, updates);
   }
 
-  /** Reset all units' turn flags (hasMoved, hasActed). Called at START of each turn. */
+  /**
+   * Reset all units' turn flags (hasMoved, hasActed, isJustPlaced).
+   * Called at START of each owner's turn.
+   */
   resetTurnFlags(player: Player): void {
     this.getUnitsOf(player).forEach(u => {
       u.hasMoved = false;
       u.hasActed = false;
+      u.isJustPlaced = false;  // Unit placed last turn can now act
       // Treason exhausted flag clears at end of opponent turn
     });
   }

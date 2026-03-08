@@ -3,6 +3,10 @@
 // All card-related enums and interfaces.
 // Zero runtime logic — pure type definitions only.
 // This is the contract every other game file builds against.
+//
+// PATCH v0.3:
+//   - Added CombatTag enum (MELEE / RANGED)
+//   - Added optional combatTag field on CardDefinition
 // ============================================================
 
 // ─────────────────────────────────────────────
@@ -54,6 +58,19 @@ export enum AtkPattern {
   NONE             = 'NONE',             // Cannot attack (Princess, Temple, Messenger, Scribe)
 }
 
+/**
+ * CombatTag — determines counter-attack eligibility.
+ * MELEE units that are attacked in melee range will counter-attack.
+ * RANGED units do not trigger or receive counter-attacks.
+ *
+ * Derived automatically from AtkPattern if not set explicitly on CardDefinition.
+ * Explicit override allows fine-grained control per card.
+ */
+export enum CombatTag {
+  MELEE  = 'MELEE',   // Adjacent attackers — subject to counter-attack
+  RANGED = 'RANGED',  // Ranged attackers — no counter-attack
+}
+
 // ─────────────────────────────────────────────
 // UNIT STATS (base values on CardDefinition)
 // ─────────────────────────────────────────────
@@ -93,6 +110,7 @@ export interface CardDefinition {
   copies: number;              // Max copies per deck: 1, 2, or 3
   stats?: UnitStats;           // Present on UNIT and STRUCTURE, absent on SPELL
   flags: CardFlag[];
+  combatTag?: CombatTag;       // Override derived combat tag. If omitted, derived from attackPattern.
   abilities: Array<CommonAbility | CustomAbility>;
   abilityText?: string;        // Human-readable description for UI rendering
 }

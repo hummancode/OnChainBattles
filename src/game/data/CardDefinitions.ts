@@ -91,7 +91,18 @@ export const CARD_DEFINITIONS: CardDefinition[] = [
     id: 'assassin', name: 'Assassin',
     flavorText: 'The shadow moves. Then it\'s over.',
     class: U, allegiance: STD, subtypes: [], cost: 3, copies: 2,
-    stats: { atk: 4, def: 1, movement: MovementType.JUMP_DIAGONAL_1, attackPattern: AtkPattern.ON_JUMP },
+    stats: { atk: 4, def: 1, movement: MovementType.JUMP_DIAGONAL_1, attackPattern: AtkPattern.ON_JUMP, customAttack : {
+        offsets: [{dx:1, dy:-1}, {dx:-1, dy:-1}, {dx:1, dy:1}, {dx:-1, dy:1}],  
+        range: 1,
+      },
+      customMove : {
+        offsets: [{dx:2, dy:0}, {dx:-2, dy:0}, {dx:0, dy:2}, {dx:0, dy:-2}],  
+        range: 1,
+      },
+      
+      
+    },
+    
     flags: [],
     abilities: [],
     abilityText: 'Jumps diagonally. Attacks landing square on jump. Ignores units along path.',

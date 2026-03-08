@@ -58,13 +58,19 @@ export default class MainMenuScene extends Phaser.Scene {
     this.cleanupPrevious();
 
     const { width, height } = this.scale;
-
 // Background — use loaded image if available, fallback to solid color
     if (this.textures.exists('bg_main_menu')) {
       this.add.image(width / 2, height / 2, 'bg_main_menu').setDisplaySize(width, height);
     } else {
       this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a2e);
     }
+
+    // ── Dark panel behind content for text readability ─────────
+    const panel = this.add.graphics();
+    panel.fillStyle(0x16213e, 0.88);
+    panel.fillRoundedRect(width / 2 - 260, BASE_Y - 40, 520, 500, 10);
+    panel.lineStyle(2, 0x4fc3f7, 0.4);
+    panel.strokeRoundedRect(width / 2 - 260, BASE_Y - 40, 520, 500, 10);
 
     // Fade in
     this.cameras.main.fadeIn(400, 0, 0, 0);
@@ -74,26 +80,26 @@ export default class MainMenuScene extends Phaser.Scene {
       fontSize: '44px',
       fontFamily: '"Courier New", monospace',
       fontStyle: 'bold',
-      color: '#ffffff',
+      color: '#FFFFFF',
     }).setOrigin(0.5);
 
     this.add.text(LAYOUT.tagline.x, LAYOUT.tagline.y, 'Chess-like On-Chain Card Game', {
       fontSize: '18px',
       fontFamily: '"Courier New", monospace',
-      color: '#888888',
+      color: '#AAAAAA',
     }).setOrigin(0.5);
 
     // ── Labels ───────────────────────────────────────────────
     this.add.text(LAYOUT.nameLabel.x, LAYOUT.nameLabel.y, 'Your Name', {
       fontSize: '16px',
       fontFamily: '"Courier New", monospace',
-      color: '#aaaaaa',
+      color: '#AAAAAA',
     }).setOrigin(0.5);
 
     this.add.text(LAYOUT.roomLabel.x, LAYOUT.roomLabel.y, 'Room Code  (leave blank to create new room)', {
       fontSize: '14px',
       fontFamily: '"Courier New", monospace',
-      color: '#777777',
+      color: '#AAAAAA',
     }).setOrigin(0.5);
 
     // ── HTML Inputs via DOMInputManager ──────────────────────

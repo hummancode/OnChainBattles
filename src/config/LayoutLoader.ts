@@ -2,6 +2,11 @@
 // LayoutLoader.ts
 // Fetches, validates, and caches Layout JSON files.
 // Provides typed access to layout data for all scenes.
+//
+// PATCH v0.3.1:
+//   - bottomBar defaults moved to right HUD area (no longer covers board)
+//   - PASS button zeroed out (END TURN handles both phases)
+//   - cardPlayZone zeroed out (not needed with right-side controls)
 // ============================================================
 
 import type {
@@ -9,7 +14,7 @@ import type {
   BattleLayoutJSON,
   MainMenuLayoutJSON,
   ResultLayoutJSON,
-} from '../types/UITypes';
+} from '../game/types/UITypes';
 
 // Default fallback values — used if JSON is missing a field.
 // This means you can ship partial JSON and the game still runs.
@@ -17,11 +22,11 @@ const DEFAULTS = {
   canvas: { width: 1280, height: 720 },
 
   grid: {
-    cols: 6,
-    rows: 6,
-    cellSize: 120,
-    originX: 280,
-    originY: 0,
+    cols: 7,
+    rows: 7,
+    cellSize: 102,
+    originX: 283,
+    originY: 3,
     coordsVisible: true,
     coordsFontSize: 11,
     gridLineWidth: 1,
@@ -43,11 +48,11 @@ const DEFAULTS = {
     thumbnail: {
       width: 100,
       height: 100,
-      margin: 10,
-      hpBarHeight: 4,
-      badgeFontSize: 12,
-      badgeWidth: 20,
-      badgeHeight: 16,
+      margin: 1,
+      hpBarHeight: 0,
+      badgeFontSize: 13,
+      badgeWidth: 24,
+      badgeHeight: 18,
     },
     detail: {
       width: 220,
@@ -63,11 +68,6 @@ class LayoutLoaderClass {
   private cache: Map<string, LayoutJSON> = new Map();
   private basePath = '/layouts';
 
-  /**
-   * Load a layout JSON by scene name.
-   * Returns cached version if already loaded.
-   * Merges with defaults so missing keys never crash the renderer.
-   */
   async load(sceneName: string): Promise<LayoutJSON> {
     if (this.cache.has(sceneName)) {
       return this.cache.get(sceneName)!;
@@ -94,12 +94,10 @@ class LayoutLoaderClass {
     return merged;
   }
 
-  /** Synchronous get — only works after load() has been called. */
   get(sceneName: string): LayoutJSON | null {
     return this.cache.get(sceneName) ?? null;
   }
 
-  /** Typed helpers for each scene. */
   getBattle(): BattleLayoutJSON | null {
     return this.cache.get('BattleScene') as BattleLayoutJSON ?? null;
   }
@@ -112,7 +110,6 @@ class LayoutLoaderClass {
     return this.cache.get('ResultScene') as ResultLayoutJSON ?? null;
   }
 
-  /** Clear cache — forces re-fetch on next load() call. */
   invalidate(sceneName?: string): void {
     if (sceneName) {
       this.cache.delete(sceneName);
@@ -121,25 +118,14 @@ class LayoutLoaderClass {
     }
   }
 
-  /**
-   * Compute the pixel center X of a board cell.
-   * Convenience so renderers don't repeat this math.
-   */
   cellCenterX(col: number, grid: { originX: number; cellSize: number }): number {
     return grid.originX + col * grid.cellSize + grid.cellSize / 2;
   }
 
-  /**
-   * Compute the pixel center Y of a board cell.
-   */
   cellCenterY(row: number, grid: { originY: number; cellSize: number }): number {
     return grid.originY + row * grid.cellSize + grid.cellSize / 2;
   }
 
-  /**
-   * Given a pixel position, return which cell it's in.
-   * Returns null if outside the grid.
-   */
   pixelToCell(
     px: number,
     py: number,
@@ -151,11 +137,6 @@ class LayoutLoaderClass {
     return { col, row };
   }
 
-  /**
-   * Returns asset image dimensions derived from layout config.
-   * Used by PreloadScene to know what size to expect (informational).
-   * All sizes are parametric — they derive from the JSON, not hardcoded.
-   */
   getAssetSizeRequirements(layout: BattleLayoutJSON): Record<string, { w: number; h: number }> {
     const g = layout.grid;
     const c = layout.cards;
@@ -178,7 +159,6 @@ class LayoutLoaderClass {
   // ─────────────────────────────────────────────
 
   private mergeDefaults(raw: any, sceneName: string): LayoutJSON {
-    // Deep merge: raw values win, defaults fill missing keys
     if (sceneName === 'BattleScene') {
       return {
         scene: 'BattleScene',
@@ -251,11 +231,11 @@ class LayoutLoaderClass {
   private defaultRightHUD() {
     return {
       x: 1000, y: 0, width: 280, height: 720,
-      opponentName: { x: 1140, y: 20 },
-      kingHPBar:    { x: 1030, y: 50, width: 220, height: 12 },
-      legCounter:   { x: 1140, y: 100 },
+      opponentName: { x: 1160, y: 20 },
+      kingHPBar:    { x: 1060, y: 50, width: 200, height: 12 },
+      legCounter:   { x: 1160, y: 100 },
       hand: {
-        x: 1140, y: 200,
+        x: 1160, y: 200,
         cardWidth: 70, cardHeight: 95,
         spacing: 10, maxVisible: 10,
         fanAngle: 0, selectedScale: 1.0,
@@ -263,13 +243,11 @@ class LayoutLoaderClass {
     };
   }
 
-  private defaultBottomBar() {
+private defaultBottomBar() {
     return {
-      x: 280, y: 600, width: 720, height: 120,
-      phaseLabel:   { x: 640, y: 620 },
-      endTurnBtn:   { x: 950, y: 660, width: 140, height: 44 },
-      passBtn:      { x: 790, y: 660, width: 120, height: 44 },
-      cardPlayZone: { x: 640, y: 655, width: 400, height: 80 },
+x: 997, y: 300, width: 70, height: 120,
+      phaseLabel:   { x: 1035, y: 310 },
+      endTurnBtn:   { x: 1035, y: 345, width: 76, height: 36 },
     };
   }
 

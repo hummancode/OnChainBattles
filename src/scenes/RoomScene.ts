@@ -65,13 +65,20 @@ export default class RoomScene extends Phaser.Scene {
     const { width, height } = this.scale;
     this.isCryptoMode = GameState.currentMode === GameMode.CryptoPlay;
 
-    // Background
-   // Background — use loaded image if available, fallback to solid color
+// Background — use loaded image if available, fallback to solid color
     if (this.textures.exists('bg_lobby')) {
       this.add.image(width / 2, height / 2, 'bg_lobby').setDisplaySize(width, height);
     } else {
       this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a2e);
     }
+
+    // ── Dark panel behind content for text readability ─────────
+    const panel = this.add.graphics();
+    panel.fillStyle(0x16213e, 0.88);
+    panel.fillRoundedRect(width / 2 - 380, 15, 760, 490, 10);
+    panel.lineStyle(2, 0x4fc3f7, 0.4);
+    panel.strokeRoundedRect(width / 2 - 380, 15, 760, 490, 10);
+
     this.cameras.main.fadeIn(400, 0, 0, 0);
 
     // ── Title ────────────────────────────────────────────────
@@ -79,7 +86,7 @@ export default class RoomScene extends Phaser.Scene {
       fontSize: '28px',
       fontFamily: '"Courier New", monospace',
       fontStyle: 'bold',
-      color: '#ffffff',
+      color: '#FFFFFF',
     }).setOrigin(0.5);
 
     // ── Mode badge ───────────────────────────────────────────
@@ -160,23 +167,23 @@ export default class RoomScene extends Phaser.Scene {
       color: '#00ff88',
     }).setOrigin(0.5);
 
-    this.opponentNameText = this.add.text(
+this.opponentNameText = this.add.text(
       LAYOUT.opponentName.x,
       LAYOUT.opponentName.y,
       'Waiting for opponent...',
       {
         fontSize: '18px',
         fontFamily: '"Courier New", monospace',
-        color: '#555555',
+        color: '#AAAAAA',
       },
     ).setOrigin(0.5);
 
     // ── VS icon ──────────────────────────────────────────────
-    this.add.text(LAYOUT.vs.x, LAYOUT.vs.y, 'VS', {
+this.add.text(LAYOUT.vs.x, LAYOUT.vs.y, 'VS', {
       fontSize: '48px',
       fontFamily: '"Courier New", monospace',
       fontStyle: 'bold',
-      color: '#253348',
+      color: '#4FC3F7',
     }).setOrigin(0.5);
 
     // ── Status ───────────────────────────────────────────────
@@ -187,11 +194,11 @@ export default class RoomScene extends Phaser.Scene {
       color: '#f5a623',
     }).setOrigin(0.5);
 
-    this.subStatusText = this.add.text(LAYOUT.subStatus.x, LAYOUT.subStatus.y,
+this.subStatusText = this.add.text(LAYOUT.subStatus.x, LAYOUT.subStatus.y,
       'Share your room code with a friend', {
       fontSize: '13px',
       fontFamily: '"Courier New", monospace',
-      color: '#777777',
+      color: '#AAAAAA',
     }).setOrigin(0.5);
 
     // ── Connect socket ───────────────────────────────────────

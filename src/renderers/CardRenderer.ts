@@ -9,12 +9,12 @@
 // Change card width/height in JSON → entire card rescales.
 // No hardcoded pixel values below.
 //
-// STEP 3 PATCHES:
-//   - Added static _missingKeyWarned set to suppress console spam
-//   - Added safeImage() helper — all texture lookups are now safe
-//   - renderFull() typeIcon: replaced unguarded add.image() with safeImage()
-//   - renderFull() allegiance guard: data?.allegiance ?? 'STANDARD'
-//   - renderDetail() allegiance guard: data?.allegiance ?? 'STANDARD'
+// PATCH v0.3.2:
+//   - renderThumbnail: badge groups wrapped in named containers
+//     ('atk_badge', 'def_badge') for in-place updates
+//   - NEW: updateThumbnailBadges() — updates ATK/DEF/canAct
+//     in-place without destroying the parent container.
+//     This eliminates tween race conditions entirely.
 // ============================================================
 
 import Phaser from 'phaser';
@@ -26,8 +26,6 @@ export class CardRenderer {
   private layout: BattleLayoutJSON;
   private theme: ThemeJSON;
 
-  // Tracks which texture keys have already logged a warning.
-  // Prevents console spam when many cards share the same missing texture.
   private static _missingKeyWarned = new Set<string>();
 
   constructor(scene: Phaser.Scene, layout: BattleLayoutJSON, theme: ThemeJSON) {
@@ -40,11 +38,6 @@ export class CardRenderer {
   // PUBLIC API
   // ─────────────────────────────────────────────
 
-  /**
-   * Create a card Container at position (x, y).
-   * The container origin is top-left for 'full' and 'thumbnail',
-   * center for 'detail'.
-   */
   render(data: CardRenderData, mode: CardRenderMode, x: number, y: number): Phaser.GameObjects.Container {
     switch (mode) {
       case 'full':      return this.renderFull(data, x, y);
@@ -53,15 +46,76 @@ export class CardRenderer {
     }
   }
 
-  /**
-   * Update an existing card container's visual state
-   * without recreating it. Used for exhausted/selected state changes.
-   */
   updateState(container: Phaser.GameObjects.Container, data: CardRenderData, mode: CardRenderMode): void {
     if (mode === 'thumbnail') {
       this.applyThumbnailState(container, data);
     } else {
       this.applyFullState(container, data);
+    }
+  }
+
+  /**
+   * Update ATK/DEF badges and canAct glow IN-PLACE on an existing thumbnail container.
+   * Does NOT destroy or recreate the container — only swaps named child elements.
+   * Safe to call while tweens are animating the container position.
+   */
+  updateThumbnailBadges(
+    container: Phaser.GameObjects.Container,
+    atk: number | undefined,
+    currentHP: number | undefined,
+    maxHP: number | undefined,
+    canAct: boolean,
+  ): void {
+    const L = this.layout.cards.thumbnail;
+    const BT = this.theme.board;
+    const w = L.width;
+    const h = L.height;
+
+    // ── Update ATK badge ──
+    const oldAtk = container.getByName('atk_badge');
+    if (oldAtk) container.remove(oldAtk, true);
+    if (atk !== undefined) {
+      const atkGroup = this.scene.add.container(0, 0);
+      atkGroup.setName('atk_badge');
+      const atkParts = this.makeBadge(
+        2, h - BT.unitBandHeight - 2,
+        String(atk),
+        this.theme.cards.atkBadgeColor,
+        L.badgeFontSize, false, L.badgeWidth, L.badgeHeight
+      );
+      atkGroup.add(atkParts);
+      container.add(atkGroup);
+    }
+
+    // ── Update DEF/HP badge ──
+    const oldDef = container.getByName('def_badge');
+    if (oldDef) container.remove(oldDef, true);
+    if (currentHP !== undefined) {
+      const hpPct = (maxHP && maxHP > 0) ? currentHP / maxHP : 1;
+      const defColor = hpPct > 0.5 ? this.theme.cards.defBadgeColor
+                     : hpPct > 0.25 ? BT.hpBarMid
+                     : BT.hpBarLow;
+      const defGroup = this.scene.add.container(0, 0);
+      defGroup.setName('def_badge');
+      const defParts = this.makeBadge(
+        w - 2, h - BT.unitBandHeight - 2,
+        String(currentHP),
+        defColor,
+        L.badgeFontSize, true, L.badgeWidth, L.badgeHeight
+      );
+      defGroup.add(defParts);
+      container.add(defGroup);
+    }
+
+    // ── Update canAct glow ──
+    const oldGlow = container.getByName('can_act_glow');
+    if (oldGlow) container.remove(oldGlow, true);
+    if (canAct) {
+      const glow = this.scene.add.graphics();
+      glow.lineStyle(3, 0xF5A623, 0.9);
+      glow.strokeRect(-1, -1, w + 2, h + 2);
+      glow.setName('can_act_glow');
+      container.add(glow);
     }
   }
 
@@ -71,7 +125,6 @@ export class CardRenderer {
 
   private renderFull(data: CardRenderData, x: number, y: number): Phaser.GameObjects.Container {
     const L = this.layout.cards.full;
-    // PATCH: guard allegiance before passing to ThemeLoader
     const T = ThemeLoader.cardTypeTheme(this.theme, data?.allegiance ?? 'STANDARD');
     const container = this.scene.add.container(x, y);
 
@@ -79,23 +132,19 @@ export class CardRenderer {
     const h = L.height;
     const r = L.cornerRadius;
 
-    // — Background body —
     const body = this.scene.add.graphics();
     body.fillStyle(ThemeLoader.hexToNum(T.bodyColor), 1);
     body.fillRoundedRect(0, 0, w, h, r);
 
-    // — Top color band —
-    const bandH = h * 0.15; // proportional: ~30px at 200h
+    const bandH = h * 0.15;
     const band = this.scene.add.graphics();
     band.fillStyle(ThemeLoader.hexToNum(T.bandColor), 1);
     band.fillRoundedRect(0, 0, w, bandH, { tl: r, tr: r, bl: 0, br: 0 });
 
-    // — Border —
     const border = this.scene.add.graphics();
     border.lineStyle(T.borderWidth, ThemeLoader.hexToNum(T.borderColor), 1);
     border.strokeRoundedRect(0, 0, w, h, r);
 
-    // — LEG cost pip (top-left) —
     const pipR = L.legPipSize / 2;
     const pip = this.scene.add.graphics();
     pip.fillStyle(ThemeLoader.hexToNum(this.theme.cards.STANDARD.legPipColor === T.legPipColor
@@ -109,24 +158,14 @@ export class CardRenderer {
       color: '#FFFFFF',
     }).setOrigin(0.5, 0.5);
 
-    // — Type icon (top-right) — PATCH: safeImage() replaces unguarded add.image()
     const iconKey = `icon_type_${(data?.allegiance ?? 'standard').toLowerCase()}`;
     this.safeImage(
-      container,
-      iconKey,
-      w - L.typeIconSize / 2 - 4,  // x (center-origin)
-      L.typeIconSize / 2 + 4,       // y (center-origin)
-      L.typeIconSize,
-      L.typeIconSize,
-      0.5, 0.5,                     // center origin
-      0x223366, 0.5,                // fallback: dark blue rect
+      container, iconKey,
+      w - L.typeIconSize / 2 - 4, L.typeIconSize / 2 + 4,
+      L.typeIconSize, L.typeIconSize,
+      0.5, 0.5, 0x223366, 0.5,
     );
-    // Note: safeImage() adds directly to container, so typeIcon is no longer
-    // a separate variable. It's removed from the children.push() call below.
 
-    // — Art area —
-  // — Art area —
-// — Art area —
     const artY = bandH;
     const artH = L.artAreaHeight;
     const artKey = data.artKey ?? `art_${data.id}`;
@@ -137,19 +176,16 @@ export class CardRenderer {
         .setOrigin(0, 0)
         .setDisplaySize(w, artH);
     } else {
-      // Placeholder if art not loaded — grey-blue rect with card id label
       const artPh = this.scene.add.graphics();
       artPh.fillStyle(0x333355, 1);
       artPh.fillRect(0, artY, w, artH);
       artObj = artPh;
-      // Small label so developer can identify which art is missing
       if (!CardRenderer._missingKeyWarned.has(artKey)) {
         CardRenderer._missingKeyWarned.add(artKey);
         console.warn(`[CardRenderer] Art texture missing, using fallback rect: "${artKey}"`);
       }
     }
 
-    // — Name bar —
     const nameY = artY + artH;
     const nameBar = this.scene.add.graphics();
     const { color: nbColor, alpha: nbAlpha } = ThemeLoader.hexToColorAlpha(this.theme.cards.nameBarBg);
@@ -162,36 +198,25 @@ export class CardRenderer {
       color: this.theme.fonts.cardName.color ?? '#FFFFFF',
     }).setOrigin(0.5, 0.5).setWordWrapWidth(w - 8);
 
-    // — Stat row (ATK | DEF) —
     const statY = nameY + L.nameBarHeight;
     const statBg = this.scene.add.graphics();
     statBg.fillStyle(0x000000, 0.4);
     statBg.fillRect(0, statY, w, L.statRowHeight);
 
-    // typeIcon is now added directly to container by safeImage() above,
-    // so it's excluded from this children array.
     const children: Phaser.GameObjects.GameObject[] = [body, band, border, artObj, nameBar, nameText, statBg];
 
     if (data.atk !== undefined && data.def !== undefined) {
-      // ATK badge
       const atkBadge = this.makeBadge(
         4, statY + L.statRowHeight / 2,
-        `ATK ${data.atk}`,
-        this.theme.cards.atkBadgeColor,
-        L.statRowHeight - 4
+        `ATK ${data.atk}`, this.theme.cards.atkBadgeColor, L.statRowHeight - 4
       );
-      // DEF badge
       const defBadge = this.makeBadge(
         w - 4, statY + L.statRowHeight / 2,
-        `DEF ${data.def}`,
-        this.theme.cards.defBadgeColor,
-        L.statRowHeight - 4,
-        true // right-aligned
+        `DEF ${data.def}`, this.theme.cards.defBadgeColor, L.statRowHeight - 4, true
       );
       children.push(...atkBadge, ...defBadge);
     }
 
-    // — Ability text (remaining height) —
     const abilityY = statY + L.statRowHeight + 4;
     if (data.abilityText) {
       const abilityText = this.scene.add.text(4, abilityY, data.abilityText, {
@@ -203,18 +228,14 @@ export class CardRenderer {
       children.push(abilityText);
     }
 
-    // — Bottom type label —
     const typeLabel = this.scene.add.text(w / 2, h - 8, (data?.allegiance ?? 'STANDARD').toUpperCase(), {
       fontFamily: this.theme.fonts.small.family,
       fontSize: `${this.theme.fonts.small.size}px`,
       color: this.theme.colors.TEXT_SECONDARY,
     }).setOrigin(0.5, 1);
 
-    // typeIcon excluded here — already added to container by safeImage()
     children.push(pip, pipText, typeLabel);
     container.add(children);
-
-    // — Apply state overlays —
     this.applyFullState(container, data);
 
     return container;
@@ -222,6 +243,8 @@ export class CardRenderer {
 
   // ─────────────────────────────────────────────
   // THUMBNAIL (on-board unit)
+  // Named children: 'atk_badge', 'def_badge', 'can_act_glow'
+  // These can be swapped in-place by updateThumbnailBadges()
   // ─────────────────────────────────────────────
 
   private renderThumbnail(data: CardRenderData, x: number, y: number): Phaser.GameObjects.Container {
@@ -231,10 +254,8 @@ export class CardRenderer {
 
     const w = L.width;
     const h = L.height;
-// — Art: prefer dedicated thumb (200×200, closer to display size = sharper)
-    // Falls back to full art, then grey rectangle.
-    // Use data.artKey (set correctly by toCardRenderData as "art_<cardId>")
-    // and derive thumb key from it, since data.id is instanceId not cardId.
+
+    // — Art —
     const baseArtKey = data.artKey ?? `art_${data.id}`;
     const thumbKey = baseArtKey.replace(/^art_/, 'thumb_');
     const textureKey = this.scene.textures.exists(thumbKey) ? thumbKey
@@ -264,68 +285,70 @@ export class CardRenderer {
     band.fillRect(0, h - BT.unitBandHeight, w, BT.unitBandHeight);
     container.add(band);
 
-    // — HP bar (inside band) —
-    if (data.currentHP !== undefined && data.maxHP !== undefined) {
-      const hpPct = Math.max(0, data.currentHP / data.maxHP);
-      const hpColor = hpPct > 0.5 ? BT.hpBarFull : hpPct > 0.25 ? BT.hpBarMid : BT.hpBarLow;
-
-      const hpBg = this.scene.add.graphics();
-      hpBg.fillStyle(ThemeLoader.hexToNum(BT.hpBarBackground), 1);
-      hpBg.fillRect(0, h - L.hpBarHeight, w, L.hpBarHeight);
-
-      const hpFill = this.scene.add.graphics();
-      hpFill.fillStyle(ThemeLoader.hexToNum(hpColor), 1);
-      hpFill.fillRect(0, h - L.hpBarHeight, w * hpPct, L.hpBarHeight);
-
-      container.add([hpBg, hpFill]);
-    }
-
-    // — ATK badge (bottom-left) —
+    // — ATK badge (named container for in-place updates) —
     if (data.atk !== undefined) {
-      const atkBadge = this.makeBadge(
+      const atkGroup = this.scene.add.container(0, 0);
+      atkGroup.setName('atk_badge');
+      const atkParts = this.makeBadge(
         2, h - BT.unitBandHeight - 2,
-        String(data.atk),
-        this.theme.cards.atkBadgeColor,
-        L.badgeFontSize,
-        false,
-        L.badgeWidth,
-        L.badgeHeight
+        String(data.atk), this.theme.cards.atkBadgeColor,
+        L.badgeFontSize, false, L.badgeWidth, L.badgeHeight
       );
-      container.add(atkBadge);
+      atkGroup.add(atkParts);
+      container.add(atkGroup);
     }
 
-    // — DEF badge (bottom-right) —
-    if (data.def !== undefined) {
-      const defBadge = this.makeBadge(
+    // — DEF/HP badge (named container for in-place updates) —
+    if (data.currentHP !== undefined) {
+      const hpPct = (data.maxHP && data.maxHP > 0) ? data.currentHP / data.maxHP : 1;
+      const defColor = hpPct > 0.5 ? this.theme.cards.defBadgeColor
+                     : hpPct > 0.25 ? BT.hpBarMid
+                     : BT.hpBarLow;
+      const defGroup = this.scene.add.container(0, 0);
+      defGroup.setName('def_badge');
+      const defParts = this.makeBadge(
         w - 2, h - BT.unitBandHeight - 2,
-        String(data.def),
-        this.theme.cards.defBadgeColor,
-        L.badgeFontSize,
-        true,
-        L.badgeWidth,
-        L.badgeHeight
+        String(data.currentHP), defColor,
+        L.badgeFontSize, true, L.badgeWidth, L.badgeHeight
       );
-      container.add(defBadge);
+      defGroup.add(defParts);
+      container.add(defGroup);
+    } else if (data.def !== undefined) {
+      const defGroup = this.scene.add.container(0, 0);
+      defGroup.setName('def_badge');
+      const defParts = this.makeBadge(
+        w - 2, h - BT.unitBandHeight - 2,
+        String(data.def), this.theme.cards.defBadgeColor,
+        L.badgeFontSize, true, L.badgeWidth, L.badgeHeight
+      );
+      defGroup.add(defParts);
+      container.add(defGroup);
+    }
+
+    // — "Can Act" gold glow (named for in-place toggle) —
+    if (data.canAct) {
+      const glow = this.scene.add.graphics();
+      glow.lineStyle(3, 0xF5A623, 0.9);
+      glow.strokeRect(-1, -1, w + 2, h + 2);
+      glow.setName('can_act_glow');
+      container.add(glow);
     }
 
     this.applyThumbnailState(container, data);
-
     return container;
   }
 
   // ─────────────────────────────────────────────
-  // DETAIL OVERLAY (right-click / long-press)
+  // DETAIL OVERLAY
   // ─────────────────────────────────────────────
 
   private renderDetail(data: CardRenderData, x: number, y: number): Phaser.GameObjects.Container {
     const L = this.layout.cards.detail;
-    // PATCH: guard allegiance
     const T = ThemeLoader.cardTypeTheme(this.theme, data?.allegiance ?? 'STANDARD');
     const container = this.scene.add.container(x - L.width / 2, y - L.height / 2);
 
     const w = L.width;
     const r = 8;
-
     const scaleFactor = L.width / this.layout.cards.full.width;
 
     const detailLayout: BattleLayoutJSON = {
@@ -346,12 +369,10 @@ export class CardRenderer {
       },
     };
 
-    // Build a sub-renderer with scaled layout
     const subRenderer = new CardRenderer(this.scene, detailLayout, this.theme);
     const cardBody = subRenderer.renderFull(data, 0, 0);
     container.add(cardBody);
 
-    // — Movement/Attack pattern diagram —
     const diagY = L.height + 10;
     const diagSize = L.patternDiagramSize;
     if (data.id) {
@@ -369,14 +390,12 @@ export class CardRenderer {
       container.add([diagBg, diagLabel]);
     }
 
-    // Suppress unused variable warning — T is kept for potential future use
     void T;
-
     return container;
   }
 
   // ─────────────────────────────────────────────
-  // CARD BACK (face-down / opponent hand)
+  // CARD BACK
   // ─────────────────────────────────────────────
 
   renderBack(x: number, y: number, width: number, height: number): Phaser.GameObjects.Container {
@@ -397,7 +416,6 @@ export class CardRenderer {
         .setDisplaySize(width - 4, height - 4);
       container.add([bg, border, back]);
     } else {
-      // Fallback pattern — concentric rectangles
       const pattern = this.scene.add.graphics();
       pattern.lineStyle(1, 0x2C4A8A, 0.3);
       for (let i = 4; i < Math.min(width, height) / 2; i += 8) {
@@ -408,7 +426,6 @@ export class CardRenderer {
         fontSize: `${Math.round(width * 0.2)}px`,
         color: '#4FC3F799',
       }).setOrigin(0.5, 0.5);
-
       container.add([bg, border, pattern, logoText]);
     }
 
@@ -420,7 +437,6 @@ export class CardRenderer {
   // ─────────────────────────────────────────────
 
   private applyFullState(container: Phaser.GameObjects.Container, data: CardRenderData): void {
-    // Remove any existing state overlays
     const existing = container.getByName('state_overlay');
     if (existing) container.remove(existing, true);
 
@@ -429,7 +445,6 @@ export class CardRenderer {
     overlay.setName('state_overlay');
 
     if (data.isExhausted) {
-      // Darken card
       overlay.fillStyle(0x000000, 1 - this.theme.cards.exhaustedAlpha);
       overlay.fillRoundedRect(0, 0, L.width, L.height, L.cornerRadius);
     }
@@ -437,8 +452,7 @@ export class CardRenderer {
     if (data.isSelected) {
       overlay.lineStyle(
         this.theme.cards.selectedGlowSize,
-        ThemeLoader.hexToNum(this.theme.cards.selectedGlowColor),
-        0.8
+        ThemeLoader.hexToNum(this.theme.cards.selectedGlowColor), 0.8
       );
       overlay.strokeRoundedRect(
         -this.theme.cards.selectedGlowSize / 2,
@@ -463,7 +477,6 @@ export class CardRenderer {
     if (data.isExhausted) {
       overlay.fillStyle(0x000000, 1 - this.theme.cards.exhaustedAlpha);
       overlay.fillRect(0, 0, L.width, L.height);
-      // Clock icon — already guarded with textures.exists, unchanged
       if (this.scene.textures.exists('icon_clock')) {
         const clock = this.scene.add.image(L.width / 2, L.height / 2, 'icon_clock')
           .setDisplaySize(20, 20)
@@ -476,8 +489,7 @@ export class CardRenderer {
     if (data.isSelected) {
       overlay.lineStyle(
         this.theme.cards.selectedGlowSize,
-        ThemeLoader.hexToNum(this.theme.cards.selectedGlowColor),
-        0.9
+        ThemeLoader.hexToNum(this.theme.cards.selectedGlowColor), 0.9
       );
       overlay.strokeRect(0, 0, L.width, L.height);
     }
@@ -489,36 +501,11 @@ export class CardRenderer {
   // HELPERS
   // ─────────────────────────────────────────────
 
-  /**
-   * Safely add an image to a container.
-   * If the texture key is not loaded in Phaser's cache, adds a
-   * semi-transparent colored rectangle as a stand-in (silent fallback).
-   *
-   * Logs a one-time console warning per missing key so developers
-   * can see what art is absent without being spammed per-frame.
-   *
-   * @param container     - Target Phaser container
-   * @param key           - Phaser texture key (e.g. 'art_king', 'icon_atk')
-   * @param x             - X position
-   * @param y             - Y position
-   * @param w             - Display width
-   * @param h             - Display height
-   * @param originX       - Phaser origin X (0 = left, 0.5 = center)
-   * @param originY       - Phaser origin Y (0 = top,  0.5 = center)
-   * @param fallbackColor - Hex number for fallback rect (default: 0x333355)
-   * @param fallbackAlpha - Alpha for fallback rect (default: 0.6)
-   */
   private safeImage(
     container: Phaser.GameObjects.Container,
-    key: string,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    originX = 0,
-    originY = 0,
-    fallbackColor = 0x333355,
-    fallbackAlpha = 0.6,
+    key: string, x: number, y: number, w: number, h: number,
+    originX = 0, originY = 0,
+    fallbackColor = 0x333355, fallbackAlpha = 0.6,
   ): void {
     if (this.scene.textures.exists(key)) {
       const img = this.scene.add.image(x, y, key)
@@ -526,7 +513,6 @@ export class CardRenderer {
         .setDisplaySize(w, h);
       container.add(img);
     } else {
-      // Convert origin-relative position to top-left for graphics rect
       const rx = originX === 0.5 ? x - w / 2 : x;
       const ry = originY === 0.5 ? y - h / 2 : y;
       const rect = this.scene.add.graphics();
@@ -541,19 +527,9 @@ export class CardRenderer {
     }
   }
 
-  /**
-   * Make an ATK/DEF badge pill.
-   * Returns array of GameObjects to add to a container.
-   */
   private makeBadge(
-    x: number,
-    y: number,
-    label: string,
-    fillHex: string,
-    fontSize: number,
-    rightAligned = false,
-    w = 24,
-    h = 16
+    x: number, y: number, label: string, fillHex: string,
+    fontSize: number, rightAligned = false, w = 24, h = 16
   ): Phaser.GameObjects.GameObject[] {
     const bgX = rightAligned ? x - w : x;
 
