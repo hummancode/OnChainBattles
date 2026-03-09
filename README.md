@@ -8,7 +8,7 @@
 
 ## What Is This?
 
-OnChainBattles is a real-time PvP card battler where two players deploy historical units onto a 6×6 board, maneuver for position, and fight to destroy the opponent's King — with real AVAX on the line.
+OnChainBattles is a real-time PvP card battler where two players deploy historical units onto a 7x7 board, maneuver for position, and fight to destroy the opponent's King — with real AVAX on the line.
 
 Think **chess meets Hearthstone, on-chain.** Card draw adds controlled randomness, but positioning, timing, and resource management are pure tactics. Losing feels like a mistake, not bad luck.
 
