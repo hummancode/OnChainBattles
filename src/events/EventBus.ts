@@ -5,12 +5,9 @@
 // No Phaser dependency. No game logic.
 // ============================================================
 
-export type EventHandler<T = any> = (payload: T) => void;
+import type { GameEventMap, GameEventType } from '../game/types/GameEventMap';
 
-interface Subscription {
-  type: string;
-  handler: EventHandler;
-}
+export type EventHandler<T = any> = (payload: T) => void;
 
 class EventBusClass {
   private listeners: Map<string, Set<EventHandler>> = new Map();
@@ -24,23 +21,27 @@ class EventBusClass {
   }
 
   /**
-   * Subscribe to an event type.
+   * Subscribe to a typed event.
    * Returns an unsubscribe function for easy cleanup.
    */
-  on<T = any>(type: string, handler: EventHandler<T>): () => void {
+  on<K extends GameEventType>(type: K, handler: (payload: GameEventMap[K]) => void): () => void;
+  on(type: string, handler: EventHandler): () => void;
+  on(type: string, handler: EventHandler): () => void {
     if (!this.listeners.has(type)) {
       this.listeners.set(type, new Set());
     }
-    this.listeners.get(type)!.add(handler as EventHandler);
+    this.listeners.get(type)!.add(handler);
 
-    return () => this.off(type, handler as EventHandler);
+    return () => this.off(type, handler);
   }
 
   /**
    * Subscribe to an event type, fire once, then auto-unsubscribe.
    */
-  once<T = any>(type: string, handler: EventHandler<T>): void {
-    const wrapper: EventHandler = (payload: T) => {
+  once<K extends GameEventType>(type: K, handler: (payload: GameEventMap[K]) => void): void;
+  once(type: string, handler: EventHandler): void;
+  once(type: string, handler: EventHandler): void {
+    const wrapper: EventHandler = (payload: any) => {
       handler(payload);
       this.off(type, wrapper);
     };
@@ -55,11 +56,13 @@ class EventBusClass {
   }
 
   /**
-   * Emit an event. All subscribers for this type receive the payload.
+   * Emit a typed event. All subscribers for this type receive the payload.
    * Errors in handlers are caught individually — one bad handler
    * won't prevent others from receiving the event.
    */
-  emit<T = any>(type: string, payload?: T): void {
+  emit<K extends GameEventType>(type: K, payload: GameEventMap[K]): void;
+  emit(type: string, payload?: any): void;
+  emit(type: string, payload?: any): void {
     const handlers = this.listeners.get(type);
     if (!handlers) return;
 
@@ -144,7 +147,7 @@ export const EV = {
   SELECTION_CHANGED:   'SELECTION_CHANGED',
   HIGHLIGHTS_CHANGED:  'HIGHLIGHTS_CHANGED',
   INPUT_BOARD_CLICK:   'INPUT_BOARD_CLICK',   // BoardRenderer → SelectionManager
-INPUT_HAND_CLICK:    'INPUT_HAND_CLICK',    // HandRenderer  → SelectionManager
+  INPUT_HAND_CLICK:    'INPUT_HAND_CLICK',    // HandRenderer  → SelectionManager
   CARD_HOVERED:        'CARD_HOVERED',
   CARD_HOVER_END:      'CARD_HOVER_END',
   DETAIL_SHOW:         'DETAIL_SHOW',

@@ -15,11 +15,11 @@
 // ============================================================
 
 import type { GameContext } from '../GameContext';
-import type { Unit, Position } from '../types/GameTypes';
+import type { Unit } from '../types/GameTypes';
 import { Allegiance, CardClass, CardFlag } from '../types/CardTypes';
 import { getCard } from '../data/CardDefinitions';
 import { getValidDeploySquares } from '../MovementRules';
-import { resolveOnDeploy } from '../AbilityResolver';
+import { resolveOnDeploy } from '../abilities/AbilityDispatcher';
 import { EngineStatus } from '../types/GameTypes';
 
 /**

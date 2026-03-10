@@ -13,12 +13,11 @@
 // ============================================================
 
 import type { Unit } from './types/GameTypes';
-import { Player } from './types/GameTypes';
 import type { Board } from './Board';
 import { getCard } from './data/CardDefinitions';
-import { CombatTag, AtkPattern } from './types/CardTypes';
+import { CombatTag } from './types/CardTypes';
 import {
-  EvUnitAttacked, EvUnitDied, EvUnitHealed, EvUnitTransformed,
+  EvUnitAttacked, EvUnitDied, EvUnitTransformed,
   GameEvent
 } from './types/EventTypes';
 
@@ -34,7 +33,7 @@ import {
 export function resolveAttack(
   attacker: Unit,
   defender: Unit,
-  board: Board
+  _board: Board
 ): GameEvent[] {
   const events: GameEvent[] = [];
 

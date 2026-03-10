@@ -31,7 +31,7 @@ import { DeckLoader } from '../config/DeckLoader';
 import { getCard } from './data/CardDefinitions';
 
 import { Player, TurnPhase, EngineStatus } from './types/GameTypes';
-import type { Unit, Position, GameStateSnapshot } from './types/GameTypes';
+import type { Position, GameStateSnapshot } from './types/GameTypes';
 import type { GameEvent } from './types/EventTypes';
 import type { PendingInteraction } from './types/AbilityTypes';
 import { Allegiance } from './types/CardTypes';

@@ -1,0 +1,20 @@
+import './handlers/onDeployDraw';
+import './handlers/onDeployScout';
+import './handlers/onDeployHeal';
+import './handlers/onDeployRevive';
+import './handlers/spellDamageStructure';
+import './handlers/spellFreezeLeg';
+import './handlers/spellDrainLeg';
+import './handlers/spellForwardDeploy';
+import './handlers/spellTransformAll';
+import './handlers/spellEarthquake';
+import './handlers/spellDrawStructures';
+import './handlers/spellWarHorn';
+import './handlers/spellCoup';
+import './handlers/spellTreason';
+import './handlers/spellRevolt';
+import './handlers/spellMotherland';
+import './handlers/customMystic';
+import './handlers/customMilitia';
+import './handlers/passiveNoOp';
+// ↓ ADD NEW HANDLERS HERE ↓

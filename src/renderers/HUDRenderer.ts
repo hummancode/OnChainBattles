@@ -393,6 +393,7 @@ export class HUDRenderer {
 
       EventBus.on(EV.UNIT_ATTACKED, ({ targetPlayer, isKingHit, newHP, maxHP }) => {
         if (!isKingHit) return;
+        if (newHP == null || maxHP == null) return;
         if (targetPlayer === this.localPlayerIndex) {
           this.updatePlayerHP(newHP, maxHP);
         } else {

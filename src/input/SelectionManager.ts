@@ -20,7 +20,6 @@
 import type { BattleLayoutJSON } from '../game/types/UITypes';
 import type { SelectionState } from '../game/types/UITypes';
 import { EventBus, EV } from '../events/EventBus';
-import { LayoutLoader } from '../config/LayoutLoader';
 
 // Minimal interface for what SelectionManager needs from GameEngine.
 // This avoids importing the full GameEngine in the UI layer.
@@ -339,7 +338,7 @@ private publishHighlights(): void {
     }),
 
     EventBus.on(EV.INPUT_HAND_CLICK, ({ index }) => {
-      this.onHandCardClicked(index);
+      if (index !== null) this.onHandCardClicked(index);
     }),
 
       // When engine enters AWAITING_INPUT, set mode

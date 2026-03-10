@@ -239,7 +239,7 @@ onComplete: () => {
   }
 
   animateAttack(
-    from: { col: number; row: number },
+    _from: { col: number; row: number },
     target: { col: number; row: number },
     onComplete?: () => void
   ): void {
@@ -475,7 +475,9 @@ onComplete: () => {
         this.animateUnitMove(from, to);
       }),
 
-      EventBus.on(EV.UNIT_ATTACKED, ({ from, target, damage }) => {
+      EventBus.on(EV.UNIT_ATTACKED, ({ attackerCol, attackerRow, targetCol, targetRow, damage }) => {
+        const from = { col: attackerCol, row: attackerRow };
+        const target = { col: targetCol, row: targetRow };
         this.animateAttack(from, target, () => {
           if (damage) this.showDamageNumber(target.col, target.row, damage);
         });

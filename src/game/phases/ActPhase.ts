@@ -24,14 +24,14 @@
 
 import type { GameContext } from '../GameContext';
 import { opponent } from '../GameContext';
-import type { Unit, Position } from '../types/GameTypes';
+import type { Unit } from '../types/GameTypes';
 import { Player, EngineStatus } from '../types/GameTypes';
 import { AtkPattern } from '../types/CardTypes';
 import { getCard } from '../data/CardDefinitions';
 import { canUnitMove, canUnitAttack } from '../UnitQuery';
-import { getValidMoves, getValidAttacks, isMoveValid, isAttackValid, isLancerForwardMove } from '../MovementRules';
-import { resolveAttack, resolveAttackWithCounter } from '../CombatResolver';
-import { resolveOnDeath, resolveOnKill } from '../AbilityResolver';
+import { isMoveValid, isAttackValid, isLancerForwardMove } from '../MovementRules';
+import { resolveAttackWithCounter } from '../CombatResolver';
+import { resolveOnDeath, resolveOnKill } from '../abilities/AbilityDispatcher';
 
 // ─────────────────────────────────────────────
 // MOVE

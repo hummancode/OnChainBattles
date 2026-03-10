@@ -20,7 +20,6 @@ import { HUDRenderer } from '../renderers/HUDRenderer';
 import { OverlayRenderer } from '../renderers/OverlayRenderer';
 import { SelectionManager } from '../input/SelectionManager';
 import { EventBus, EV } from '../events/EventBus';
-import type { BattleLayoutJSON, ThemeJSON } from '../game/types/UITypes';
 import GameState from '../GameState';
 import { getCard } from '../game/data/CardDefinitions';
 import type { CardRenderData } from '../game/types/UITypes';

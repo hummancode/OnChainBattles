@@ -1,3 +1,4 @@
+import './game/abilities/registerAll';
 import Phaser from 'phaser';
 import PreLoadScene    from './scenes/PreloadScene';
 import MainMenuScene   from './scenes/MainMenuScene';

@@ -45,7 +45,7 @@ Each scene lives in `src/scenes/` and has a corresponding renderer in `src/rende
 
 - **GameEngine** - Thin orchestrator owning Board, PlayerState, GameModifiers, AuraSystem
 - Turn phases execute sequentially: Draw → LEG → Play → Act → End (each in `src/game/phases/`)
-- **CombatResolver** and **AbilityResolver** handle damage and special abilities
+- **CombatResolver** handles damage; abilities use Strategy Pattern via `src/game/abilities/` (registry + per-ability handler files)
 - **UnitFactory** creates runtime unit instances from card definitions in `src/data/`
 
 ### Rendering layer (`src/renderers/`)
@@ -82,3 +82,38 @@ Socket.io relays all game actions between players. The server generates a shared
 - Game logic and rendering are strictly separated (engine vs renderers)
 - Global state lives in `src/state/GlobalGameState.ts` (persistent across scenes) and `src/state/RuntimeGameState.ts` (per-match)
 - Phaser 4 RC6 is used (not Phaser 3) - API differences exist from stable Phaser 3 docs
+- EventBus is typed via `GameEventMap` (`src/game/types/GameEventMap.ts`) — use `EV.*` constants for compile-time payload checking
+
+## Plan Notes (OCB_Architecture_ActionPlan_FINAL_v5.md)
+
+Issues and corrections discovered while executing the refactoring plan:
+
+- **PatternResolver.ts is NOT dead code** — Plan says delete it (P2.7, Step 1.8), but it actively exports `resolveCustomPattern()` and offset constants (`OFFSETS_OMNI`, `OFFSETS_HV`, `OFFSETS_DIAGONAL`, `OFFSETS_FORWARD_ONLY`) used by MovementRules. Do NOT delete. Could be moved/renamed in Phase 6 instead.
+- **Line number references are wrong** — The handler extraction table (Step 1.4) references "codebase.md" line numbers (5176-5619), not actual AbilityResolver.ts lines. The real file was ~603 lines. Use the actual source, not the table line numbers.
+- **PendingInteraction missing `count` field** — The `PendingInteraction` interface in `AbilityTypes.ts` has no `count` property, but `warHornHandler` sets `count: 1`. This caused TS2353 at line 487. Phase 3 (PendingCommand) should add `count` to the DISCARD variant.
+- **EventBus payloads differ from EventTypes.ts** — `wireEngineToEventBus` in BattleScene enriches/transforms engine events before emitting to the bus. The GameEventMap must reflect these UI-adapted payloads, NOT the raw `Ev*` interfaces from EventTypes.ts. Key differences:
+  - `UNIT_PLACED` → `{ data: CardRenderData, col, row }` (not `EvUnitPlaced`)
+  - `UNIT_DIED` → `{ col, row, instanceId }` (subset of `EvUnitDied`)
+  - `CARD_DRAWN` → `{ card: CardRenderData, handIndex, deckRemaining }` (not `EvCardDrawn`)
+  - `CARD_PLAYED` / `CARD_DISCARDED` → adds `isLocal: boolean` field
+  - `UNIT_TRANSFORMED` → emitted as a UNIT_DIED + UNIT_PLACED pair, never as its own event
+- **Pre-existing TS errors** — 16-17 unused variable warnings (`noUnusedLocals`/`noUnusedParameters`) exist as baseline. These are class members and locals in HUDRenderer, OverlayRenderer, HandRenderer, RoomScene, PreloadScene, SelectionManager, ActPhase, MipmapHelper. They don't block builds (Vite ignores them) but `npx tsc --noEmit` will report them.
+- **`noUnusedLocals` does NOT respect `_` prefix** — Unlike `noUnusedParameters`, TypeScript's `noUnusedLocals` does not suppress warnings for `_`-prefixed local variables or class members. Only function parameters benefit from `_` prefix.
+- **Phase 2 typed EventBus uses overloads** — The EventBus `on`/`emit`/`once` methods have typed overloads for `GameEventType` keys AND a fallback `string` overload for backward compatibility. This means raw string usage still compiles but doesn't get type checking.
+
+## Refactoring Progress
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| Pre-cleanup | Done | Removed 15 unused imports, prefixed 2 unused params |
+| 1. AbilityResolver → Strategy | Done | Deleted 602 LOC monolith → 19 handler files + registry + dispatcher |
+| 2. Typed EventBus | Done | GameEventMap with 35+ typed events, fixed 5 real payload bugs |
+| 3. PendingCommand | Pending | |
+| 4. BattleScene Decomposition | Pending | |
+| 5. CardRenderer Split | Pending | |
+| 6. CardDefinitions Restructure | Pending | |
+| 7. Interface Extraction | Pending | |
+| 8. AuraSystem Chain | Pending | |
+| 9. Server TypeScript | Pending | |
+| 10. Renderer Utilities | Pending | |
+| 11. GameState Cleanup | Pending | |

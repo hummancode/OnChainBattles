@@ -67,7 +67,7 @@ export class Board {
    * P2 deploy zone: rows (rows-DEPLOY_ROWS)..(rows-1).
    * Middle rows are neutral — no player can deploy there.
    */
-  isOwnHalf(col: number, row: number, player: Player): boolean {
+  isOwnHalf(_col: number, row: number, player: Player): boolean {
     return player === Player.P1
       ? row < DEPLOY_ROWS
       : row >= this.rows - DEPLOY_ROWS;
