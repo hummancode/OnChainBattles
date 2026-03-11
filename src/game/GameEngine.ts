@@ -69,6 +69,7 @@ export interface IGameEngineAPI {
   selectPosition(col: number, row: number): void;
   selectColumn(col: number): void;
   selectDiscard(handIndex: number): void;
+  cancelPending(): void;
   getState(): GameStateSnapshot;
   on(handler: (event: GameEvent) => void): void;
   off(handler: (event: GameEvent) => void): void;
@@ -264,7 +265,7 @@ export class GameEngine implements IGameEngineAPI {
     if (!this.pending.validTargetIds.includes(instanceId)) return;
     const cmd = this.pending;
     this.clearPending();
-    const events = resolvePending(cmd, { kind: 'TARGET', instanceId });
+    const events = resolvePending(cmd, { kind: 'TARGET', instanceId }, { board: this.board });
     for (const e of events) { this.applyEvent(e); this.emit(e); }
   }
 
@@ -294,6 +295,13 @@ export class GameEngine implements IGameEngineAPI {
     this.clearPending();
     const events = resolvePending(cmd, { kind: 'DISCARD', handIndex });
     for (const e of events) { this.applyEvent(e); this.emit(e); }
+  }
+
+  /** Cancel the current pending interaction (e.g., user pressed Cancel). */
+  cancelPending(): void {
+    if (!this.pending) return;
+    console.log('[GameEngine] Pending interaction cancelled');
+    this.clearPending();
   }
 
   // ─────────────────────────────────────────────

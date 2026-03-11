@@ -54,12 +54,16 @@ export function createSelectionManager(
       const ok = engine.attackUnit(attacker.instanceId, target.instanceId);
       if (ok !== false) SocketManager.sendGameAction({ type: 'ATTACK_UNIT', fromCol, fromRow, targetCol, targetRow });
     },
-    selectTarget: (instanceId: string) => engine.selectTarget(instanceId),
+    selectTarget: (col: number, row: number) => {
+      const unit = getBoardUnit(col, row);
+      if (unit) engine.selectTarget(unit.instanceId);
+    },
     selectPosition: (col: number, row: number) => {
       engine.selectPosition(col, row);
       SocketManager.sendGameAction({ type: 'SELECT_POSITION', col, row });
     },
     selectHandCard: () => {},
+    cancelPending: () => engine.cancelPending(),
     isAwaitingInput: () => (engine as any).getState().status === 'AWAITING_INPUT',
     canAct: () => {
       const state = (engine as any).getState();

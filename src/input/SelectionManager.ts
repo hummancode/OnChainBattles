@@ -33,6 +33,7 @@ export interface IGameEngineAPI {
   selectTarget(col: number, row: number): void;
   selectPosition(col: number, row: number): void;
   selectHandCard(handIndex: number): void;
+  cancelPending(): void;
   isAwaitingInput(): boolean;
   canAct(col: number, row: number): boolean;
   isPlayerUnit(col: number, row: number): boolean;
@@ -391,7 +392,11 @@ private publishHighlights(): void {
       }),
 
       // When interaction resolves, back to idle
-      EventBus.on(EV.INTERACTION_RESOLVED, () => {
+      EventBus.on(EV.INTERACTION_RESOLVED, (ev: any) => {
+        // If cancelled from UI (e.g., Cancel button), tell the engine to clear pending state
+        if (ev?.cancelled) {
+          this.engine.cancelPending();
+        }
         this.pendingKind = null;
         this.pendingValidPositions = [];
         this.clearSelection();
