@@ -1,5 +1,5 @@
 import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
-import type { PendingInteraction } from '../../types/AbilityTypes';
+import type { PendingCommand } from '../../pending/PendingCommand';
 import type { AbilityContext, AbilityResult } from '../types';
 import { Player } from '../types';
 import { getCard } from '../../data/CardDefinitions';
@@ -12,11 +12,13 @@ function coupHandler(ctx: AbilityContext): AbilityResult {
 
   if (targets.length === 0) return { events: [] };
 
-  const pending: PendingInteraction = {
+  const pending: PendingCommand = {
     kind:           'TARGET',
+    sourceCardId:   ctx.cardId,
+    sourceAbility:  'coupHandler',
     reason:         'Coup: choose an enemy Royal unit to capture or banish.',
     validTargetIds: targets.map(u => u.instanceId),
-    resumeCallback: () => {},
+    deferredEvents: [],
   };
 
   return { events: [], pending };

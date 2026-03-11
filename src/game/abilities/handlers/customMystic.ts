@@ -1,5 +1,5 @@
 import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
-import type { PendingInteraction } from '../../types/AbilityTypes';
+import type { PendingCommand } from '../../pending/PendingCommand';
 import type { AbilityContext, AbilityResult } from '../types';
 import type { GameEvent } from '../../types/EventTypes';
 
@@ -16,14 +16,15 @@ function mysticDeployHandler(ctx: AbilityContext): AbilityResult {
 
   if (graveIds.length === 0) return { events: [drainEvent] };
 
-  const pending: PendingInteraction = {
+  const pending: PendingCommand = {
     kind:           'TARGET',
+    sourceCardId:   ctx.cardId,
+    sourceAbility:  'mysticDeployHandler',
     reason:         'Mystic: choose a unit from your graveyard to revive.',
     validTargetIds: graveIds,
-    resumeCallback: () => {},
+    deferredEvents: [drainEvent],
   };
 
-  // Drain applied after resolve — GameEngine emits it after interact resolves
   return { events: [], pending };
 }
 

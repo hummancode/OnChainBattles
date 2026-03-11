@@ -1,5 +1,5 @@
 import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
-import type { PendingInteraction } from '../../types/AbilityTypes';
+import type { PendingCommand } from '../../pending/PendingCommand';
 import type { AbilityContext, AbilityResult } from '../types';
 import { Player } from '../types';
 import { getCard } from '../../data/CardDefinitions';
@@ -12,11 +12,13 @@ function treasonHandler(ctx: AbilityContext): AbilityResult {
 
   if (targets.length === 0) return { events: [] };
 
-  const pending: PendingInteraction = {
+  const pending: PendingCommand = {
     kind:           'TARGET',
+    sourceCardId:   ctx.cardId,
+    sourceAbility:  'treasonHandler',
     reason:         'Treason: choose an enemy non-Royal unit to control this turn.',
     validTargetIds: targets.map(u => u.instanceId),
-    resumeCallback: () => {},
+    deferredEvents: [],
   };
 
   return { events: [], pending };

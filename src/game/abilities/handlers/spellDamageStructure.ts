@@ -1,5 +1,6 @@
 import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
-import { AbilityType, type PendingInteraction } from '../../types/AbilityTypes';
+import { AbilityType } from '../../types/AbilityTypes';
+import type { PendingCommand } from '../../pending/PendingCommand';
 import type { AbilityContext, AbilityResult } from '../types';
 
 function spellDamageStructure(ctx: AbilityContext): AbilityResult {
@@ -8,11 +9,13 @@ function spellDamageStructure(ctx: AbilityContext): AbilityResult {
 
   if (validTargetIds.length === 0) return { events: [] };
 
-  const pending: PendingInteraction = {
+  const pending: PendingCommand = {
     kind:           'TARGET',
+    sourceCardId:   ctx.cardId,
+    sourceAbility:  AbilityType.SPELL_DAMAGE_STRUCTURE_ADJ,
     reason:         'Choose an enemy structure to afflict with Disease.',
     validTargetIds,
-    resumeCallback: () => {},
+    deferredEvents: [],
   };
   return { events: [], pending };
 }

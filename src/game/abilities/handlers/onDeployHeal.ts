@@ -1,5 +1,6 @@
 import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
-import { AbilityType, type PendingInteraction } from '../../types/AbilityTypes';
+import { AbilityType } from '../../types/AbilityTypes';
+import type { PendingCommand } from '../../pending/PendingCommand';
 import type { AbilityContext, AbilityResult } from '../types';
 
 function onDeployHeal(ctx: AbilityContext): AbilityResult {
@@ -8,11 +9,13 @@ function onDeployHeal(ctx: AbilityContext): AbilityResult {
 
   if (validTargetIds.length === 0) return { events: [] };
 
-  const pending: PendingInteraction = {
+  const pending: PendingCommand = {
     kind:           'TARGET',
+    sourceCardId:   ctx.cardId,
+    sourceAbility:  AbilityType.ON_DEPLOY_HEAL_FRIENDLY,
     reason:         'Choose a friendly unit to fully restore HP.',
     validTargetIds,
-    resumeCallback: () => {},
+    deferredEvents: [],
   };
   return { events: [], pending };
 }

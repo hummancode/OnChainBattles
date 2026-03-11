@@ -1,5 +1,5 @@
 import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
-import type { PendingInteraction } from '../../types/AbilityTypes';
+import type { PendingCommand } from '../../pending/PendingCommand';
 import type { AbilityContext, AbilityResult } from '../types';
 import type { GameEvent } from '../../types/EventTypes';
 
@@ -9,12 +9,14 @@ function warHornHandler(ctx: AbilityContext): AbilityResult {
     { type: 'CARD_DRAWN', player: ctx.owner, cardId: '__DRAW__', handIndex: -1, deckRemaining: -1 },
   ];
 
-  const pending: PendingInteraction = {
+  const pending: PendingCommand = {
     kind:           'DISCARD',
-    reason:         'War Horn: discard 1 card from your hand.',
+    sourceCardId:   ctx.cardId,
+    sourceAbility:  'warHornHandler',
     count:          1,
-    resumeCallback: () => {},
-  } as PendingInteraction & { count: number };
+    reason:         'War Horn: discard 1 card from your hand.',
+    deferredEvents: [],
+  };
 
   return { events: drawEvents, pending };
 }

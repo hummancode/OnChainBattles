@@ -74,21 +74,8 @@ export interface AbilityContext {
 }
 
 // ─────────────────────────────────────────────
-// PENDING INTERACTION
-// Created by AbilityResolver when engine must pause for input.
-// GameEngine stores this and resumes when selectTarget() etc called.
+// PENDING COMMAND (type re-export for convenience)
+// See src/game/pending/PendingCommand.ts for the canonical definition.
 // ─────────────────────────────────────────────
 
-export type PendingInteractionKind =
-  | 'TARGET'    // Player picks a unit (Priest, Mystic, Coup, Treason, Disease)
-  | 'POSITION'  // Player picks a board square (Casus Belli forward deploy)
-  | 'COLUMN'    // Player picks a column 0-5 (Earthquake)
-  | 'DISCARD';  // Player picks a hand card to discard (War Horn)
-
-export interface PendingInteraction {
-  kind: PendingInteractionKind;
-  reason: string;                             // Human-readable for UI
-  validTargetIds?: string[];                  // Unit instance IDs for TARGET
-  validPositions?: Array<{ col: number; row: number }>; // For POSITION
-  resumeCallback: (selection: any) => void;   // GameEngine calls this on resolve
-}
+export type { PendingCommand } from '../pending/PendingCommand';

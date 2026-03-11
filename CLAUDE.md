@@ -108,7 +108,7 @@ Issues and corrections discovered while executing the refactoring plan:
 | Pre-cleanup | Done | Removed 15 unused imports, prefixed 2 unused params |
 | 1. AbilityResolver → Strategy | Done | Deleted 602 LOC monolith → 19 handler files + registry + dispatcher |
 | 2. Typed EventBus | Done | GameEventMap with 35+ typed events, fixed 5 real payload bugs |
-| 3. PendingCommand | Pending | |
+| 3. PendingCommand | Done | Removed callback anti-pattern → serializable PendingCommand union type + resolver |
 | 4. BattleScene Decomposition | Pending | |
 | 5. CardRenderer Split | Pending | |
 | 6. CardDefinitions Restructure | Pending | |

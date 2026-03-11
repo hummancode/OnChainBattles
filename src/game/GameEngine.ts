@@ -33,7 +33,8 @@ import { getCard } from './data/CardDefinitions';
 import { Player, TurnPhase, EngineStatus } from './types/GameTypes';
 import type { Position, GameStateSnapshot } from './types/GameTypes';
 import type { GameEvent } from './types/EventTypes';
-import type { PendingInteraction } from './types/AbilityTypes';
+import type { PendingCommand } from './pending/PendingCommand';
+import { resolvePending } from './pending/PendingCommandResolver';
 import { Allegiance } from './types/CardTypes';
 import type { GameContext } from './GameContext';
 import { opponent } from './GameContext';
@@ -92,7 +93,7 @@ export class GameEngine implements IGameEngineAPI {
   private status: EngineStatus = EngineStatus.IDLE;
 
   // Interaction pause state
-  private pending: PendingInteraction | null = null;
+  private pending: PendingCommand | null = null;
 
   // Dead unit registry (instanceId → cardId)
   private graveyard: Map<string, string> = new Map();
@@ -199,9 +200,8 @@ export class GameEngine implements IGameEngineAPI {
     const ctx = this.buildContext();
     const success = executePlayCard(ctx, handIndex, col, row);
 
-    // Capture pending if PlayPhase set one
-    if ((ctx as any)._lastPending) {
-      this.pending = (ctx as any)._lastPending;
+    if (ctx.pending) {
+      this.pending = ctx.pending;
     }
 
     return success;
@@ -222,7 +222,13 @@ export class GameEngine implements IGameEngineAPI {
     if (this.phase !== TurnPhase.ACT) return false;
 
     const ctx = this.buildContext();
-    return executeAttack(ctx, unitId, targetId);
+    const success = executeAttack(ctx, unitId, targetId);
+
+    if (ctx.pending) {
+      this.pending = ctx.pending;
+    }
+
+    return success;
   }
 
   endPlayPhase(): void {
@@ -251,35 +257,39 @@ export class GameEngine implements IGameEngineAPI {
 
   selectTarget(instanceId: string): void {
     if (!this.pending || this.pending.kind !== 'TARGET') return;
-    if (!(this.pending.validTargetIds ?? []).includes(instanceId)) return;
-    const cb = this.pending.resumeCallback;
+    if (!this.pending.validTargetIds.includes(instanceId)) return;
+    const cmd = this.pending;
     this.clearPending();
-    cb(instanceId);
+    const events = resolvePending(cmd, { kind: 'TARGET', instanceId });
+    for (const e of events) { this.applyEvent(e); this.emit(e); }
   }
 
   selectPosition(col: number, row: number): void {
     if (!this.pending || this.pending.kind !== 'POSITION') return;
-    if (!(this.pending.validPositions ?? []).some(p => p.col === col && p.row === row)) return;
-    const cb = this.pending.resumeCallback;
+    if (!this.pending.validPositions.some(p => p.col === col && p.row === row)) return;
+    const cmd = this.pending;
     this.clearPending();
-    cb({ col, row });
+    const events = resolvePending(cmd, { kind: 'POSITION', col, row });
+    for (const e of events) { this.applyEvent(e); this.emit(e); }
   }
 
   selectColumn(col: number): void {
     if (!this.pending || this.pending.kind !== 'COLUMN') return;
     if (col < 0 || col >= this.board.cols) return;
-    const cb = this.pending.resumeCallback;
+    const cmd = this.pending;
     this.clearPending();
-    cb(col);
+    const events = resolvePending(cmd, { kind: 'COLUMN', col });
+    for (const e of events) { this.applyEvent(e); this.emit(e); }
   }
 
   selectDiscard(handIndex: number): void {
     if (!this.pending || this.pending.kind !== 'DISCARD') return;
     const ps = this.players[this.activePlayer];
     if (handIndex < 0 || handIndex >= ps.hand.length) return;
-    const cb = this.pending.resumeCallback;
+    const cmd = this.pending;
     this.clearPending();
-    cb(handIndex);
+    const events = resolvePending(cmd, { kind: 'DISCARD', handIndex });
+    for (const e of events) { this.applyEvent(e); this.emit(e); }
   }
 
   // ─────────────────────────────────────────────
@@ -337,6 +347,7 @@ export class GameEngine implements IGameEngineAPI {
       phase:        this.phase,
       status:       this.status,
       graveyard:    this.graveyard,
+      pending:      undefined,
 
       createUnit: (cardId, owner, pos) => this.unitFactory.create(cardId, owner, pos),
 

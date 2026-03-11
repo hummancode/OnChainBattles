@@ -1,5 +1,6 @@
 import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
-import { AbilityType, type PendingInteraction } from '../../types/AbilityTypes';
+import { AbilityType } from '../../types/AbilityTypes';
+import type { PendingCommand } from '../../pending/PendingCommand';
 import type { AbilityContext, AbilityResult } from '../types';
 import { Player } from '../types';
 import type { Position } from '../../types/GameTypes';
@@ -12,11 +13,13 @@ function spellForwardDeploy(ctx: AbilityContext): AbilityResult {
   }
   if (validPositions.length === 0 || ctx.players[ctx.owner].hand.length === 0) return { events: [] };
 
-  const pending: PendingInteraction = {
+  const pending: PendingCommand = {
     kind:           'POSITION',
+    sourceCardId:   ctx.cardId,
+    sourceAbility:  AbilityType.SPELL_FORWARD_DEPLOY,
     reason:         'Choose an empty square in the enemy front row to deploy a card.',
     validPositions,
-    resumeCallback: () => {},
+    deferredEvents: [],
   };
   return { events: [], pending };
 }

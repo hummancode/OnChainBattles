@@ -4,13 +4,13 @@ import type { Board } from '../Board';
 import type { PlayerState } from '../PlayerState';
 import type { GameModifiers } from '../GameModifiers';
 import type { GameEvent } from '../types/EventTypes';
-import type { PendingInteraction } from '../types/AbilityTypes';
+import type { PendingCommand } from '../pending/PendingCommand';
 
 export { Player };
 
 export interface AbilityResult {
   events: GameEvent[];
-  pending?: PendingInteraction;
+  pending?: PendingCommand;
 }
 
 export interface AbilityContext {

@@ -109,18 +109,17 @@ export function executePlayCard(
   // Handle pending interaction (Priest, Mystic, Disease, etc.)
   if (result.pending) {
     ctx.status = EngineStatus.AWAITING_INPUT;
+    ctx.pending = result.pending;
     ctx.emit({
       type: result.pending.kind === 'TARGET'   ? 'PENDING_TARGET'   :
             result.pending.kind === 'POSITION' ? 'PENDING_POSITION' :
             result.pending.kind === 'COLUMN'   ? 'PENDING_COLUMN'   :
                                                   'PENDING_DISCARD',
       reason: result.pending.reason,
-      validTargetIds:  result.pending.validTargetIds ?? [],
-      validPositions:  result.pending.validPositions ?? [],
-      count: 1,
+      validTargetIds:  result.pending.kind === 'TARGET' ? result.pending.validTargetIds : [],
+      validPositions:  result.pending.kind === 'POSITION' ? result.pending.validPositions : [],
+      count: result.pending.kind === 'DISCARD' ? result.pending.count : 1,
     } as any);
-    // Return the pending object to the engine so it can store it
-    (ctx as any)._lastPending = result.pending;
   }
 
   // Spells go to discard after play

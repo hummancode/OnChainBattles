@@ -11,6 +11,7 @@ import type { PlayerState } from './PlayerState';
 import type { AuraSystem } from './AuraSystem';
 import type { Unit, Position } from './types/GameTypes';
 import type { GameEvent } from './types/EventTypes';
+import type { PendingCommand } from './pending/PendingCommand';
 import { Player, TurnPhase, EngineStatus } from './types/GameTypes';
 
 /**
@@ -33,6 +34,9 @@ export interface GameContext {
 
   // Graveyard registry (instanceId → cardId)
   readonly graveyard: Map<string, string>;
+
+  // Pending command set by phase modules when ability needs player input
+  pending?: PendingCommand;
 
   // Unit factory — engine provides this so phases don't need the counter
   createUnit(cardId: string, owner: Player, position: Position): Unit;

@@ -1,5 +1,6 @@
 import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
-import { AbilityType, type PendingInteraction } from '../../types/AbilityTypes';
+import { AbilityType } from '../../types/AbilityTypes';
+import type { PendingCommand } from '../../pending/PendingCommand';
 import type { AbilityContext, AbilityResult } from '../types';
 
 function onDeployRevive(ctx: AbilityContext): AbilityResult {
@@ -16,11 +17,13 @@ function onDeployRevive(ctx: AbilityContext): AbilityResult {
     };
   }
 
-  const pending: PendingInteraction = {
+  const pending: PendingCommand = {
     kind:           'TARGET',
+    sourceCardId:   ctx.cardId,
+    sourceAbility:  AbilityType.ON_DEPLOY_REVIVE,
     reason:         'Choose a unit from your graveyard to revive.',
     validTargetIds: graveIds,
-    resumeCallback: () => {},
+    deferredEvents: [],
   };
   return { events: [], pending };
 }

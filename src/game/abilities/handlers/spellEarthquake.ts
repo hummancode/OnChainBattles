@@ -1,12 +1,15 @@
 import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
-import { AbilityType, type PendingInteraction } from '../../types/AbilityTypes';
+import { AbilityType } from '../../types/AbilityTypes';
+import type { PendingCommand } from '../../pending/PendingCommand';
 import type { AbilityContext, AbilityResult } from '../types';
 
-function spellEarthquake(_ctx: AbilityContext): AbilityResult {
-  const pending: PendingInteraction = {
+function spellEarthquake(ctx: AbilityContext): AbilityResult {
+  const pending: PendingCommand = {
     kind:           'COLUMN',
+    sourceCardId:   ctx.cardId,
+    sourceAbility:  AbilityType.SPELL_EARTHQUAKE,
     reason:         'Choose a column (A\u2013F) to strike with the Earthquake.',
-    resumeCallback: () => {},
+    deferredEvents: [],
   };
   return { events: [], pending };
 }

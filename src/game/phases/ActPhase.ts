@@ -210,7 +210,7 @@ function handleUnitDeath(
   ctx.applyEvents(deathResult.events);
 
   if (deathResult.pending) {
-    (ctx as any)._lastPending = deathResult.pending;
+    ctx.pending = deathResult.pending;
     ctx.status = EngineStatus.AWAITING_INPUT;
   }
 
