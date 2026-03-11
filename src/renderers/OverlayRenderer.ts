@@ -18,6 +18,7 @@ import type {
 import { EventBus, EV } from '../events/EventBus';
 import { ThemeLoader } from '../config/ThemeLoader';
 import { CardRenderer } from './CardRenderer';
+import { getCard } from '../game/data/CardDefinitions';
 
 export interface TargetSelectConfig {
   prompt: string;
@@ -216,6 +217,41 @@ export class OverlayRenderer {
     this.rootContainer.add(panel);
   }
 
+  /** Show placement prompt with card preview in top-right corner. */
+  showPlacementPreview(cardData: CardRenderData, prompt: string): void {
+    this.close();
+
+    const container = this.scene.add.container(0, 0);
+
+    // Card preview at top-right (above phase label area)
+    const previewX = 1040;
+    const previewY = 20;
+    const cardContainer = this.cardRenderer.render(cardData, 'full', previewX, previewY);
+    container.add(cardContainer);
+
+    // Prompt banner above the board
+    const bannerY = 690;
+    const bannerW = 400;
+    const bannerH = 32;
+    const bannerX = 283 + (7 * 102) / 2; // board center X
+
+    const bannerBg = this.scene.add.graphics();
+    bannerBg.fillStyle(0x000000, 0.8);
+    bannerBg.fillRoundedRect(bannerX - bannerW / 2, bannerY, bannerW, bannerH, 6);
+    container.add(bannerBg);
+
+    const promptText = this.scene.add.text(bannerX, bannerY + bannerH / 2, prompt, {
+      fontFamily: this.theme.fonts.body.family,
+      fontSize: `${this.theme.fonts.body.size}px`,
+      color: this.theme.overlays.titleColor,
+      align: 'center',
+    }).setOrigin(0.5, 0.5);
+    container.add(promptText);
+
+    this.activeOverlay = container;
+    this.rootContainer.add(container);
+  }
+
   /** Show card detail overlay (right-click). */
   showCardDetail(data: CardRenderData): void {
     this.close();
@@ -411,7 +447,27 @@ export class OverlayRenderer {
         });
       }),
 
-     
+      EventBus.on(EV.PENDING_POSITION, (ev: any) => {
+        // Build CardRenderData from the sourceCardId carried in the event
+        const cardId = ev.sourceCardId;
+        if (cardId) {
+          const def = getCard(cardId);
+          const cardData: CardRenderData = {
+            id: cardId, name: def.name, cardClass: def.class,
+            allegiance: def.allegiance, cost: def.cost,
+            artKey: `art_${cardId}`,
+            atk: def.stats?.atk, def: def.stats?.def,
+            currentHP: def.stats?.def, maxHP: def.stats?.def,
+            abilityText: def.abilityText,
+            isEnemy: false, isExhausted: false, isSelected: false,
+          };
+          this.showPlacementPreview(cardData, ev.reason ?? 'Choose a position');
+        }
+      }),
+
+      EventBus.on(EV.INTERACTION_RESOLVED, () => {
+        this.close();
+      }),
 
       EventBus.on(EV.DETAIL_SHOW, (data: CardRenderData) => {
         this.showCardDetail(data);

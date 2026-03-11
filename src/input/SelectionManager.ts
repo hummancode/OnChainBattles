@@ -56,6 +56,10 @@ export class SelectionManager {
     mode: 'idle',
   };
 
+  // Track what kind of pending interaction is active
+  private pendingKind: 'TARGET' | 'POSITION' | 'COLUMN' | 'DISCARD' | null = null;
+  private pendingValidPositions: Array<{ col: number; row: number }> = [];
+
   private unsubs: Array<() => void> = [];
 
   constructor(layout: BattleLayoutJSON, engine: IGameEngineAPI) {
@@ -74,9 +78,17 @@ export class SelectionManager {
    */
   onBoardCellClicked(col: number, row: number): void {
     if (this.engine.isAwaitingInput()) {
-      // Engine is waiting for player to pick a target
-      this.engine.selectTarget(col, row);
-      this.clearSelection();
+      if (this.pendingKind === 'POSITION') {
+        // Validate click is on a valid position
+        if (this.pendingValidPositions.some(p => p.col === col && p.row === row)) {
+          this.engine.selectPosition(col, row);
+          this.clearSelection();
+        }
+      } else {
+        // TARGET or other — pass through (col, row used to find unit)
+        this.engine.selectTarget(col, row);
+        this.clearSelection();
+      }
       return;
     }
 
@@ -343,6 +355,35 @@ private publishHighlights(): void {
 
       // When engine enters AWAITING_INPUT, set mode
       EventBus.on(EV.PENDING_TARGET, () => {
+        this.pendingKind = 'TARGET';
+        this.pendingValidPositions = [];
+        this.state = { ...this.state, mode: 'awaiting_target' };
+        EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
+          moves: [], attacks: [], auras: [],
+        });
+      }),
+
+      EventBus.on(EV.PENDING_POSITION, (ev: any) => {
+        this.pendingKind = 'POSITION';
+        this.pendingValidPositions = ev.validPositions ?? [];
+        this.state = { ...this.state, mode: 'awaiting_target' };
+        EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
+          moves: this.pendingValidPositions, attacks: [], auras: [],
+        });
+      }),
+
+      EventBus.on(EV.PENDING_COLUMN, () => {
+        this.pendingKind = 'COLUMN';
+        this.pendingValidPositions = [];
+        this.state = { ...this.state, mode: 'awaiting_target' };
+        EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
+          moves: [], attacks: [], auras: [],
+        });
+      }),
+
+      EventBus.on(EV.PENDING_DISCARD, () => {
+        this.pendingKind = 'DISCARD';
+        this.pendingValidPositions = [];
         this.state = { ...this.state, mode: 'awaiting_target' };
         EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
           moves: [], attacks: [], auras: [],
@@ -351,6 +392,8 @@ private publishHighlights(): void {
 
       // When interaction resolves, back to idle
       EventBus.on(EV.INTERACTION_RESOLVED, () => {
+        this.pendingKind = null;
+        this.pendingValidPositions = [];
         this.clearSelection();
       }),
 

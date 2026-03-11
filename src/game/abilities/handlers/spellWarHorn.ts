@@ -11,6 +11,7 @@ function warHornHandler(ctx: AbilityContext): AbilityResult {
 
   const pending: PendingCommand = {
     kind:           'DISCARD',
+    owner:          ctx.owner,
     sourceCardId:   ctx.cardId,
     sourceAbility:  'warHornHandler',
     count:          1,

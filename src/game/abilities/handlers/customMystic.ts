@@ -18,6 +18,7 @@ function mysticDeployHandler(ctx: AbilityContext): AbilityResult {
 
   const pending: PendingCommand = {
     kind:           'TARGET',
+    owner:          ctx.owner,
     sourceCardId:   ctx.cardId,
     sourceAbility:  'mysticDeployHandler',
     reason:         'Mystic: choose a unit from your graveyard to revive.',

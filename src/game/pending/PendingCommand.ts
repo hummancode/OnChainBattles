@@ -8,11 +8,13 @@
 // ============================================================
 
 import type { Position } from '../types/GameTypes';
+import type { Player } from '../types/GameTypes';
 import type { GameEvent } from '../types/EventTypes';
 
 export type PendingCommand =
   | {
       kind: 'TARGET';
+      owner: Player;
       sourceCardId: string;
       sourceAbility: string;
       validTargetIds: string[];
@@ -21,6 +23,7 @@ export type PendingCommand =
     }
   | {
       kind: 'POSITION';
+      owner: Player;
       sourceCardId: string;
       sourceAbility: string;
       validPositions: Position[];
@@ -29,6 +32,7 @@ export type PendingCommand =
     }
   | {
       kind: 'COLUMN';
+      owner: Player;
       sourceCardId: string;
       sourceAbility: string;
       reason: string;
@@ -36,6 +40,7 @@ export type PendingCommand =
     }
   | {
       kind: 'DISCARD';
+      owner: Player;
       sourceCardId: string;
       sourceAbility: string;
       count: number;

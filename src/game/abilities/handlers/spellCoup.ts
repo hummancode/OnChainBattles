@@ -14,6 +14,7 @@ function coupHandler(ctx: AbilityContext): AbilityResult {
 
   const pending: PendingCommand = {
     kind:           'TARGET',
+    owner:          ctx.owner,
     sourceCardId:   ctx.cardId,
     sourceAbility:  'coupHandler',
     reason:         'Coup: choose an enemy Royal unit to capture or banish.',

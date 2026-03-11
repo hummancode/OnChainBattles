@@ -200,7 +200,11 @@ function wireEngineToEventBus(engine: any, localPlayerIndex: number): void {
       case 'PENDING_POSITION':
       case 'PENDING_COLUMN':
       case 'PENDING_DISCARD': {
-        EventBus.emit(event.type, event);
+        // Only show pending interaction UI for the local (active) player
+        const pendState = engine.getState();
+        if (pendState.turn?.activePlayer === localPlayerIndex) {
+          EventBus.emit(event.type, event);
+        }
         break;
       }
 
@@ -258,6 +262,8 @@ export default class BattleScene extends Phaser.Scene {
         else console.warn('[BattleScene] ATTACK_UNIT replay: unit not found');
         break;
       }
+      case 'SELECT_POSITION':
+        this.engine.selectPosition(action.col!, action.row!); break;
       case 'END_PLAY_PHASE': this.engine.endPlayPhase(); break;
       case 'END_ACT_PHASE':  this.engine.endActPhase(); break;
       default: console.warn('[BattleScene] Unknown opponent action:', (action as any).type);
@@ -397,7 +403,10 @@ export default class BattleScene extends Phaser.Scene {
         if (ok !== false) SocketManager.sendGameAction({ type: 'ATTACK_UNIT', fromCol, fromRow, targetCol, targetRow });
       },
       selectTarget: (instanceId: string) => this.engine.selectTarget(instanceId),
-      selectPosition: (col: number, row: number) => this.engine.selectPosition(col, row),
+      selectPosition: (col: number, row: number) => {
+        this.engine.selectPosition(col, row);
+        SocketManager.sendGameAction({ type: 'SELECT_POSITION', col, row });
+      },
       selectHandCard: () => {},
       isAwaitingInput: () => this.engine.getState().status === 'AWAITING_INPUT',
       canAct: () => {

@@ -19,6 +19,7 @@ function onDeployRevive(ctx: AbilityContext): AbilityResult {
 
   const pending: PendingCommand = {
     kind:           'TARGET',
+    owner:          ctx.owner,
     sourceCardId:   ctx.cardId,
     sourceAbility:  AbilityType.ON_DEPLOY_REVIVE,
     reason:         'Choose a unit from your graveyard to revive.',

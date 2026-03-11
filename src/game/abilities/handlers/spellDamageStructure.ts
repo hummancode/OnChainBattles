@@ -11,6 +11,7 @@ function spellDamageStructure(ctx: AbilityContext): AbilityResult {
 
   const pending: PendingCommand = {
     kind:           'TARGET',
+    owner:          ctx.owner,
     sourceCardId:   ctx.cardId,
     sourceAbility:  AbilityType.SPELL_DAMAGE_STRUCTURE_ADJ,
     reason:         'Choose an enemy structure to afflict with Disease.',

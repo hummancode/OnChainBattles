@@ -3,8 +3,6 @@
 //
 // When the player makes a selection (target, position, column,
 // or discard), this resolver produces the GameEvent[] to apply.
-// Currently returns deferredEvents carried by the command.
-// Per-ability resolution logic can be added here as needed.
 // ============================================================
 
 import type { PendingCommand } from './PendingCommand';
@@ -22,7 +20,24 @@ export type PendingSelection =
  */
 export function resolvePending(
   command: PendingCommand,
-  _selection: PendingSelection,
+  selection: PendingSelection,
 ): GameEvent[] {
-  return command.deferredEvents;
+  const events: GameEvent[] = [];
+
+  // POSITION summon — place a unit at the selected position
+  if (command.kind === 'POSITION' && selection.kind === 'POSITION') {
+    events.push({
+      type: 'UNIT_PLACED',
+      instanceId: `${command.sourceCardId}_pending_${Date.now()}`,
+      cardId: command.sourceCardId,
+      owner: command.owner,
+      col: selection.col,
+      row: selection.row,
+      isActive: true,
+    } as GameEvent);
+  }
+
+  // Append deferred events (e.g., Mystic LEG drain)
+  events.push(...command.deferredEvents);
+  return events;
 }

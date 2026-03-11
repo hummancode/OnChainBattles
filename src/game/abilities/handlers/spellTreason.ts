@@ -14,6 +14,7 @@ function treasonHandler(ctx: AbilityContext): AbilityResult {
 
   const pending: PendingCommand = {
     kind:           'TARGET',
+    owner:          ctx.owner,
     sourceCardId:   ctx.cardId,
     sourceAbility:  'treasonHandler',
     reason:         'Treason: choose an enemy non-Royal unit to control this turn.',

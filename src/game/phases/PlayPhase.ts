@@ -116,6 +116,7 @@ export function executePlayCard(
             result.pending.kind === 'COLUMN'   ? 'PENDING_COLUMN'   :
                                                   'PENDING_DISCARD',
       reason: result.pending.reason,
+      sourceCardId:    result.pending.sourceCardId,
       validTargetIds:  result.pending.kind === 'TARGET' ? result.pending.validTargetIds : [],
       validPositions:  result.pending.kind === 'POSITION' ? result.pending.validPositions : [],
       count: result.pending.kind === 'DISCARD' ? result.pending.count : 1,

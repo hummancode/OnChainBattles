@@ -15,6 +15,7 @@ function spellForwardDeploy(ctx: AbilityContext): AbilityResult {
 
   const pending: PendingCommand = {
     kind:           'POSITION',
+    owner:          ctx.owner,
     sourceCardId:   ctx.cardId,
     sourceAbility:  AbilityType.SPELL_FORWARD_DEPLOY,
     reason:         'Choose an empty square in the enemy front row to deploy a card.',

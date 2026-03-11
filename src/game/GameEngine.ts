@@ -203,6 +203,7 @@ export class GameEngine implements IGameEngineAPI {
     if (ctx.pending) {
       this.pending = ctx.pending;
     }
+    this.syncFromContext(ctx);
 
     return success;
   }
@@ -227,18 +228,21 @@ export class GameEngine implements IGameEngineAPI {
     if (ctx.pending) {
       this.pending = ctx.pending;
     }
+    this.syncFromContext(ctx);
 
     return success;
   }
 
   endPlayPhase(): void {
     if (this.phase !== TurnPhase.PLAY) return;
+    if (this.status === EngineStatus.AWAITING_INPUT) return;
     this.phase = TurnPhase.ACT;
     this.emit({ type: 'PHASE_CHANGED', phase: TurnPhase.ACT, activePlayer: this.activePlayer, turn: this.turnNumber });
   }
 
   endActPhase(): void {
     if (this.phase !== TurnPhase.ACT) return;
+    if (this.status === EngineStatus.AWAITING_INPUT) return;
     const ctx = this.buildContext();
     const gameOver = runEndPhase(ctx);
     this.syncFromContext(ctx);
@@ -383,6 +387,9 @@ export class GameEngine implements IGameEngineAPI {
           const newUnit = this.unitFactory.create(event.cardId, event.owner, { col: event.col, row: event.row });
           newUnit.isActive = event.isActive;
           this.board.placeUnit(newUnit);
+          // Sync event instanceId to the UnitFactory-generated one so
+          // downstream listeners (BoardRenderer) use the correct key.
+          event.instanceId = newUnit.instanceId;
         }
         break;
       }

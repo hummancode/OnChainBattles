@@ -5,7 +5,7 @@
 import { io, Socket } from "socket.io-client";
 import GameState, { RoomAction } from "../GameState.ts";
 export interface GameAction {
-  type: 'PLAY_CARD' | 'MOVE_UNIT' | 'ATTACK_UNIT' | 'END_PLAY_PHASE' | 'END_ACT_PHASE';
+  type: 'PLAY_CARD' | 'MOVE_UNIT' | 'ATTACK_UNIT' | 'END_PLAY_PHASE' | 'END_ACT_PHASE' | 'SELECT_POSITION';
   handIndex?: number;
   col?: number;
   row?: number;

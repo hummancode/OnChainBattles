@@ -1,4 +1,5 @@
 import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import type { PendingCommand } from '../../pending/PendingCommand';
 import type { AbilityContext, AbilityResult } from '../types';
 
 function militiaDeployHandler(ctx: AbilityContext): AbilityResult {
@@ -8,18 +9,17 @@ function militiaDeployHandler(ctx: AbilityContext): AbilityResult {
   const freeSquares = ctx.board.getFreeSquaresInHalf(ctx.owner);
   if (freeSquares.length === 0) return { events: [] };
 
-  const pos = freeSquares[0];
-  return {
-    events: [{
-      type:        'UNIT_PLACED',
-      instanceId:  `militia_summoned_${Date.now()}`,
-      cardId:      'militia',
-      owner:       ctx.owner,
-      col:         pos.col,
-      row:         pos.row,
-      isActive:    true,
-    }]
+  const pending: PendingCommand = {
+    kind:           'POSITION',
+    owner:          ctx.owner,
+    sourceCardId:   'militia',
+    sourceAbility:  'militiaDeployHandler',
+    reason:         'Place the summoned Militia on your half of the board.',
+    validPositions: freeSquares,
+    deferredEvents: [],
   };
+
+  return { events: [], pending };
 }
 
 AbilityHandlerRegistry.register('militiaDeployHandler', militiaDeployHandler);

@@ -11,6 +11,7 @@ function onDeployHeal(ctx: AbilityContext): AbilityResult {
 
   const pending: PendingCommand = {
     kind:           'TARGET',
+    owner:          ctx.owner,
     sourceCardId:   ctx.cardId,
     sourceAbility:  AbilityType.ON_DEPLOY_HEAL_FRIENDLY,
     reason:         'Choose a friendly unit to fully restore HP.',
