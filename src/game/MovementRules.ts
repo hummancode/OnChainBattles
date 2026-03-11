@@ -20,7 +20,7 @@ import type { CustomPattern, PatternOffset } from './types/CardTypes';
 import type { Unit, Position } from './types/GameTypes';
 import { Player } from './types/GameTypes';
 import type { Board } from './Board';
-import { getCard } from './data/CardDefinitions';
+import { getCard } from './data/CardRegistry';
 
 // ═══════════════════════════════════════════════════════
 // PUBLIC API — called by GameEngine (after UnitQuery gate)

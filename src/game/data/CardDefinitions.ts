@@ -14,6 +14,7 @@ import {
 } from '../types/CardTypes.js';
 import type { CardDefinition } from '../types/CardTypes.js';
 import { AbilityType } from '../types/AbilityTypes';
+import { PATTERN_ARCHER_ATTACK, PATTERN_ASSASSIN_ATTACK, PATTERN_ASSASSIN_MOVE } from './MovementPresets';
 
 const U = CardClass.UNIT;
 const SP = CardClass.SPELL;
@@ -74,12 +75,8 @@ export const CARD_DEFINITIONS: CardDefinition[] = [
     flavorText: 'Precision over brute force.',
     class: U, allegiance: STD, subtypes: [], cost: 3, copies: 2,
     stats: { atk: 3, def: 1, movement: MovementType.OMNI_1, attackPattern: AtkPattern.DIAGONAL_RANGED_2,
-    customAttack : {
-        offsets: [{dx:1, dy:-1}, {dx:-1, dy:-1}, {dx:1, dy:1}, {dx:-1, dy:1}, {dx:2, dy:-2}, {dx:-2, dy:-2}, {dx:2, dy:2}, {dx:-2, dy:2}],  
-        range: 1,
-      },
-
-      },
+      customAttack: PATTERN_ARCHER_ATTACK,
+    },
 
      
     flags: [],
@@ -91,16 +88,9 @@ export const CARD_DEFINITIONS: CardDefinition[] = [
     id: 'assassin', name: 'Assassin',
     flavorText: 'The shadow moves. Then it\'s over.',
     class: U, allegiance: STD, subtypes: [], cost: 3, copies: 2,
-    stats: { atk: 4, def: 1, movement: MovementType.JUMP_DIAGONAL_1, attackPattern: AtkPattern.ON_JUMP, customAttack : {
-        offsets: [{dx:1, dy:-1}, {dx:-1, dy:-1}, {dx:1, dy:1}, {dx:-1, dy:1}],  
-        range: 1,
-      },
-      customMove : {
-        offsets: [{dx:2, dy:0}, {dx:-2, dy:0}, {dx:0, dy:2}, {dx:0, dy:-2}],  
-        range: 1,
-      },
-      
-      
+    stats: { atk: 4, def: 1, movement: MovementType.JUMP_DIAGONAL_1, attackPattern: AtkPattern.ON_JUMP,
+      customAttack: PATTERN_ASSASSIN_ATTACK,
+      customMove: PATTERN_ASSASSIN_MOVE,
     },
     
     flags: [],
@@ -430,57 +420,3 @@ export const CARD_DEFINITIONS: CardDefinition[] = [
 
 ];
 
-// ─────────────────────────────────────────────
-// LOOKUP MAP — O(1) by card id
-// ─────────────────────────────────────────────
-
-export const CARD_MAP: Map<string, CardDefinition> = new Map(
-  CARD_DEFINITIONS.map(c => [c.id, c])
-);
-
-export function getCard(id: string): CardDefinition {
-  const c = CARD_MAP.get(id);
-  if (!c) throw new Error(`[CardDefinitions] Unknown card id: "${id}"`);
-  return c;
-}
-
-// ─────────────────────────────────────────────
-// DEMO DECK — 31 cards (King pre-placed, not included)
-// Both players use identical deck, independently shuffled.
-// ─────────────────────────────────────────────
-
-// ─────────────────────────────────────────────
-// UNITS-ONLY DECK — 31 cards (King pre-placed, not included)
-// No spells or structures. Focused on unit combat for MVP playtesting.
-// Both players use identical pool, each gets an independently shuffled copy.
-// ─────────────────────────────────────────────
-
-export const UNITS_ONLY_DECK_IDS: string[] = [
-  // Standard units
-  'foot_soldier', 'foot_soldier', 'foot_soldier',  // 3 copies — cheap backbone
-  'pikeman',      'pikeman',                        // 2 — anti-cavalry
-  'archer',       'archer',                         // 2 — ranged
-  'assassin',     'assassin',                       // 2 — fast striker
-  'militia',      'militia',                        // 2 — expendable
-  'scout',        'scout',                          // 2 — board info
-  'lancer',       'lancer',                         // 2 — cavalry charge
-  'messenger',    'messenger',                      // 2 — utility
-  'mystic',                                         // 1 — revive wildcard
-  // Royal units
-  'swordsman',    'swordsman',                      // 2 — reliable fighter
-  'priest',       'priest',                         // 2 — healer
-  'inquisitor',   'inquisitor',                     // 2 — LEG drain threat
-  'knight',       'knight',                         // 2 — heavy cavalry
-  'scribe',       'scribe',                         // 2 — deck utility
-  'princess',                                       // 1 — CROWN boost
-  'commander',                                      // 1 — aura leader
-  'knights_guard',                                  // 1 — defensive elite
-];
-
-// Sanity check — must be exactly 31
-if (UNITS_ONLY_DECK_IDS.length !== 31) {
-  console.error(`[CardDefinitions] UNITS_ONLY_DECK_IDS has ${UNITS_ONLY_DECK_IDS.length} entries, expected 31`);
-}
-
-// Keep old name as alias so nothing else breaks during transition
-export const DEMO_DECK_IDS = UNITS_ONLY_DECK_IDS;

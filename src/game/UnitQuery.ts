@@ -19,7 +19,7 @@
 
 import type { Unit } from './types/GameTypes';
 import { MovementType, AtkPattern, CardFlag } from './types/CardTypes';
-import { getCard } from './data/CardDefinitions';
+import { getCard } from './data/CardRegistry';
 
 // ─────────────────────────────────────────────
 // CORE CAPABILITY CHECKS

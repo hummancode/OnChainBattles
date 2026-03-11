@@ -9,12 +9,13 @@
 // This keeps the economy tight: turn 3 → CROWN 3, cap 3. No hoarding.
 // ============================================================
 
-import type { GameModifiers as IGameModifiers, TimedEffect } from './types/GameTypes';
+import type { GameModifiers as GameModifiersSnapshot, TimedEffect } from './types/GameTypes';
 import { Player } from './types/GameTypes';
+import type { IGameModifiers } from './interfaces/IGameModifiers';
 
 const LEG_RATE_MIN = 1;
 
-export class GameModifiers {
+export class GameModifiers implements IGameModifiers {
   readonly player: Player;
 
   legRateBase: number   = 0;   // Grows +1 each turn via GameEngine.runLEGPhase
@@ -199,7 +200,7 @@ export class GameModifiers {
   // SERIALIZATION
   // ─────────────────────────────────────────────
 
-  snapshot(): IGameModifiers {
+  snapshot(): GameModifiersSnapshot {
     return {
       legRateBase:      this.legRateBase,
       legRateBonus:     this.legRateBonus,

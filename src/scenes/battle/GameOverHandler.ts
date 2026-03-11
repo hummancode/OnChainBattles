@@ -1,0 +1,42 @@
+// ============================================================
+// GameOverHandler.ts
+// Handles GAME_OVER event: records result + transitions scene.
+// ============================================================
+
+import { EventBus, EV } from '../../events/EventBus';
+import type { GameEngine } from '../../game/GameEngine';
+import GameState from '../../GameState';
+import SocketManager from '../../network/SocketManager';
+
+export function setupGameOverHandler(
+  scene: Phaser.Scene,
+  engine: GameEngine,
+  localPlayerIndex: number,
+  playerName: string,
+  opponentName: string,
+  isCryptoMode: boolean,
+): void {
+  EventBus.on(EV.GAME_OVER, (ev: any) => {
+    if (!scene.scene.isActive('BattleScene')) return;
+
+    const result = ev.result ?? ev;
+    const turnCount = result?.turns ?? (engine as any).getState().turn?.turnNumber ?? 0;
+    const reason = result?.reason ?? 'KING_DESTROYED';
+    const playerWon = (result?.winner ?? ev.winner) === localPlayerIndex;
+
+    if (playerWon) GameState.recordWin(); else GameState.recordLoss();
+
+    GameState.setLastMatch({
+      playerName, opponentName, playerRoll: 0, opponentRoll: 0, playerWon, isTie: false,
+      stakeAmount: GameState.currentStake, payout: playerWon ? GameState.currentStake * 2 * 0.95 : 0,
+    });
+    (GameState as any).lastMatchExtra = { reason, turnCount, winnerName: playerWon ? playerName : opponentName };
+
+    if (isCryptoMode) SocketManager.sendGameOver(localPlayerIndex, playerWon);
+
+    scene.time.delayedCall(1500, () => {
+      scene.cameras.main.fadeOut(300, 0, 0, 0);
+      scene.cameras.main.once('camerafadeoutcomplete', () => scene.scene.start('ResultScene'));
+    });
+  });
+}

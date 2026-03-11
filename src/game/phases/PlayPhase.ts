@@ -17,7 +17,7 @@
 import type { GameContext } from '../GameContext';
 import type { Unit } from '../types/GameTypes';
 import { Allegiance, CardClass, CardFlag } from '../types/CardTypes';
-import { getCard } from '../data/CardDefinitions';
+import { getCard } from '../data/CardRegistry';
 import { getValidDeploySquares } from '../MovementRules';
 import { resolveOnDeploy } from '../abilities/AbilityDispatcher';
 import { EngineStatus } from '../types/GameTypes';

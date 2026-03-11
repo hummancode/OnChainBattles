@@ -1,0 +1,75 @@
+// ============================================================
+// InputCoordinator.ts
+// Sets up SelectionManager with engine-backed callbacks.
+// ============================================================
+
+import type { GameEngine } from '../../game/GameEngine';
+import type { BattleLayoutJSON } from '../../game/types/UITypes';
+import { SelectionManager } from '../../input/SelectionManager';
+import SocketManager from '../../network/SocketManager';
+
+export function createSelectionManager(
+  engine: GameEngine,
+  layout: BattleLayoutJSON,
+  localPlayerIndex: number,
+): SelectionManager {
+  const getBoardUnit = (col: number, row: number) => {
+    const cell = (engine as any).getState().board.find((c: any) => c.col === col && c.row === row);
+    return cell?.unit ?? null;
+  };
+
+  return new SelectionManager(layout, {
+    getAttackRange: (col: number, row: number) => {
+      const unit = getBoardUnit(col, row);
+      if (!unit) return [];
+      return engine.getAttackRange(unit.instanceId).map((p: any) => ({ col: p.col, row: p.row }));
+    },
+    getValidMoves: (col: number, row: number) => {
+      const unit = getBoardUnit(col, row);
+      if (!unit) return [];
+      return engine.getValidMoveSquares(unit.instanceId).map((p: any) => ({ col: p.col, row: p.row }));
+    },
+    getValidAttacks: (col: number, row: number) => {
+      const unit = getBoardUnit(col, row);
+      if (!unit) return [];
+      return engine.getValidAttackSquares(unit.instanceId).map((p: any) => ({ col: p.col, row: p.row }));
+    },
+    getValidDeployPositions: () => {
+      return engine.getValidDeployPositions().map((p: any) => ({ col: p.col, row: p.row }));
+    },
+    playCard: (handIndex: number, col: number, row: number) => {
+      const ok = engine.playCard(handIndex, col, row);
+      if (ok !== false) SocketManager.sendGameAction({ type: 'PLAY_CARD', handIndex, col, row });
+    },
+    moveUnit: (fromCol: number, fromRow: number, toCol: number, toRow: number) => {
+      const unit = getBoardUnit(fromCol, fromRow);
+      if (!unit) return;
+      const ok = engine.moveUnit(unit.instanceId, toCol, toRow);
+      if (ok !== false) SocketManager.sendGameAction({ type: 'MOVE_UNIT', fromCol, fromRow, col: toCol, row: toRow });
+    },
+    attackUnit: (fromCol: number, fromRow: number, targetCol: number, targetRow: number) => {
+      const attacker = getBoardUnit(fromCol, fromRow);
+      const target   = getBoardUnit(targetCol, targetRow);
+      if (!attacker || !target) return;
+      const ok = engine.attackUnit(attacker.instanceId, target.instanceId);
+      if (ok !== false) SocketManager.sendGameAction({ type: 'ATTACK_UNIT', fromCol, fromRow, targetCol, targetRow });
+    },
+    selectTarget: (instanceId: string) => engine.selectTarget(instanceId),
+    selectPosition: (col: number, row: number) => {
+      engine.selectPosition(col, row);
+      SocketManager.sendGameAction({ type: 'SELECT_POSITION', col, row });
+    },
+    selectHandCard: () => {},
+    isAwaitingInput: () => (engine as any).getState().status === 'AWAITING_INPUT',
+    canAct: () => {
+      const state = (engine as any).getState();
+      return state.turn?.activePlayer === localPlayerIndex && state.turn?.phase === 'ACT';
+    },
+    isPlayerUnit: (col: number, row: number) => {
+      const unit = getBoardUnit(col, row);
+      return unit?.owner === localPlayerIndex;
+    },
+    isOccupied: (col: number, row: number) => getBoardUnit(col, row) !== null,
+    getPhase: () => (engine as any).getState().turn?.phase ?? 'DRAW',
+  } as any);
+}

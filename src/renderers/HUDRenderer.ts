@@ -14,10 +14,10 @@
 // ============================================================
 
 import Phaser from 'phaser';
-import type { BattleLayoutJSON, ThemeJSON, HUDSnapshot, ButtonStyle } from '../game/types/UITypes';
+import type { BattleLayoutJSON, ThemeJSON, HUDSnapshot } from '../game/types/UITypes';
 import { EventBus, EV } from '../events/EventBus';
 import { ThemeLoader } from '../config/ThemeLoader';
-import { setContainerHitArea } from '../utils/PhaserUtils';
+import { createButton } from './helpers/ButtonFactory';
 
 export class HUDRenderer {
   private scene: Phaser.Scene;
@@ -233,15 +233,16 @@ export class HUDRenderer {
 
     // End Turn button — positioned in right HUD area below phase label
     if (L.endTurnBtn.width > 0 && L.endTurnBtn.height > 0) {
-      this.endTurnBtn = this.makeButton(
-        L.endTurnBtn.x - L.endTurnBtn.width / 2,
-        L.endTurnBtn.y - L.endTurnBtn.height / 2,
-        L.endTurnBtn.width,
-        L.endTurnBtn.height,
-        'END TURN',
-        this.theme.buttons.endTurn,
-        () => { if (this.onEndTurn) this.onEndTurn(); }
-      );
+      this.endTurnBtn = createButton(this.scene, {
+        x: L.endTurnBtn.x - L.endTurnBtn.width / 2,
+        y: L.endTurnBtn.y - L.endTurnBtn.height / 2,
+        w: L.endTurnBtn.width,
+        h: L.endTurnBtn.height,
+        label: 'END TURN',
+        style: this.theme.buttons.endTurn,
+        fontFamily: this.theme.fonts.body.family,
+        onClick: () => { if (this.onEndTurn) this.onEndTurn(); },
+      });
     }
 
     // PASS button removed — END TURN handles phase advancement for both PLAY and ACT
@@ -269,54 +270,7 @@ export class HUDRenderer {
     gfx.fillRoundedRect(bar.x, bar.y, fillW, bar.height, 3);
   }
 
-  private makeButton(
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    label: string,
-    style: ButtonStyle,
-    onClick: () => void
-  ): Phaser.GameObjects.Container {
-    const container = this.scene.add.container(x, y);
-
-    const bg = this.scene.add.graphics();
-    bg.fillStyle(ThemeLoader.hexToNum(style.fillColor), 1);
-    bg.fillRoundedRect(0, 0, w, h, style.cornerRadius);
-    bg.lineStyle(style.strokeWidth, ThemeLoader.hexToNum(style.strokeColor), 1);
-    bg.strokeRoundedRect(0, 0, w, h, style.cornerRadius);
-
-    const txt = this.scene.add.text(w / 2, h / 2, label, {
-      fontFamily: this.theme.fonts.body.family,
-      fontSize: `${style.fontSize}px`,
-      color: style.textColor,
-    }).setOrigin(0.5, 0.5);
-
-    container.add([bg, txt]);
-    setContainerHitArea(container, w, h);
-
-    container.on('pointerover', () => {
-      bg.clear();
-      bg.fillStyle(ThemeLoader.hexToNum(style.hoverFillColor), 1);
-      bg.fillRoundedRect(0, 0, w, h, style.cornerRadius);
-      bg.lineStyle(style.strokeWidth, ThemeLoader.hexToNum(style.strokeColor), 1);
-      bg.strokeRoundedRect(0, 0, w, h, style.cornerRadius);
-      txt.setColor(style.hoverTextColor);
-    });
-
-    container.on('pointerout', () => {
-      bg.clear();
-      bg.fillStyle(ThemeLoader.hexToNum(style.fillColor), 1);
-      bg.fillRoundedRect(0, 0, w, h, style.cornerRadius);
-      bg.lineStyle(style.strokeWidth, ThemeLoader.hexToNum(style.strokeColor), 1);
-      bg.strokeRoundedRect(0, 0, w, h, style.cornerRadius);
-      txt.setColor(style.textColor);
-    });
-
-    container.on('pointerdown', onClick);
-
-    return container;
-  }
+  // makeButton extracted → helpers/ButtonFactory.ts createButton()
 
   private drawDashedRect(
     gfx: Phaser.GameObjects.Graphics,

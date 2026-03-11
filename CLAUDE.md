@@ -16,7 +16,7 @@ npm start
 npm run build
 
 # Backend multiplayer server (port 3001)
-node server/index.js
+npm run server
 
 # Smart contract tests
 npx hardhat test
@@ -32,7 +32,7 @@ npx hardhat ignition deploy --network fuji ignition/modules/Escrow.ts
 ### Three-tier system
 
 1. **Frontend** (`src/`) - Phaser 4 game in TypeScript, bundled with Vite
-2. **Backend** (`server/index.js`) - Express + Socket.io relay server; also holds the owner wallet to call escrow payout functions
+2. **Backend** (`server/`) - Express + Socket.io relay server in TypeScript; also holds the owner wallet to call escrow payout functions
 3. **Smart Contract** (`contracts/Escrow.sol`) - On-chain escrow for match stakes; winner gets pot minus 5% rake
 
 ### Frontend scene flow
@@ -52,7 +52,7 @@ Each scene lives in `src/scenes/` and has a corresponding renderer in `src/rende
 
 Renderers are decoupled from game logic. BoardRenderer, HandRenderer, HUDRenderer, OverlayRenderer each manage their own Phaser objects. Input flows through **SelectionManager** → GameEngine.
 
-### Multiplayer (`src/network/SocketManager.ts` ↔ `server/index.js`)
+### Multiplayer (`src/network/SocketManager.ts` ↔ `server/app.ts`)
 
 Socket.io relays all game actions between players. The server generates a shared `game_seed` for deterministic deck shuffling. In crypto mode, the server calls `Escrow.claimWinnings()` with the owner wallet after receiving `game_over`.
 
@@ -109,11 +109,11 @@ Issues and corrections discovered while executing the refactoring plan:
 | 1. AbilityResolver → Strategy | Done | Deleted 602 LOC monolith → 19 handler files + registry + dispatcher |
 | 2. Typed EventBus | Done | GameEventMap with 35+ typed events, fixed 5 real payload bugs |
 | 3. PendingCommand | Done | Removed callback anti-pattern → serializable PendingCommand union type + resolver |
-| 4. BattleScene Decomposition | Pending | |
-| 5. CardRenderer Split | Pending | |
-| 6. CardDefinitions Restructure | Pending | |
-| 7. Interface Extraction | Pending | |
-| 8. AuraSystem Chain | Pending | |
-| 9. Server TypeScript | Pending | |
-| 10. Renderer Utilities | Pending | |
+| 4. BattleScene Decomposition | Done | 496-LOC monolith → 5 coordinators + thin shell (~120 LOC) |
+| 5. CardRenderer Split | Done | 548-LOC monolith → 4 renderers + helpers + thin facade |
+| 6. CardDefinitions Restructure | Done | Extracted CardRegistry (frozen), DeckDefinitions, MovementPresets |
+| 7. Interface Extraction | Done | IBoard, IPlayerState, IGameModifiers interfaces + implements |
+| 8. AuraSystem Chain | Done | 270-LOC monolith → 7 processors + chain + helpers, class ~75 LOC |
+| 9. Server TypeScript | Done | JS monolith → 4 TS files (app, RoomManager, SessionManager, PayoutService) + shared NetworkEvents |
+| 10. Renderer Utilities | Done | TextureHelper, ButtonFactory, CardLayoutCalc + wired into HUD/Overlay/Hand renderers |
 | 11. GameState Cleanup | Pending | |

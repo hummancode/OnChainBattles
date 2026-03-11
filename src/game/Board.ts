@@ -15,11 +15,12 @@
 
 import type { Unit, BoardCell, Position } from './types/GameTypes';
 import { Player } from './types/GameTypes';
+import type { IBoard } from './interfaces/IBoard';
 
 /** Number of rows each player can deploy into (from their back edge). */
 export const DEPLOY_ROWS = 3;
 
-export class Board {
+export class Board implements IBoard {
   readonly cols: number;
   readonly rows: number;
   private cells: BoardCell[][];

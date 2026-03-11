@@ -2,7 +2,7 @@ import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
 import type { PendingCommand } from '../../pending/PendingCommand';
 import type { AbilityContext, AbilityResult } from '../types';
 import { Player } from '../types';
-import { getCard } from '../../data/CardDefinitions';
+import { getCard } from '../../data/CardRegistry';
 
 function treasonHandler(ctx: AbilityContext): AbilityResult {
   const opp = ctx.owner === Player.P1 ? Player.P2 : Player.P1;

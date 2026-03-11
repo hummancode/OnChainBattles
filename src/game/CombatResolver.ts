@@ -14,7 +14,7 @@
 
 import type { Unit } from './types/GameTypes';
 import type { Board } from './Board';
-import { getCard } from './data/CardDefinitions';
+import { getCard } from './data/CardRegistry';
 import { CombatTag } from './types/CardTypes';
 import {
   EvUnitAttacked, EvUnitDied, EvUnitTransformed,

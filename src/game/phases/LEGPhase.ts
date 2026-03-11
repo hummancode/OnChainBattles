@@ -19,7 +19,7 @@
 import type { GameContext } from '../GameContext';
 import { opponent } from '../GameContext';
 import { TurnPhase } from '../types/GameTypes';
-import { getCard } from '../data/CardDefinitions';
+import { getCard } from '../data/CardRegistry';
 import { resolveCastleAreaAttack, applyDamage, applyAutoHeal } from '../CombatResolver';
 
 const CROWN_CAP = 10;

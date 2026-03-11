@@ -5,7 +5,8 @@
 // Falls back to UNITS_ONLY_DECK_IDS if the file is missing or invalid.
 // ============================================================
 
-import { UNITS_ONLY_DECK_IDS, getCard } from '../game/data/CardDefinitions';
+import { UNITS_ONLY_DECK_IDS } from '../game/data/DeckDefinitions';
+import { getCard } from '../game/data/CardRegistry';
 
 class DeckLoaderClass {
   private deckIds: string[] | null = null;

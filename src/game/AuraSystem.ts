@@ -1,212 +1,116 @@
 // ============================================================
 // AuraSystem.ts
-// Recalculates ALL unit stats each LEG phase.
-// Algorithm: reset every unit to base stats → apply each
-// active aura in sequence → write final values back.
-// Pure TypeScript — no Phaser, no EventBus.
+// Recalculates ALL unit stats each LEG phase using a
+// Chain of Responsibility pattern.
 //
-// Auras are never stored incrementally; they are re-derived
-// from scratch each turn so stale state is impossible.
+// Algorithm: reset every unit to base stats → run processor
+// chain to accumulate deltas → apply deltas → run economy
+// processors for modifier recalculation.
+//
+// Pure TypeScript — no Phaser, no EventBus.
 // ============================================================
 
 import type { Unit } from './types/GameTypes';
 import { Player } from './types/GameTypes';
-import type { Board } from './Board';
-import type { GameModifiers } from './GameModifiers';
-import { getCard } from './data/CardDefinitions';
+import type { IBoard } from './interfaces/IBoard';
+import type { IGameModifiers } from './interfaces/IGameModifiers';
+import type { AuraProcessor, EconomyProcessor, StatDelta } from './auras/AuraProcessor';
+import { createStatChain, createEconomyChain, runStatChain } from './auras/AuraProcessorChain';
+import { getCard } from './data/CardRegistry';
 import { AbilityType } from './types/AbilityTypes';
+import { params } from './auras/auraHelpers';
 import type { EvAuraApplied } from './types/EventTypes';
 
-interface StatDelta {
-  atkDelta: number;
-  defDelta: number;
-  moveDelta: number;
-}
+export class AuraSystem {
+  private statChain: AuraProcessor[];
+  private economyChain: EconomyProcessor[];
 
-// Convenience: safely read params from any ability (CommonAbility or CustomAbility).
-// CustomAbility has no params — casting to any avoids the union type error.
-function params(ab: any): any {
-  return ab.params ?? {};
-}
-
-// ─────────────────────────────────────────────
-// MAIN ENTRY POINT
-// ─────────────────────────────────────────────
-
-/**
- * Full aura recalculation pass.
- * Call once per LEG phase before any ACT actions.
- * Mutates unit.currentAtk / currentDef / currentMovement in place.
- * Also updates GameModifiers royalCostDiscount and legRateBonus.
- *
- * Returns an EvAuraApplied event for the renderer (so it can
- * show stat-change indicators on cards that gained/lost buffs).
- */
-export function evaluateAuras(
-  board: Board,
-  mods: [GameModifiers, GameModifiers]
-): EvAuraApplied {
-  const allUnits = board.getAllUnits();
-
-  // ── Step 1: Reset every unit to base stats ──
-  for (const unit of allUnits) {
-    unit.currentAtk      = unit.baseAtk;
-    unit.currentDef      = Math.min(unit.currentDef, unit.maxDef);
-    unit.currentMovement = unit.baseMovement;
+  constructor() {
+    this.statChain = createStatChain();
+    this.economyChain = createEconomyChain();
   }
 
-  // ── Step 2: Collect per-unit deltas ──
-  const deltas = new Map<string, StatDelta>();
-  for (const unit of allUnits) {
-    deltas.set(unit.instanceId, { atkDelta: 0, defDelta: 0, moveDelta: 0 });
-  }
+  /**
+   * Full aura recalculation pass.
+   * Call once per LEG phase before any ACT actions.
+   * Mutates unit.currentAtk / currentDef / currentMovement in place.
+   * Also updates GameModifiers royalCostDiscount and legRateBonus.
+   */
+  evaluateAuras(board: IBoard, mods: [IGameModifiers, IGameModifiers]): EvAuraApplied {
+    const allUnits = board.getAllUnits();
 
-  // ── Step 3: Apply each aura source ──
-  for (const unit of allUnits) {
-    if (!unit.isActive) continue; // BUILD_DELAY units have no aura
-    const def = getCard(unit.cardId);
+    // ── Step 1: Reset every unit to base stats ──
+    for (const unit of allUnits) {
+      unit.currentAtk      = unit.baseAtk;
+      unit.currentDef      = Math.min(unit.currentDef, unit.maxDef);
+      unit.currentMovement = unit.baseMovement;
+    }
 
-    for (const ability of def.abilities) {
-      if (ability.type === 'CUSTOM') continue;
-      const p = params(ability);
+    // ── Step 2: Collect per-unit deltas ──
+    const deltas = new Map<string, StatDelta>();
+    for (const unit of allUnits) {
+      deltas.set(unit.instanceId, { atkDelta: 0, defDelta: 0, moveDelta: 0 });
+    }
 
-      switch (ability.type) {
+    // ── Step 3: Run stat processor chain for each active unit ──
+    for (const unit of allUnits) {
+      if (!unit.isActive) continue;
+      runStatChain(this.statChain, unit, allUnits, board, deltas);
+    }
 
-        // ── Castle: adjacent friendly +DEF ──
-        case AbilityType.AURA_ADJ_DEF: {
-          const adjacents = board.getAdjacentUnits(unit.position.col, unit.position.row);
-          for (const adj of adjacents) {
-            if (adj.owner === unit.owner) {
-              addDelta(deltas, adj.instanceId, 0, p.amount, 0);
-            }
-          }
-          break;
-        }
+    // ── Step 4: Apply deltas to currentAtk / currentMovement ──
+    const changes: EvAuraApplied['changes'] = [];
 
-        // ── Commander: own-half +DEF ──
-        case AbilityType.AURA_BOARD_HALF_DEF: {
-          const benefitOwner = p.half === 'OWN' ? unit.owner : otherPlayer(unit.owner);
-          for (const u of allUnits) {
-            if (u.owner === unit.owner && board.isOwnHalf(u.position.col, u.position.row, benefitOwner)) {
-              addDelta(deltas, u.instanceId, 0, p.amount, 0);
-            }
-          }
-          break;
-        }
+    for (const unit of allUnits) {
+      const d = deltas.get(unit.instanceId)!;
 
-        // ── Commander: enemy-half +ATK ──
-        case AbilityType.AURA_BOARD_HALF_ATK: {
-          const targetHalfOwner = p.half === 'ENEMY' ? otherPlayer(unit.owner) : unit.owner;
-          for (const u of allUnits) {
-            if (u.owner === unit.owner && board.isOwnHalf(u.position.col, u.position.row, targetHalfOwner)) {
-              addDelta(deltas, u.instanceId, p.amount, 0, 0);
-            }
-          }
-          break;
-        }
+      const prevAtk = unit.currentAtk;
+      const prevMov = unit.currentMovement;
 
-        // ── Village: adjacent enemies −movement ──
-        case AbilityType.AURA_VILLAGE_SLOW: {
-          const adjacents = board.getAdjacentUnits(unit.position.col, unit.position.row);
-          for (const adj of adjacents) {
-            if (adj.owner !== unit.owner) {
-              addDelta(deltas, adj.instanceId, 0, 0, -p.amount);
-            }
-          }
-          break;
-        }
+      unit.currentAtk      = Math.max(0, unit.currentAtk + d.atkDelta);
+      unit.currentMovement = Math.max(0, unit.currentMovement + d.moveDelta);
 
-        // ── Pikeman flank: +ATK +DEF if friendly on both sides ──
-        case AbilityType.AURA_PIKEMAN_FLANK: {
-          const { col, row } = unit.position;
-          const leftUnit  = board.isInBounds(col - 1, row) ? board.getUnit(col - 1, row) : null;
-          const rightUnit = board.isInBounds(col + 1, row) ? board.getUnit(col + 1, row) : null;
-          const hasLeft   = leftUnit  !== null && leftUnit.owner  === unit.owner;
-          const hasRight  = rightUnit !== null && rightUnit.owner === unit.owner;
-          if (hasLeft && hasRight) {
-            addDelta(deltas, unit.instanceId, p.bonusAtk, p.bonusDef, 0);
-          }
-          break;
-        }
-
-        // CAVALRY_COUNTER → combat-time only (CombatResolver)
-        // AURA_AUTO_HEAL  → LEG phase only (GameEngine.runLEGPhase)
-        // AURA_ROYAL_DISCOUNT / AURA_LEG_BONUS → Step 5 below
-        default:
-          break;
+      if (d.atkDelta !== 0 || d.defDelta !== 0 || d.moveDelta !== 0) {
+        changes.push({
+          instanceId: unit.instanceId,
+          col:        unit.position.col,
+          row:        unit.position.row,
+          atkDelta:   unit.currentAtk - prevAtk,
+          defDelta:   d.defDelta,
+          moveDelta:  unit.currentMovement - prevMov,
+        });
       }
     }
-  }
 
-  // ── Step 4: Apply deltas to currentAtk / currentMovement ──
-  const changes: EvAuraApplied['changes'] = [];
+    // ── Step 5: Run economy processors per player ──
+    for (const player of [Player.P1, Player.P2] as Player[]) {
+      const mod = mods[player];
+      const ownUnits = board.getUnitsOf(player);
 
-  for (const unit of allUnits) {
-    const d = deltas.get(unit.instanceId)!;
-
-    const prevAtk = unit.currentAtk;
-    const prevMov = unit.currentMovement;
-
-    unit.currentAtk      = Math.max(0, unit.currentAtk + d.atkDelta);
-    unit.currentMovement = Math.max(0, unit.currentMovement + d.moveDelta);
-
-    if (d.atkDelta !== 0 || d.defDelta !== 0 || d.moveDelta !== 0) {
-      changes.push({
-        instanceId: unit.instanceId,
-        col:        unit.position.col,
-        row:        unit.position.row,
-        atkDelta:   unit.currentAtk - prevAtk,
-        defDelta:   d.defDelta,
-        moveDelta:  unit.currentMovement - prevMov,
-      });
-    }
-  }
-
-  // ── Step 5: Recalculate economy modifiers ──
-  for (const player of [Player.P1, Player.P2] as Player[]) {
-    const mod = mods[player];
-    const ownUnits = board.getUnitsOf(player);
-
-    // Royal discount from Castle, Temple, Princess
-    let discount = 0;
-    for (const u of ownUnits) {
-      if (!u.isActive) continue;
-      const def = getCard(u.cardId);
-      for (const ab of def.abilities) {
-        if (ab.type === 'CUSTOM') continue;
-        if (ab.type === AbilityType.AURA_ROYAL_DISCOUNT) {
-          discount += params(ab).amount;
+      for (const processor of this.economyChain) {
+        const value = processor.process(ownUnits, mod);
+        if (processor.auraType === AbilityType.AURA_ROYAL_DISCOUNT) {
+          mod.royalCostDiscount = value;
+        } else if (processor.auraType === AbilityType.AURA_LEG_BONUS) {
+          mod.setLEGRateBonus(value);
         }
       }
     }
-    mod.royalCostDiscount = discount;
 
-    // LEG rate bonus from Princess
-    let legBonus = 0;
-    for (const u of ownUnits) {
-      if (!u.isActive) continue;
-      const def = getCard(u.cardId);
-      for (const ab of def.abilities) {
-        if (ab.type === 'CUSTOM') continue;
-        if (ab.type === AbilityType.AURA_LEG_BONUS && u.cardId !== 'king') {
-          legBonus += params(ab).amount;
-        }
-      }
-    }
-    mod.setLEGRateBonus(legBonus);
+    return { type: 'AURA_APPLIED', changes };
   }
 
-  return { type: 'AURA_APPLIED', changes };
+  recalculateModifiers(board: IBoard, mods: [IGameModifiers, IGameModifiers]): void {
+    this.evaluateAuras(board, mods);
+  }
 }
 
 // ─────────────────────────────────────────────
 // COMBAT-TIME AURA QUERIES
 // Called by CombatResolver / GameEngine at moment of combat.
+// These are standalone — not part of the chain.
 // ─────────────────────────────────────────────
 
-/**
- * Check if the Pikeman cavalry counter applies for this attack.
- */
 export function getCavalryCounterMultiplier(attacker: Unit, defender: Unit): number {
   const attDef = getCard(attacker.cardId);
   const defDef = getCard(defender.cardId);
@@ -223,49 +127,9 @@ export function getCavalryCounterMultiplier(attacker: Unit, defender: Unit): num
   return 1;
 }
 
-/**
- * Returns Kings Guard auto-heal amount if unit has the aura.
- */
 export function getAutoHealAmount(unit: Unit): number {
   const def = getCard(unit.cardId);
   const ab = def.abilities.find(ab => ab.type === AbilityType.AURA_AUTO_HEAL);
   if (!ab) return 0;
   return params(ab).amount;
-}
-
-// ─────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────
-
-function addDelta(
-  deltas: Map<string, StatDelta>,
-  instanceId: string,
-  atk: number,
-  def: number,
-  mov: number
-): void {
-  const d = deltas.get(instanceId);
-  if (!d) return;
-  d.atkDelta += atk;
-  d.defDelta += def;
-  d.moveDelta += mov;
-}
-
-function otherPlayer(p: Player): Player {
-  return p === Player.P1 ? Player.P2 : Player.P1;
-}
-
-// ─────────────────────────────────────────────
-// CLASS WRAPPER
-// GameEngine uses `new AuraSystem()` with instance methods.
-// ─────────────────────────────────────────────
-
-export class AuraSystem {
-  evaluateAuras(board: Board, mods: [GameModifiers, GameModifiers]): EvAuraApplied {
-    return evaluateAuras(board, mods);
-  }
-
-  recalculateModifiers(board: Board, mods: [GameModifiers, GameModifiers]): void {
-    evaluateAuras(board, mods);
-  }
 }

@@ -5,7 +5,7 @@ import { Player } from '../types/GameTypes';
 import type { Board } from '../Board';
 import type { PlayerState } from '../PlayerState';
 import type { GameModifiers } from '../GameModifiers';
-import { getCard } from '../data/CardDefinitions';
+import { getCard } from '../data/CardRegistry';
 export function resolveOnDeploy(
   cardId: string,
   owner: Player,

@@ -27,7 +27,7 @@ import { opponent } from '../GameContext';
 import type { Unit } from '../types/GameTypes';
 import { Player, EngineStatus } from '../types/GameTypes';
 import { AtkPattern } from '../types/CardTypes';
-import { getCard } from '../data/CardDefinitions';
+import { getCard } from '../data/CardRegistry';
 import { canUnitMove, canUnitAttack } from '../UnitQuery';
 import { isMoveValid, isAttackValid, isLancerForwardMove } from '../MovementRules';
 import { resolveAttackWithCounter } from '../CombatResolver';

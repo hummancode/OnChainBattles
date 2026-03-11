@@ -18,7 +18,8 @@ import type {
 import { EventBus, EV } from '../events/EventBus';
 import { ThemeLoader } from '../config/ThemeLoader';
 import { CardRenderer } from './CardRenderer';
-import { getCard } from '../game/data/CardDefinitions';
+import { createButton } from './helpers/ButtonFactory';
+import { getCard } from '../game/data/CardRegistry';
 
 export interface TargetSelectConfig {
   prompt: string;
@@ -93,16 +94,18 @@ export class OverlayRenderer {
     panel.add(prompt);
 
     // Cancel button
-    const cancelBtn = this.makePanelButton(
-      0, L.height / 2 - 30,
-      'CANCEL',
-      this.theme.buttons.secondary,
-      80, 28,
-      () => {
+    const cancelBtn = createButton(this.scene, {
+      x: 0, y: L.height / 2 - 30,
+      w: 80, h: 28,
+      label: 'CANCEL',
+      style: this.theme.buttons.secondary,
+      fontFamily: this.theme.fonts.body.family,
+      onClick: () => {
         this.close();
         EventBus.emit(EV.INTERACTION_RESOLVED, { cancelled: true });
-      }
-    );
+      },
+      centered: true,
+    });
     panel.add(cancelBtn);
 
     this.activeOverlay = panel;
@@ -182,22 +185,26 @@ export class OverlayRenderer {
     }
 
     // Play again button
-    const playAgainBtn = this.makePanelButton(
-      -60, L.height / 2 - 40,
-      'PLAY AGAIN',
-      this.theme.buttons.primary,
-      120, 40,
-      onPlayAgain
-    );
+    const playAgainBtn = createButton(this.scene, {
+      x: -60, y: L.height / 2 - 40,
+      w: 120, h: 40,
+      label: 'PLAY AGAIN',
+      style: this.theme.buttons.primary,
+      fontFamily: this.theme.fonts.body.family,
+      onClick: onPlayAgain,
+      centered: true,
+    });
 
     // Menu button
-    const menuBtn = this.makePanelButton(
-      80, L.height / 2 - 40,
-      'MENU',
-      this.theme.buttons.secondary,
-      80, 40,
-      onMenu
-    );
+    const menuBtn = createButton(this.scene, {
+      x: 80, y: L.height / 2 - 40,
+      w: 80, h: 40,
+      label: 'MENU',
+      style: this.theme.buttons.secondary,
+      fontFamily: this.theme.fonts.body.family,
+      onClick: onMenu,
+      centered: true,
+    });
 
     panel.add([...children, playAgainBtn, menuBtn]);
 
@@ -329,13 +336,15 @@ export class OverlayRenderer {
     });
 
     // Close button
-    const closeBtn = this.makePanelButton(
-      0, L.height / 2 - 25,
-      'CLOSE',
-      this.theme.buttons.secondary,
-      80, 30,
-      () => { this.close(); onClose(); }
-    );
+    const closeBtn = createButton(this.scene, {
+      x: 0, y: L.height / 2 - 25,
+      w: 80, h: 30,
+      label: 'CLOSE',
+      style: this.theme.buttons.secondary,
+      fontFamily: this.theme.fonts.body.family,
+      onClick: () => { this.close(); onClose(); },
+      centered: true,
+    });
     panel.add(closeBtn);
 
     this.activeOverlay = panel;
@@ -387,45 +396,7 @@ export class OverlayRenderer {
     return panel;
   }
 
-  private makePanelButton(
-    x: number, y: number,
-    label: string,
-    style: typeof this.theme.buttons.primary,
-    w: number, h: number,
-    onClick: () => void
-  ): Phaser.GameObjects.Container {
-    const container = this.scene.add.container(x, y);
-
-    const bg = this.scene.add.graphics();
-    bg.fillStyle(ThemeLoader.hexToNum(style.fillColor), 1);
-    bg.fillRoundedRect(-w / 2, -h / 2, w, h, style.cornerRadius);
-    bg.lineStyle(style.strokeWidth, ThemeLoader.hexToNum(style.strokeColor), 1);
-    bg.strokeRoundedRect(-w / 2, -h / 2, w, h, style.cornerRadius);
-
-    const txt = this.scene.add.text(0, 0, label, {
-      fontFamily: this.theme.fonts.body.family,
-      fontSize: `${style.fontSize}px`,
-      color: style.textColor,
-    }).setOrigin(0.5, 0.5);
-
-    container.add([bg, txt]);
-    container.setSize(w, h);
-    container.setInteractive();
-
-    container.on('pointerover', () => {
-      bg.clear();
-      bg.fillStyle(ThemeLoader.hexToNum(style.hoverFillColor), 1);
-      bg.fillRoundedRect(-w / 2, -h / 2, w, h, style.cornerRadius);
-    });
-    container.on('pointerout', () => {
-      bg.clear();
-      bg.fillStyle(ThemeLoader.hexToNum(style.fillColor), 1);
-      bg.fillRoundedRect(-w / 2, -h / 2, w, h, style.cornerRadius);
-    });
-    container.on('pointerdown', onClick);
-
-    return container;
-  }
+  // makePanelButton extracted → helpers/ButtonFactory.ts createButton()
 
   private showDimmer(alpha: number): void {
     const L = this.layout.overlays.dimmer;

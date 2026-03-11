@@ -28,7 +28,7 @@ import { PlayerState } from './PlayerState';
 import { AuraSystem } from './AuraSystem';
 import { UnitFactory, movementToNumber } from './UnitFactory';
 import { DeckLoader } from '../config/DeckLoader';
-import { getCard } from './data/CardDefinitions';
+import { getCard } from './data/CardRegistry';
 
 import { Player, TurnPhase, EngineStatus } from './types/GameTypes';
 import type { Position, GameStateSnapshot } from './types/GameTypes';

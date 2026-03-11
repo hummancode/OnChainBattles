@@ -17,6 +17,7 @@ import type { BattleLayoutJSON, ThemeJSON, CardRenderData } from '../game/types/
 import { EventBus, EV } from '../events/EventBus';
 import { CardRenderer } from './CardRenderer';
 import { setContainerHitArea } from '../utils/PhaserUtils';
+import { fanPosition } from './helpers/CardLayoutCalc';
 
 export class HandRenderer {
   private scene: Phaser.Scene;
@@ -195,35 +196,13 @@ setContainerHitArea(cardContainer, fullW, fullH);
     }
   }
 
-  /**
-   * Calculate a card's X, Y, and rotation angle in the fan layout.
-   * All values are derived from layout.leftHUD.hand config.
-   */
+  // cardPosition extracted → helpers/CardLayoutCalc.ts fanPosition()
   private cardPosition(
     index: number,
     total: number,
     H: typeof this.layout.leftHUD.hand
   ): { x: number; y: number; angle: number } {
-    if (total === 1) {
-      return { x: H.x - H.cardWidth / 2, y: H.y, angle: 0 };
-    }
-
-    // Stack vertically with optional fan
-    const totalHeight = (total - 1) * (H.cardHeight + H.spacing);
-    const startY = H.y;
-
-    // Fan angle: cards fan from center, negative left / positive right
-    const centerIdx = (total - 1) / 2;
-    const angle = (index - centerIdx) * H.fanAngle;
-
-    // X shift based on fan angle so cards spread slightly
-    const xShift = (index - centerIdx) * (H.fanAngle * 0.8);
-
-    return {
-      x: H.x - H.cardWidth / 2 + xShift,
-      y: startY + index * (H.cardHeight + H.spacing),
-      angle,
-    };
+    return fanPosition(index, total, H);
   }
 
   private refreshCardVisual(index: number): void {

@@ -114,15 +114,6 @@ class SocketManagerClass {
     });
   }
 
-  sendDiceRoll(roll: number): void {
-    console.log(`[SocketManager] Sending roll: ${roll}`);
-    this.socket?.emit("diceRoll", {
-      roomCode: GameState.roomCode,
-      playerName: GameState.playerName,
-      roll,
-    });
-  }
-
   private registerEvents(): void {
     if (!this.socket) return;
 

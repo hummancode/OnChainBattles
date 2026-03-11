@@ -15,7 +15,7 @@
 import type { Unit, Position } from './types/GameTypes';
 import { Player } from './types/GameTypes';
 import { MovementType, AtkPattern, CombatTag } from './types/CardTypes';
-import { getCard } from './data/CardDefinitions';
+import { getCard } from './data/CardRegistry';
 import { computeCanAttackAfterMove } from './UnitQuery';
 
 export class UnitFactory {

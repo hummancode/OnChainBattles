@@ -5,10 +5,11 @@
 // ============================================================
 
 import { Player } from './types/GameTypes';
-import { getCard } from './data/CardDefinitions';
-import GameState from '../GameState';  // ADD at top
+import { getCard } from './data/CardRegistry';
+import GameState from '../GameState';
+import type { IPlayerState } from './interfaces/IPlayerState';
 
-export class PlayerState {
+export class PlayerState implements IPlayerState {
   readonly player: Player;
 
   hand: string[]    = []; // cardIds (may have duplicates per copies rule)

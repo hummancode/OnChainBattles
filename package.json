@@ -15,7 +15,9 @@
     "homepage": "https://github.com/phaserjs/template-vite-ts#readme",
     "scripts": {
         "start": "vite --config vite/config.dev.mjs",
-        "build": "vite build --config vite/config.prod.mjs && phaser-asset-pack-hashing -j -r dist"
+        "build": "vite build --config vite/config.prod.mjs && phaser-asset-pack-hashing -j -r dist",
+        "server:build": "tsc -p tsconfig.server.json",
+        "server": "tsc -p tsconfig.server.json && node server/dist/server/app.js"
     },
     "devDependencies": {
         "@nomicfoundation/hardhat-ethers": "^4.0.4",
@@ -23,6 +25,7 @@
         "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.2",
         "@types/chai": "^4.3.20",
         "@types/chai-as-promised": "^8.0.2",
+        "@types/express": "^5.0.6",
         "@types/mocha": "^10.0.10",
         "@types/node": "^22.19.11",
         "chai": "^5.3.3",
