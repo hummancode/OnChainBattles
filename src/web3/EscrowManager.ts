@@ -74,7 +74,7 @@ class EscrowManagerClass {
       console.log(`[EscrowManager] createMatch tx sent: ${tx.hash}`);
 
       const receipt = await tx.wait();
-      console.log(`[EscrowManager] createMatch confirmed — block: ${receipt.blockNumber}, tx: ${tx.hash}`);
+      console.log(`[EscrowManager] createMatch confirmed — block: ${receipt?.blockNumber ?? '?'}, tx: ${tx.hash}`);
 
       return tx.hash;
     } catch (err: any) {
@@ -98,7 +98,7 @@ class EscrowManagerClass {
       console.log(`[EscrowManager] joinMatch tx sent: ${tx.hash}`);
 
       const receipt = await tx.wait();
-      console.log(`[EscrowManager] joinMatch confirmed — block: ${receipt.blockNumber}, tx: ${tx.hash}`);
+      console.log(`[EscrowManager] joinMatch confirmed — block: ${receipt?.blockNumber ?? '?'}, tx: ${tx.hash}`);
 
       return tx.hash;
     } catch (err: any) {

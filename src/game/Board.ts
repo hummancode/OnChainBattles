@@ -246,7 +246,7 @@ export class Board implements IBoard {
     return this.getCells().map(cell => ({
       col: cell.col,
       row: cell.row,
-      unit: cell.unit ? { ...cell.unit } : null, // Shallow copy
+      unit: cell.unit ? { ...cell.unit, position: { ...cell.unit.position } } : null,
     }));
   }
 

@@ -88,7 +88,7 @@ Socket.io relays all game actions between players. The server generates a shared
 
 Issues and corrections discovered while executing the refactoring plan:
 
-- **PatternResolver.ts is NOT dead code** — Plan says delete it (P2.7, Step 1.8), but it actively exports `resolveCustomPattern()` and offset constants (`OFFSETS_OMNI`, `OFFSETS_HV`, `OFFSETS_DIAGONAL`, `OFFSETS_FORWARD_ONLY`) used by MovementRules. Do NOT delete. Could be moved/renamed in Phase 6 instead.
+- **PatternResolver.ts was deleted** — After Phase 6, MovementRules.ts has its own `resolveCustomPattern()` and offset constants. PatternResolver.ts became dead code (zero imports) and was removed.
 - **Line number references are wrong** — The handler extraction table (Step 1.4) references "codebase.md" line numbers (5176-5619), not actual AbilityResolver.ts lines. The real file was ~603 lines. Use the actual source, not the table line numbers.
 - **PendingInteraction missing `count` field** — The `PendingInteraction` interface in `AbilityTypes.ts` has no `count` property, but `warHornHandler` sets `count: 1`. This caused TS2353 at line 487. Phase 3 (PendingCommand) should add `count` to the DISCARD variant.
 - **EventBus payloads differ from EventTypes.ts** — `wireEngineToEventBus` in BattleScene enriches/transforms engine events before emitting to the bus. The GameEventMap must reflect these UI-adapted payloads, NOT the raw `Ev*` interfaces from EventTypes.ts. Key differences:
@@ -116,4 +116,4 @@ Issues and corrections discovered while executing the refactoring plan:
 | 8. AuraSystem Chain | Done | 270-LOC monolith → 7 processors + chain + helpers, class ~75 LOC |
 | 9. Server TypeScript | Done | JS monolith → 4 TS files (app, RoomManager, SessionManager, PayoutService) + shared NetworkEvents |
 | 10. Renderer Utilities | Done | TextureHelper, ButtonFactory, CardLayoutCalc + wired into HUD/Overlay/Hand renderers |
-| 11. GameState Cleanup | Pending | |
+| 11. GameState Cleanup | Done | BoardGameResult replaces MatchResult+MatchState, typed fields, 0 `as any` casts |

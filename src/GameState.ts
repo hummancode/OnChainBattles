@@ -11,21 +11,27 @@ export enum RoomAction {
     Join = "Join",
 }
 
-export interface MatchResult {
+export interface BoardGameResult {
     playerName: string;
     opponentName: string;
-    playerRoll: number;
-    opponentRoll: number;
     playerWon: boolean;
     isTie: boolean;
+    reason: string;       // 'KING_DESTROYED' | 'DISCONNECT' | 'SURRENDER' | 'TIMEOUT'
+    turns: number;
     stakeAmount: number;
     payout: number;
+}
+
+export interface PayoutResult {
+    success: boolean;
+    txHash?: string;
+    error?: string;
 }
 
 class GameStateClass {
     // ─── Player ───────────────────────────────────────────────
     playerName: string = "Player";
-    opponentName: string = "";          // ← ADDED
+    opponentName: string = "";
     walletAddress: string = "";
     isWalletConnected: boolean = false;
 
@@ -35,13 +41,18 @@ class GameStateClass {
     // ─── Room ─────────────────────────────────────────────────
     roomCode: string = "";
     roomAction: RoomAction = RoomAction.Create;
-    playerIndex: number = 0;     // ← ADD: 0 = P1/creator, 1 = P2/joiner
-    gameSeed: number = 0;        // ← ADD: shared shuffle seed (set in Step 5)
+    playerIndex: number = 0;     // 0 = P1/creator, 1 = P2/joiner
+    gameSeed: number = 0;        // Shared shuffle seed from server
+
     // ─── Match ────────────────────────────────────────────────
     currentStake: number = 1;
     winCount: number = 0;
     lossCount: number = 0;
-    lastMatch: MatchResult | null = null;
+    lastMatch: BoardGameResult | null = null;
+
+    // ─── Crypto ───────────────────────────────────────────────
+    depositTxHash: string | null = null;
+    payoutResult: PayoutResult | null = null;
 
     // ─── Setters ──────────────────────────────────────────────
     setPlayerName(name: string): void {
@@ -49,7 +60,7 @@ class GameStateClass {
         console.log(`[GameState] Player name set: ${name}`);
     }
 
-    setOpponentName(name: string): void {   // ← ADDED
+    setOpponentName(name: string): void {
         this.opponentName = name;
         console.log(`[GameState] Opponent name set: ${name}`);
     }
@@ -85,15 +96,17 @@ class GameStateClass {
         this.roomAction = action;
         console.log(`[GameState] Room action: ${action}`);
     }
-    setPlayerIndex(index: number): void {
-    this.playerIndex = index;
-    console.log(`[GameState] Player index set: ${index} (${index === 0 ? 'P1/Creator' : 'P2/Joiner'})`);
-}
 
-setGameSeed(seed: number): void {
-    this.gameSeed = seed;
-    console.log(`[GameState] Game seed set: ${seed}`);
-}
+    setPlayerIndex(index: number): void {
+        this.playerIndex = index;
+        console.log(`[GameState] Player index set: ${index} (${index === 0 ? 'P1/Creator' : 'P2/Joiner'})`);
+    }
+
+    setGameSeed(seed: number): void {
+        this.gameSeed = seed;
+        console.log(`[GameState] Game seed set: ${seed}`);
+    }
+
     // ─── Match ────────────────────────────────────────────────
     recordWin(): void {
         this.winCount++;
@@ -105,9 +118,14 @@ setGameSeed(seed: number): void {
         console.log(`[GameState] Loss recorded. Total: ${this.lossCount}`);
     }
 
-    setLastMatch(match: MatchResult): void {
+    setLastMatch(match: BoardGameResult): void {
         this.lastMatch = match;
         console.log(`[GameState] Match saved — Won: ${match.playerWon}`);
+    }
+
+    clearMatchData(): void {
+        this.depositTxHash = null;
+        this.payoutResult = null;
     }
 
     // ─── Debug ────────────────────────────────────────────────

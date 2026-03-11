@@ -1,7 +1,7 @@
 // ============================================================
 // ResultScene.ts
 // Shows match result after BattleScene ends.
-// Reads GameState.lastMatch + lastMatchExtra + payoutResult.
+// Reads GameState.lastMatch + payoutResult.
 //
 // Handles:
 //   - Victory / Defeat / Tie headline
@@ -17,18 +17,6 @@
 import Phaser from 'phaser';
 import GameState, { GameMode } from '../GameState';
 
-interface MatchExtra {
-  reason?: string;
-  turnCount?: number;
-  winnerName?: string;
-}
-
-interface PayoutResult {
-  success: boolean;
-  txHash?: string;
-  error?: string;
-}
-
 export default class ResultScene extends Phaser.Scene {
   constructor() {
     super('ResultScene');
@@ -37,8 +25,7 @@ export default class ResultScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale;
     const match = GameState.lastMatch;
-    const extra = (GameState as any).lastMatchExtra as MatchExtra | undefined;
-    const payoutResult = (GameState as any).payoutResult as PayoutResult | undefined;
+    const payoutResult = GameState.payoutResult;
 
     // ── Background ─────────────────────────────────────────────
     if (this.textures.exists('bg_result')) {
@@ -132,14 +119,14 @@ export default class ResultScene extends Phaser.Scene {
     yPos += 40;
 
     // ── Reason ─────────────────────────────────────────────────
-    if (extra?.reason) {
+    if (match.reason) {
       const reasonMap: Record<string, string> = {
         'KING_DESTROYED': 'King destroyed',
         'DISCONNECT':     'Opponent disconnected',
         'SURRENDER':      'Surrender',
         'TIMEOUT':        'Timeout',
       };
-      const reasonText = reasonMap[extra.reason] ?? extra.reason;
+      const reasonText = reasonMap[match.reason] ?? match.reason;
       this.add.text(panelX, yPos, reasonText, {
         fontSize: '16px', color: '#AAAAAA',
       }).setOrigin(0.5);
@@ -147,8 +134,8 @@ export default class ResultScene extends Phaser.Scene {
     }
 
     // ── Turn count ─────────────────────────────────────────────
-    if (extra?.turnCount) {
-      this.add.text(panelX, yPos, `Turns played: ${extra.turnCount}`, {
+    if (match.turns > 0) {
+      this.add.text(panelX, yPos, `Turns played: ${match.turns}`, {
         fontSize: '16px', color: '#AAAAAA',
       }).setOrigin(0.5);
       yPos += 30;
@@ -245,9 +232,7 @@ export default class ResultScene extends Phaser.Scene {
   }
 
   private goToMenu(): void {
-    // Clear payout data so it doesn't leak into next match
-    (GameState as any).payoutResult = undefined;
-    (GameState as any).lastMatchExtra = undefined;
+    GameState.clearMatchData();
 
     this.cameras.main.fadeOut(200, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {

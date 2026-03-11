@@ -21,24 +21,10 @@ export interface RoomCallbacks {
   onOpponentJoined: (opponentName: string) => void;
   onOpponentAction: (action: GameAction) => void;
   onOpponentDisconnected: () => void;
-  onOpponentRollReceived: (roll: number, opponentName: string) => void;
   onError: (message: string) => void;
   onBothCryptoReady?: () => void;
-  onCryptoMatchResult?: (result: CryptoMatchResult) => void;
-  onTieReroll?: () => void;
   onPayoutResult?: (result: { success: boolean; txHash?: string; error?: string }) => void;
   onHostDepositConfirmed?: () => void;
-  // ← ADD
-}
-
-export interface CryptoMatchResult {
-  winnerName: string;
-  loserName: string;
-  winnerRoll: number;
-  loserRoll: number;
-  txHash?: string;
-  success: boolean;
-  error?: string;
 }
 
 class SocketManagerClass {
@@ -143,11 +129,6 @@ this.socket.on("game_seed", (data: { seed: number }) => {
   console.log(`[SocketManager] Game seed received: ${data.seed}`);
   GameState.setGameSeed(data.seed);
 });
-    this.socket.on("opponentRoll", (data: { roll: number; playerName: string }) => {
-      console.log(`[SocketManager] Opponent rolled: ${data.roll}`);
-      this.callbacks?.onOpponentRollReceived(data.roll, data.playerName);
-    });
-
     this.socket.on("opponentDisconnected", () => {
       console.log("[SocketManager] Opponent disconnected.");
       this.callbacks?.onOpponentDisconnected();
@@ -164,20 +145,11 @@ this.socket.on("game_seed", (data: { seed: number }) => {
       this.callbacks?.onBothCryptoReady?.();
     });
 
-    this.socket.on("cryptoMatchResult", (result: CryptoMatchResult) => {
-      console.log("[SocketManager] Crypto match result:", result);
-      this.callbacks?.onCryptoMatchResult?.(result);
-    });
 this.socket.on('payout_result', (data: { success: boolean; txHash?: string; error?: string }) => {
   console.log('[SocketManager] Payout result:', data);
-  (GameState as any).payoutResult = data;
+  GameState.payoutResult = data;
   this.callbacks?.onPayoutResult?.(data);
 });
-    this.socket.on("tieReroll", () => {
-      console.log("[SocketManager] Tie — re-rolling");
-      this.callbacks?.onTieReroll?.();
-    });
-
   }
 sendGameAction(action: GameAction): void {
   if (!this.socket?.connected) {

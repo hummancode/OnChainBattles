@@ -243,11 +243,12 @@ export default class MainMenuScene extends Phaser.Scene {
       : match.isTie ? '#f5a623'
       : '#ff6666';
 
+    const turnsInfo = match.turns > 0 ? ` (${match.turns} turns)` : '';
     const resultMsg = match.playerWon
-      ? `Last: You beat ${match.opponentName}! (${match.playerRoll} vs ${match.opponentRoll})`
+      ? `Last: You beat ${match.opponentName}!${turnsInfo}`
       : match.isTie
       ? `Last: Tie with ${match.opponentName}`
-      : `Last: ${match.opponentName} beat you (${match.playerRoll} vs ${match.opponentRoll})`;
+      : `Last: ${match.opponentName} beat you${turnsInfo}`;
 
     this.add.text(LAYOUT.matchBanner.x, LAYOUT.matchBanner.y, resultMsg, {
       fontSize: '15px',

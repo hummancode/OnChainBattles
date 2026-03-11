@@ -206,7 +206,7 @@ loadDeck(cardIds: string[], playerIndex: number = 0): void {
   }
 
 private shuffle(arr: string[]): void {
-  const seed = (GameState as any).gameSeed;
+  const seed = GameState.gameSeed;
   if (seed && seed > 0) {
     this.seededShuffle(arr, seed);
   } else {

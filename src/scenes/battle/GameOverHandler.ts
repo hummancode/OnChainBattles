@@ -27,10 +27,11 @@ export function setupGameOverHandler(
     if (playerWon) GameState.recordWin(); else GameState.recordLoss();
 
     GameState.setLastMatch({
-      playerName, opponentName, playerRoll: 0, opponentRoll: 0, playerWon, isTie: false,
-      stakeAmount: GameState.currentStake, payout: playerWon ? GameState.currentStake * 2 * 0.95 : 0,
+      playerName, opponentName, playerWon, isTie: false,
+      reason, turns: turnCount,
+      stakeAmount: GameState.currentStake,
+      payout: playerWon ? GameState.currentStake * 2 * 0.95 : 0,
     });
-    (GameState as any).lastMatchExtra = { reason, turnCount, winnerName: playerWon ? playerName : opponentName };
 
     if (isCryptoMode) SocketManager.sendGameOver(localPlayerIndex, playerWon);
 

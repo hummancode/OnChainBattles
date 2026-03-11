@@ -171,7 +171,6 @@ setContainerHitArea(cardContainer, fullW, fullH);
       cardContainer.on('pointerover',  () => this.onCardHover(idx));
       cardContainer.on('pointerout',   () => this.onCardHoverEnd(idx));
       cardContainer.on('pointerdown',  () => this.onCardClick(idx));
-      cardContainer.on('pointerup',    () => {});
 
       this.handContainer.add(cardContainer);
       this.cardContainers.push(cardContainer);

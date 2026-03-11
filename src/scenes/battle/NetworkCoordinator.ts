@@ -53,13 +53,12 @@ export function handleOpponentDisconnect(deps: NetworkCoordinatorDeps): void {
 
   GameState.recordWin();
   GameState.setLastMatch({
-    playerName, opponentName, playerRoll: 0, opponentRoll: 0,
-    playerWon: true, isTie: false, stakeAmount: GameState.currentStake,
+    playerName, opponentName, playerWon: true, isTie: false,
+    reason: 'DISCONNECT',
+    turns: (engine as any).getState()?.turn?.turnNumber ?? 0,
+    stakeAmount: GameState.currentStake,
     payout: GameState.currentMode === 'CryptoPlay' ? GameState.currentStake * 2 * 0.95 : 0,
   });
-  (GameState as any).lastMatchExtra = {
-    reason: 'DISCONNECT', turnCount: (engine as any).getState()?.turn?.turnNumber ?? 0, winnerName: playerName,
-  };
 
   scene.add.rectangle(640, 360, 600, 120, 0x000000, 0.85);
   scene.add.text(640, 345, 'Opponent disconnected', { fontSize: '26px', color: '#FF6666', align: 'center' }).setOrigin(0.5);
@@ -78,7 +77,6 @@ export function setupSocketCallbacks(deps: NetworkCoordinatorDeps): void {
     onOpponentJoined: (name) => GameState.setOpponentName(name),
     onOpponentAction: (action: GameAction) => replayOpponentAction(deps, action),
     onOpponentDisconnected: () => handleOpponentDisconnect(deps),
-    onOpponentRollReceived: () => {},
     onError: (msg) => console.error('[NetworkCoordinator] Socket error:', msg),
     onPayoutResult: () => {},
   });

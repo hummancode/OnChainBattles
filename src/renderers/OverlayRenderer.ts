@@ -286,12 +286,15 @@ export class OverlayRenderer {
     container.add(blocker);
     container.bringToTop(detail);
 
-    // ESC key to close
+    // ESC key to close — track so we can remove on close()
     const escKey = this.scene.input.keyboard?.addKey('ESC');
-    escKey?.once('down', () => {
+    const escHandler = () => {
       this.close();
       EventBus.emit(EV.DETAIL_HIDE, {});
-    });
+    };
+    escKey?.once('down', escHandler);
+    // Remove ESC listener when overlay is destroyed (e.g. clicked away)
+    container.once('destroy', () => escKey?.off('down', escHandler));
 
     this.activeOverlay = container;
     this.rootContainer.add(container);

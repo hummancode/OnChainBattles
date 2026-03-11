@@ -262,9 +262,6 @@ this.subStatusText = this.add.text(LAYOUT.subStatus.x, LAYOUT.subStatus.y,
   onOpponentDisconnected: () => this.onOpponentDisconnected(),
   onError: (msg) => this.onSocketError(msg),
   onBothCryptoReady: () => this.onBothCryptoReady(),
-  onOpponentRollReceived: () => {},
-  onCryptoMatchResult: () => {},
-  onTieReroll: () => {},
   onHostDepositConfirmed: () => this.onHostDepositConfirmed(),
 
 });
@@ -371,7 +368,7 @@ private onHostDepositConfirmed(): void {
     }
 
     // Store tx hash for ResultScene display
-    (GameState as any).depositTxHash = txHash;
+    GameState.depositTxHash = txHash;
 
     this.cryptoPhase = 'waiting_opponent_deposit';
     this.statusText.setText('Funds locked ✓  Waiting for opponent...').setColor('#4fc3f7');

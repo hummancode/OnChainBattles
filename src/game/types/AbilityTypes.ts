@@ -1,7 +1,7 @@
 // ============================================================
 // AbilityTypes.ts
 // All ability type strings and ability context interfaces.
-// AbilityResolver switches on these strings.
+// AbilityDispatcher resolves these via handler registry.
 // ============================================================
 
 // ─────────────────────────────────────────────

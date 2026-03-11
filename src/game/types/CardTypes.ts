@@ -127,5 +127,5 @@ export interface CommonAbility {
 
 export interface CustomAbility {
   type: 'CUSTOM';
-  handler: string;             // Handler key — resolved in AbilityResolver
+  handler: string;             // Handler key — resolved in AbilityDispatcher
 }
