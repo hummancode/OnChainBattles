@@ -171,16 +171,24 @@ export class GameEngine implements IGameEngineAPI {
   }
 
   getState(): GameStateSnapshot {
+    // Lazily computed — only build the acted set when accessed
+    let actedSet: Set<string> | null = null;
+    const board = this.board;
+
     return {
       turn: {
         turnNumber: this.turnNumber,
         activePlayer: this.activePlayer,
         phase: this.phase,
-        unitsActedThisTurn: new Set(
-          this.board.getAllUnits()
-            .filter(u => u.hasActed || u.hasMoved)
-            .map(u => u.instanceId)
-        ),
+        get unitsActedThisTurn(): Set<string> {
+          if (!actedSet) {
+            actedSet = new Set<string>();
+            for (const u of board.getAllUnits()) {
+              if (u.hasActed || u.hasMoved) actedSet.add(u.instanceId);
+            }
+          }
+          return actedSet;
+        },
       },
       modifiers: [this.mods[0].snapshot(), this.mods[1].snapshot()],
       players:   [this.players[0].snapshot(), this.players[1].snapshot()],
@@ -215,7 +223,14 @@ export class GameEngine implements IGameEngineAPI {
     if (this.phase !== TurnPhase.ACT) return false;
 
     const ctx = this.buildContext();
-    return executeMove(ctx, unitId, col, row);
+    const success = executeMove(ctx, unitId, col, row);
+
+    if (ctx.pending) {
+      this.pending = ctx.pending;
+    }
+    this.syncFromContext(ctx);
+
+    return success;
   }
 
   attackUnit(unitId: string, targetId: string): boolean {
@@ -297,11 +312,14 @@ export class GameEngine implements IGameEngineAPI {
     for (const e of events) { this.applyEvent(e); this.emit(e); }
   }
 
-  /** Cancel the current pending interaction (e.g., user pressed Cancel). */
+  /** Cancel the current pending interaction (e.g., user pressed Cancel / ESC).
+   *  Does NOT emit INTERACTION_RESOLVED — the UI-initiated cancel already
+   *  emitted it, so clearPending()'s extra emit would cause a double-fire. */
   cancelPending(): void {
     if (!this.pending) return;
     console.log('[GameEngine] Pending interaction cancelled');
-    this.clearPending();
+    this.pending = null;
+    this.status  = EngineStatus.IDLE;
   }
 
   // ─────────────────────────────────────────────
@@ -381,6 +399,9 @@ export class GameEngine implements IGameEngineAPI {
   private syncFromContext(ctx: GameContext): void {
     this.phase  = ctx.phase;
     this.status = ctx.status;
+    if (ctx.pending) {
+      this.pending = ctx.pending;
+    }
   }
 
   // ─────────────────────────────────────────────
@@ -392,12 +413,13 @@ export class GameEngine implements IGameEngineAPI {
       case 'UNIT_PLACED': {
         const exists = this.board.getUnitById(event.instanceId);
         if (!exists) {
+          // Create unit with the event's instanceId to avoid post-emit mutation.
+          // UnitFactory generates a new ID, but we override it to match the event
+          // so subscribers already holding this event object see a consistent ID.
           const newUnit = this.unitFactory.create(event.cardId, event.owner, { col: event.col, row: event.row });
           newUnit.isActive = event.isActive;
+          newUnit.instanceId = event.instanceId;
           this.board.placeUnit(newUnit);
-          // Sync event instanceId to the UnitFactory-generated one so
-          // downstream listeners (BoardRenderer) use the correct key.
-          event.instanceId = newUnit.instanceId;
         }
         break;
       }
@@ -440,17 +462,28 @@ export class GameEngine implements IGameEngineAPI {
       }
 
       case 'CARD_DRAWN': {
-        if (event.cardId === '__DRAW_OVERFLOW__') {
-          const ps = this.players[event.player];
+        const ps = this.players[event.player];
+        if (event.cardId === '__DRAW__') {
+          const drawn = ps.drawCards(1);
+          if (drawn.length > 0) {
+            event.cardId = drawn[0];
+            event.handIndex = ps.hand.length - 1;
+            event.deckRemaining = ps.deck.length;
+          }
+        } else if (event.cardId.startsWith('__DRAW_FILTERED_')) {
+          const filter = event.cardId.replace('__DRAW_FILTERED_', '').replace('__', '');
+          const drawn = ps.drawCardsFiltered(1, filter as 'ROYAL' | 'STANDARD');
+          if (drawn.length > 0) {
+            event.cardId = drawn[0];
+            event.handIndex = ps.hand.length - 1;
+            event.deckRemaining = ps.deck.length;
+          }
+        } else if (event.cardId === '__DRAW_OVERFLOW__') {
           const drawn = ps.drawCardsOverflow(1);
           if (drawn.length > 0) {
-            this.emit({
-              type: 'CARD_DRAWN',
-              player: event.player,
-              cardId: drawn[0],
-              handIndex: ps.hand.length - 1,
-              deckRemaining: ps.deck.length,
-            });
+            event.cardId = drawn[0];
+            event.handIndex = ps.hand.length - 1;
+            event.deckRemaining = ps.deck.length;
           }
         }
         break;

@@ -9,7 +9,7 @@ OnChainBattles is a blockchain-integrated card/strategy game built with Phaser 4
 ## Common Commands
 
 ```bash
-# Frontend dev server (Vite, port 3000)
+# Frontend dev server (Vite, port 8080)
 npm start
 
 # Production build (outputs to dist/)
@@ -18,13 +18,21 @@ npm run build
 # Backend multiplayer server (port 3001)
 npm run server
 
-# Smart contract tests
+# Game logic tests (vitest, tests/ folder)
+npm run test:game           # single run — all 74 tests
+npm run test:game:watch     # watch mode
+npm run test:smoke          # game loop smoke test (run after major changes)
+
+# Smart contract tests (Hardhat, test/ folder)
 npx hardhat test
 npx hardhat test solidity   # Solidity tests only
 npx hardhat test mocha       # TypeScript integration tests only
 
 # Deploy contract to Fuji testnet
 npx hardhat ignition deploy --network fuji ignition/modules/Escrow.ts
+
+# Full dev start (server + frontend)
+dev_start.bat
 ```
 
 ## Architecture
@@ -34,6 +42,13 @@ npx hardhat ignition deploy --network fuji ignition/modules/Escrow.ts
 1. **Frontend** (`src/`) - Phaser 4 game in TypeScript, bundled with Vite
 2. **Backend** (`server/`) - Express + Socket.io relay server in TypeScript; also holds the owner wallet to call escrow payout functions
 3. **Smart Contract** (`contracts/Escrow.sol`) - On-chain escrow for match stakes; winner gets pot minus 5% rake
+
+### Supporting folders
+
+- **`tests/`** — Game logic tests (vitest). Engine, phases, abilities, pending interactions. Phaser is mocked via `tests/mocks/phaser.ts`.
+- **`test/`** — Hardhat/Solidity contract tests (mocha + chai). Separate from game tests.
+- **`context/`** — Project context docs for Claude and developers. Architecture plans, known issues, network protocol, changelogs. Read these first when onboarding.
+- **`shared/`** — Types shared between frontend and server (`NetworkEvents.ts`)
 
 ### Frontend scene flow
 

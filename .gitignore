@@ -20,5 +20,10 @@
 # Hardhat coverage reports
 /coverage
 
+# Environment files (contain secrets)
+.env
+.env.local
+.env.*.local
+
 # Claude Code local settings
 .claude/

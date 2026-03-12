@@ -124,6 +124,11 @@ class GameStateClass {
     }
 
     clearMatchData(): void {
+        this.roomCode = "";
+        this.gameSeed = 0;
+        this.playerIndex = 0;
+        this.opponentName = "";
+        this.lastMatch = null;
         this.depositTxHash = null;
         this.payoutResult = null;
     }

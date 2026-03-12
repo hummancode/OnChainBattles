@@ -56,8 +56,8 @@ export function refreshCanActIndicators(engine: any): void {
   EventBus.emit('CAN_ACT_UPDATE', { cells: canActCells });
 }
 
-export function wireEngineToEventBus(engine: any, localPlayerIndex: number): void {
-  engine.on((event: any) => {
+export function wireEngineToEventBus(engine: any, localPlayerIndex: number): () => void {
+  const handler = (event: any) => {
     switch (event.type) {
 
       case 'UNIT_PLACED': {
@@ -190,5 +190,7 @@ export function wireEngineToEventBus(engine: any, localPlayerIndex: number): voi
         break;
       }
     }
-  });
+  };
+  engine.on(handler);
+  return () => engine.off(handler);
 }

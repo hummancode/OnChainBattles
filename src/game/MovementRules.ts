@@ -215,7 +215,8 @@ export const OFFSETS_L_JUMP: PatternOffset[] = [
 
 /** BFS omni-directional movement up to maxDist. */
 function getOmniMoves(col: number, row: number, maxDist: number, board: Board): Position[] {
-  const visited = new Set<string>([`${col},${row}`]);
+  // Use numeric keys (col * 100 + row) instead of string interpolation
+  const visited = new Set<number>([col * 100 + row]);
   const result: Position[] = [];
   const queue = [{ col, row, dist: 0 }];
 
@@ -225,7 +226,7 @@ function getOmniMoves(col: number, row: number, maxDist: number, board: Board): 
 
     for (const [dc, dr] of DIRS_OMNI) {
       const nc = curr.col + dc, nr = curr.row + dr;
-      const key = `${nc},${nr}`;
+      const key = nc * 100 + nr;
       if (!board.isInBounds(nc, nr) || visited.has(key)) continue;
       visited.add(key);
       if (board.getUnit(nc, nr) === null) {

@@ -26,6 +26,15 @@ export class Board implements IBoard {
   private cells: BoardCell[][];
   private unitIndex: Map<string, Unit> = new Map(); // instanceId → Unit
 
+  /** Dirty-flagged cache for unit list queries. Invalidated on any mutation. */
+  private _allUnitsCache: Unit[] | null = null;
+  private _unitsOfCache: [Unit[], Unit[]] | null = null; // [P1, P2]
+
+  private invalidateUnitCache(): void {
+    this._allUnitsCache = null;
+    this._unitsOfCache = null;
+  }
+
   constructor(cols = 7, rows = 7) {
     this.cols = cols;
     this.rows = rows;
@@ -76,7 +85,14 @@ export class Board implements IBoard {
 
   /** Returns all units belonging to a player. */
   getUnitsOf(player: Player): Unit[] {
-    return Array.from(this.unitIndex.values()).filter(u => u.owner === player);
+    if (!this._unitsOfCache) {
+      const p1: Unit[] = [], p2: Unit[] = [];
+      for (const u of this.unitIndex.values()) {
+        (u.owner === Player.P1 ? p1 : p2).push(u);
+      }
+      this._unitsOfCache = [p1, p2];
+    }
+    return this._unitsOfCache[player];
   }
 
   /** Returns the King unit for a player, or null if dead. */
@@ -85,16 +101,24 @@ export class Board implements IBoard {
   }
 
   /** Returns all structure units (STATIC subtype) on the board. */
+  private static readonly STRUCTURE_IDS = new Set(['castle', 'temple', 'village']);
+
   getStructures(player?: Player): Unit[] {
-    const all = Array.from(this.unitIndex.values()).filter(u =>
-      ['castle', 'temple', 'village'].includes(u.cardId)
-    );
-    return player !== undefined ? all.filter(u => u.owner === player) : all;
+    const result: Unit[] = [];
+    for (const u of this.unitIndex.values()) {
+      if (Board.STRUCTURE_IDS.has(u.cardId) && (player === undefined || u.owner === player)) {
+        result.push(u);
+      }
+    }
+    return result;
   }
 
   /** Returns all units. */
   getAllUnits(): Unit[] {
-    return Array.from(this.unitIndex.values());
+    if (!this._allUnitsCache) {
+      this._allUnitsCache = Array.from(this.unitIndex.values());
+    }
+    return this._allUnitsCache;
   }
 
   /** Returns all cells as a flat array (for serialization). */
@@ -180,6 +204,7 @@ export class Board implements IBoard {
     }
     this.cells[row][col].unit = unit;
     this.unitIndex.set(unit.instanceId, unit);
+    this.invalidateUnitCache();
   }
 
   /** Remove a unit from the board (death, capture, return). */
@@ -189,6 +214,7 @@ export class Board implements IBoard {
     const { col, row } = unit.position;
     this.cells[row][col].unit = null;
     this.unitIndex.delete(instanceId);
+    this.invalidateUnitCache();
     return unit;
   }
 
@@ -253,6 +279,7 @@ export class Board implements IBoard {
   /** Clear the entire board. Used for game reset. */
   clear(): void {
     this.unitIndex.clear();
+    this.invalidateUnitCache();
     for (let r = 0; r < this.rows; r++) {
       for (let c = 0; c < this.cols; c++) {
         this.cells[r][c].unit = null;

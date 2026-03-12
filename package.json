@@ -17,7 +17,10 @@
         "start": "vite --config vite/config.dev.mjs",
         "build": "vite build --config vite/config.prod.mjs && phaser-asset-pack-hashing -j -r dist",
         "server:build": "tsc -p tsconfig.server.json",
-        "server": "tsc -p tsconfig.server.json && node server/dist/server/app.js"
+        "server": "tsc -p tsconfig.server.json && node server/dist/server/app.js",
+        "test:game": "vitest run",
+        "test:game:watch": "vitest",
+        "test:smoke": "vitest run tests/engine/gameLoop.test.ts"
     },
     "devDependencies": {
         "@nomicfoundation/hardhat-ethers": "^4.0.4",
@@ -35,7 +38,8 @@
         "phaser-asset-pack-hashing": "^1.0.6",
         "terser": "^5.28.1",
         "typescript": "~5.8.0",
-        "vite": "^7.3.1"
+        "vite": "^7.3.1",
+        "vitest": "^4.1.0"
     },
     "dependencies": {
         "@phaserjs/editor-scripts-base": "^2.0.1",

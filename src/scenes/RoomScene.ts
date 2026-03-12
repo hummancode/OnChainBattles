@@ -15,6 +15,7 @@ import Phaser from 'phaser';
 import GameState, { GameMode, RoomAction } from '../GameState';
 import SocketManager from '../network/SocketManager';
 import EscrowManager, { STAKE_AVAX } from '../web3/EscrowManager';
+import WalletManager from '../web3/WalletManager';
 import { MenuButton } from '../ui/MenuButton';
 import { ToastNotification } from '../ui/ToastNotification';
 import { ShareHelper } from '../ui/ShareHelper';
@@ -54,6 +55,7 @@ export default class RoomScene extends Phaser.Scene {
   private opponentName: string = '';
   private cryptoPhase: CryptoPhase = 'idle';
   private currentRoomCode: string = '';
+  private pendingTimers: Phaser.Time.TimerEvent[] = [];
 
   constructor() {
     super('RoomScene');
@@ -283,7 +285,7 @@ private onHostDepositConfirmed(): void {
     this.shareBtn.text.setVisible(true);
 
     if (this.isCryptoMode && GameState.walletAddress) {
-      SocketManager.registerWallet(GameState.walletAddress);
+      this.signAndRegisterWallet();
     }
   }
 
@@ -297,7 +299,7 @@ private onHostDepositConfirmed(): void {
     this.shareBtn.text.setVisible(true);
 
     if (this.isCryptoMode && GameState.walletAddress) {
-      SocketManager.registerWallet(GameState.walletAddress);
+      this.signAndRegisterWallet();
     }
   }
 
@@ -332,12 +334,12 @@ private onHostDepositConfirmed(): void {
     }
   } else {
     this.statusText.setText('Opponent joined! Entering battle...');
-    this.time.delayedCall(800, () => this.enterBattle());
+    this.pendingTimers.push(this.time.delayedCall(800, () => this.enterBattle()));
   }
 }
   private onOpponentDisconnected(): void {
     this.statusText.setText('Opponent disconnected.').setColor('#ff4444');
-    this.time.delayedCall(3000, () => this.scene.start('MainMenuScene'));
+    this.pendingTimers.push(this.time.delayedCall(3000, () => this.scene.start('MainMenuScene')));
   }
 
   private onSocketError(msg: string): void {
@@ -347,7 +349,7 @@ private onHostDepositConfirmed(): void {
   private onBothCryptoReady(): void {
     this.cryptoPhase = 'both_ready';
     this.statusText.setText('Funds locked! Entering battle...').setColor('#00ff88');
-    this.time.delayedCall(1000, () => this.enterBattle());
+    this.pendingTimers.push(this.time.delayedCall(1000, () => this.enterBattle()));
   }
 
   // ─── Crypto deposit flow ─────────────────────────────────────
@@ -373,15 +375,39 @@ private onHostDepositConfirmed(): void {
     this.cryptoPhase = 'waiting_opponent_deposit';
     this.statusText.setText('Funds locked ✓  Waiting for opponent...').setColor('#4fc3f7');
     this.subStatusText.setText('');
-    SocketManager.registerWallet(GameState.walletAddress!);
+    this.signAndRegisterWallet();
     SocketManager.signalCryptoReady();
   } catch (err: any) {
     this.statusText.setText(`Deposit failed: ${err.message}`).setColor('#ff4444');
-    this.time.delayedCall(4000, () => this.scene.start('MainMenuScene'));
+    this.pendingTimers.push(this.time.delayedCall(4000, () => this.scene.start('MainMenuScene')));
   }
 }
 
+  // ─── Wallet registration with signature ─────────────────────
+
+  private async signAndRegisterWallet(): Promise<void> {
+    const wallet = GameState.walletAddress;
+    if (!wallet) return;
+    const signer = WalletManager.getSigner();
+    if (!signer) {
+      console.warn('[RoomScene] No signer available for wallet verification');
+      return;
+    }
+    try {
+      const message = `OnChainBattles:${GameState.roomCode}:${Date.now()}`;
+      const signature = await signer.signMessage(message);
+      SocketManager.registerWallet(wallet, message, signature);
+    } catch (err) {
+      console.error('[RoomScene] Wallet signature failed:', err);
+    }
+  }
+
   // ─── Scene transition ────────────────────────────────────────
+
+  shutdown(): void {
+    for (const timer of this.pendingTimers) timer.destroy();
+    this.pendingTimers = [];
+  }
 
   private enterBattle(): void {
     this.cameras.main.fadeOut(300, 0, 0, 0);

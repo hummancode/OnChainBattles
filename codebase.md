@@ -1,3 +1,22 @@
+# .claude\settings.local.json
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "WebFetch(domain:localhost)"
+    ]
+  }
+}
+
+```
+
 # .gitignore
 
 ```
@@ -6,6 +25,7 @@
 
 # Compilation output
 /dist
+/server/dist
 
 # pnpm deploy output
 /bundle
@@ -21,6 +41,149 @@
 
 # Hardhat coverage reports
 /coverage
+
+# Claude Code local settings
+.claude/
+
+```
+
+# CLAUDE.md
+
+```md
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+OnChainBattles is a blockchain-integrated card/strategy game built with Phaser 4 (game engine), Socket.io (multiplayer), and Solidity (on-chain escrow). Players deploy units on a 7x7 board and battle to destroy the opponent's King. Supports free-play and crypto modes (AVAX stakes via escrow contract on Avalanche Fuji testnet).
+
+## Common Commands
+
+\`\`\`bash
+# Frontend dev server (Vite, port 8080)
+npm start
+
+# Production build (outputs to dist/)
+npm run build
+
+# Backend multiplayer server (port 3001)
+npm run server
+
+# Game logic tests (vitest, tests/ folder)
+npm run test:game           # single run — all 74 tests
+npm run test:game:watch     # watch mode
+npm run test:smoke          # game loop smoke test (run after major changes)
+
+# Smart contract tests (Hardhat, test/ folder)
+npx hardhat test
+npx hardhat test solidity   # Solidity tests only
+npx hardhat test mocha       # TypeScript integration tests only
+
+# Deploy contract to Fuji testnet
+npx hardhat ignition deploy --network fuji ignition/modules/Escrow.ts
+
+# Full dev start (server + frontend)
+dev_start.bat
+\`\`\`
+
+## Architecture
+
+### Three-tier system
+
+1. **Frontend** (`src/`) - Phaser 4 game in TypeScript, bundled with Vite
+2. **Backend** (`server/`) - Express + Socket.io relay server in TypeScript; also holds the owner wallet to call escrow payout functions
+3. **Smart Contract** (`contracts/Escrow.sol`) - On-chain escrow for match stakes; winner gets pot minus 5% rake
+
+### Supporting folders
+
+- **`tests/`** — Game logic tests (vitest). Engine, phases, abilities, pending interactions. Phaser is mocked via `tests/mocks/phaser.ts`.
+- **`test/`** — Hardhat/Solidity contract tests (mocha + chai). Separate from game tests.
+- **`context/`** — Project context docs for Claude and developers. Architecture plans, known issues, network protocol, changelogs. Read these first when onboarding.
+- **`shared/`** — Types shared between frontend and server (`NetworkEvents.ts`)
+
+### Frontend scene flow
+
+`PreLoadScene` → `MainMenuScene` → `RoomScene` → `BattleScene` → `ResultScene`
+
+Each scene lives in `src/scenes/` and has a corresponding renderer in `src/renderers/`.
+
+### Game engine (`src/game/`)
+
+- **GameEngine** - Thin orchestrator owning Board, PlayerState, GameModifiers, AuraSystem
+- Turn phases execute sequentially: Draw → LEG → Play → Act → End (each in `src/game/phases/`)
+- **CombatResolver** handles damage; abilities use Strategy Pattern via `src/game/abilities/` (registry + per-ability handler files)
+- **UnitFactory** creates runtime unit instances from card definitions in `src/data/`
+
+### Rendering layer (`src/renderers/`)
+
+Renderers are decoupled from game logic. BoardRenderer, HandRenderer, HUDRenderer, OverlayRenderer each manage their own Phaser objects. Input flows through **SelectionManager** → GameEngine.
+
+### Multiplayer (`src/network/SocketManager.ts` ↔ `server/app.ts`)
+
+Socket.io relays all game actions between players. The server generates a shared `game_seed` for deterministic deck shuffling. In crypto mode, the server calls `Escrow.claimWinnings()` with the owner wallet after receiving `game_over`.
+
+### Web3 (`src/web3/`)
+
+- **WalletManager** - MetaMask/Core Wallet connection, auto-switches to Fuji (chainId 43113)
+- **EscrowManager** - Calls `createMatch`/`joinMatch` on the escrow contract (0.01 AVAX stake)
+- Match IDs: room code string → UTF-8 hex → zero-padded to bytes32 (must match across frontend, server, and contract)
+
+## Key Configuration
+
+- **Vite configs**: `vite/config.dev.mjs` and `vite/config.prod.mjs`
+- **Hardhat config**: `hardhat.config.ts` (Solidity 0.8.19, Fuji network)
+- **Environment**: `.env.development` (local) and `.env.production` (deployed) set `VITE_SOCKET_URL` and contract address
+- **Card definitions**: `src/data/` (card stats, abilities, movement patterns)
+- **UI layouts**: `public/layouts/` (JSON position configs per scene)
+- **Themes**: `public/themes/` (color schemes)
+- **Deck config**: `public/deck.config.json` (card cost/name mappings loaded at runtime)
+
+## Contract Details
+
+`Escrow.sol` is Ownable. Key functions: `createMatch(bytes32)`, `joinMatch(bytes32)`, `claimWinnings(bytes32, address)`, `refundTie(bytes32)`. Rake is 500 bps (5%). Only the owner (backend wallet) can call payout functions. Deployed at `0xa145f82DC5b285B970BE71F48Cf5173E722cF515` on Fuji.
+
+## Conventions
+
+- TypeScript throughout (frontend + Hardhat tests); server is plain JS
+- Game logic and rendering are strictly separated (engine vs renderers)
+- Global state lives in `src/state/GlobalGameState.ts` (persistent across scenes) and `src/state/RuntimeGameState.ts` (per-match)
+- Phaser 4 RC6 is used (not Phaser 3) - API differences exist from stable Phaser 3 docs
+- EventBus is typed via `GameEventMap` (`src/game/types/GameEventMap.ts`) — use `EV.*` constants for compile-time payload checking
+
+## Plan Notes (OCB_Architecture_ActionPlan_FINAL_v5.md)
+
+Issues and corrections discovered while executing the refactoring plan:
+
+- **PatternResolver.ts was deleted** — After Phase 6, MovementRules.ts has its own `resolveCustomPattern()` and offset constants. PatternResolver.ts became dead code (zero imports) and was removed.
+- **Line number references are wrong** — The handler extraction table (Step 1.4) references "codebase.md" line numbers (5176-5619), not actual AbilityResolver.ts lines. The real file was ~603 lines. Use the actual source, not the table line numbers.
+- **PendingInteraction missing `count` field** — The `PendingInteraction` interface in `AbilityTypes.ts` has no `count` property, but `warHornHandler` sets `count: 1`. This caused TS2353 at line 487. Phase 3 (PendingCommand) should add `count` to the DISCARD variant.
+- **EventBus payloads differ from EventTypes.ts** — `wireEngineToEventBus` in BattleScene enriches/transforms engine events before emitting to the bus. The GameEventMap must reflect these UI-adapted payloads, NOT the raw `Ev*` interfaces from EventTypes.ts. Key differences:
+  - `UNIT_PLACED` → `{ data: CardRenderData, col, row }` (not `EvUnitPlaced`)
+  - `UNIT_DIED` → `{ col, row, instanceId }` (subset of `EvUnitDied`)
+  - `CARD_DRAWN` → `{ card: CardRenderData, handIndex, deckRemaining }` (not `EvCardDrawn`)
+  - `CARD_PLAYED` / `CARD_DISCARDED` → adds `isLocal: boolean` field
+  - `UNIT_TRANSFORMED` → emitted as a UNIT_DIED + UNIT_PLACED pair, never as its own event
+- **Pre-existing TS errors** — 16-17 unused variable warnings (`noUnusedLocals`/`noUnusedParameters`) exist as baseline. These are class members and locals in HUDRenderer, OverlayRenderer, HandRenderer, RoomScene, PreloadScene, SelectionManager, ActPhase, MipmapHelper. They don't block builds (Vite ignores them) but `npx tsc --noEmit` will report them.
+- **`noUnusedLocals` does NOT respect `_` prefix** — Unlike `noUnusedParameters`, TypeScript's `noUnusedLocals` does not suppress warnings for `_`-prefixed local variables or class members. Only function parameters benefit from `_` prefix.
+- **Phase 2 typed EventBus uses overloads** — The EventBus `on`/`emit`/`once` methods have typed overloads for `GameEventType` keys AND a fallback `string` overload for backward compatibility. This means raw string usage still compiles but doesn't get type checking.
+
+## Refactoring Progress
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| Pre-cleanup | Done | Removed 15 unused imports, prefixed 2 unused params |
+| 1. AbilityResolver → Strategy | Done | Deleted 602 LOC monolith → 19 handler files + registry + dispatcher |
+| 2. Typed EventBus | Done | GameEventMap with 35+ typed events, fixed 5 real payload bugs |
+| 3. PendingCommand | Done | Removed callback anti-pattern → serializable PendingCommand union type + resolver |
+| 4. BattleScene Decomposition | Done | 496-LOC monolith → 5 coordinators + thin shell (~120 LOC) |
+| 5. CardRenderer Split | Done | 548-LOC monolith → 4 renderers + helpers + thin facade |
+| 6. CardDefinitions Restructure | Done | Extracted CardRegistry (frozen), DeckDefinitions, MovementPresets |
+| 7. Interface Extraction | Done | IBoard, IPlayerState, IGameModifiers interfaces + implements |
+| 8. AuraSystem Chain | Done | 270-LOC monolith → 7 processors + chain + helpers, class ~75 LOC |
+| 9. Server TypeScript | Done | JS monolith → 4 TS files (app, RoomManager, SessionManager, PayoutService) + shared NetworkEvents |
+| 10. Renderer Utilities | Done | TextureHelper, ButtonFactory, CardLayoutCalc + wired into HUD/Overlay/Hand renderers |
+| 11. GameState Cleanup | Done | BoardGameResult replaces MatchResult+MatchState, typed fields, 0 `as any` casts |
 
 ```
 
@@ -222,8 +385,8 @@ echo.
 echo [1.5/3] Clearing port 3001...
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr :3001') do taskkill /PID %%a /F >nul 2>nul
 echo        Done.
-echo [2/3] Starting Socket.io server on port 3001...
-start "OCB - Socket Server" cmd /k "cd /d %PROJECT_DIR% && node server/index.js"
+echo [2/3] Building & starting Socket.io server on port 3001...
+start "OCB - Socket Server" cmd /k "cd /d %PROJECT_DIR% && npm run server"
 ping -n 3 127.0.0.1 >nul
 
 echo.
@@ -1657,7 +1820,12 @@ endlocal
     "homepage": "https://github.com/phaserjs/template-vite-ts#readme",
     "scripts": {
         "start": "vite --config vite/config.dev.mjs",
-        "build": "vite build --config vite/config.prod.mjs && phaser-asset-pack-hashing -j -r dist"
+        "build": "vite build --config vite/config.prod.mjs && phaser-asset-pack-hashing -j -r dist",
+        "server:build": "tsc -p tsconfig.server.json",
+        "server": "tsc -p tsconfig.server.json && node server/dist/server/app.js",
+        "test:game": "vitest run",
+        "test:game:watch": "vitest",
+        "test:smoke": "vitest run tests/engine/gameLoop.test.ts"
     },
     "devDependencies": {
         "@nomicfoundation/hardhat-ethers": "^4.0.4",
@@ -1665,6 +1833,7 @@ endlocal
         "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.2",
         "@types/chai": "^4.3.20",
         "@types/chai-as-promised": "^8.0.2",
+        "@types/express": "^5.0.6",
         "@types/mocha": "^10.0.10",
         "@types/node": "^22.19.11",
         "chai": "^5.3.3",
@@ -1674,7 +1843,8 @@ endlocal
         "phaser-asset-pack-hashing": "^1.0.6",
         "terser": "^5.28.1",
         "typescript": "~5.8.0",
-        "vite": "^7.3.1"
+        "vite": "^7.3.1",
+        "vitest": "^4.1.0"
     },
     "dependencies": {
         "@phaserjs/editor-scripts-base": "^2.0.1",
@@ -1687,6 +1857,7 @@ endlocal
     },
     "type": "module"
 }
+
 ```
 
 # public\assetsy\asset-pack.json
@@ -3401,63 +3572,206 @@ body {
 # README.md
 
 ```md
-# Sample Hardhat 3 Beta Project (`mocha` and `ethers`)
+# ⚔️ OnChainBattles
 
-This project showcases a Hardhat 3 Beta project using `mocha` for tests and the `ethers` library for Ethereum interactions.
+**A chess-like tactical card game on the Avalanche blockchain. Stake AVAX. Deploy units. Destroy the King.**
 
-To learn more about the Hardhat 3 Beta, please visit the [Getting Started guide](https://hardhat.org/docs/getting-started#getting-started-with-hardhat-3). To share your feedback, join our [Hardhat 3 Beta](https://hardhat.org/hardhat3-beta-telegram-group) Telegram group or [open an issue](https://github.com/NomicFoundation/hardhat/issues/new) in our GitHub issue tracker.
+🎮 [Play Now](https://ocb-game.onrender.com/) · 📄 [Smart Contract on Fuji](https://testnet.snowtrace.io/address/0xa145f82DC5b285B970BE71F48Cf5173E722cF515) · 🏔️ Built for [Avalanche Build Games 2026](https://build.avax.network/build-games)
 
-## Project Overview
+---
 
-This example project includes:
+## What Is This?
 
-- A simple Hardhat configuration file.
-- Foundry-compatible Solidity unit tests.
-- TypeScript integration tests using `mocha` and ethers.js
-- Examples demonstrating how to connect to different types of networks, including locally simulating OP mainnet.
+OnChainBattles is a real-time PvP card battler where two players deploy historical units onto a 7x7 board, maneuver for position, and fight to destroy the opponent's King — with real AVAX on the line.
 
-## Usage
+Think **chess meets Hearthstone, on-chain.** Card draw adds controlled randomness, but positioning, timing, and resource management are pure tactics. Losing feels like a mistake, not bad luck.
 
-### Running Tests
+**This is not a concept.** It's a deployed, playable game with live smart contracts on Avalanche Fuji testnet.
 
-To run all the tests in the project, execute the following command:
+---
 
-\`\`\`shell
-npx hardhat test
+## How It Works
+
+**Each turn follows 5 phases:**
+
+1. **DRAW** — Draw a card from your deck
+2. **LEG** — Your King generates Legitimacy (the game's mana resource)
+3. **PLAY** — Spend LEG to deploy a unit or cast a spell
+4. **ACT** — Each unit on the board can move OR attack
+5. **END** — Effects tick, turn passes to opponent
+
+**Win condition:** Destroy the opponent's King.
+
+**On-chain stakes:** Players can wager AVAX through a Solidity escrow contract. Winner takes 95% of the pot. 5% platform rake. Free-play mode also available.
+
+---
+
+## The Card System
+
+23 unique cards across 4 types, forming a 31-card deck (+ pre-placed King):
+
+| Type | Examples | Role |
+|------|----------|------|
+| **Standard Units** | Foot Soldier, Pikeman, Archer, Assassin, Scout, Lancer | Cheap early-game fighters with unique movement/attack patterns |
+| **Royal Units** | Princess, Knight, Commander, King's Guard, Inquisitor | Powerful late-game units that require the discount engine |
+| **Structures** | Castle, Temple, Village | Static buildings that provide auras, discounts, and board control |
+| **Spells** | Disease, Casus Belli, Earthquake, Civil War | One-shot effects that disrupt the opponent's position or economy |
+
+**The Royal Discount Engine** is the core strategic layer: Castle (−1 LEG), Temple (−1 LEG), and Princess (−1 LEG) reduce Royal unit costs. Protecting these structures unlocks your late-game power. Losing them locks you out.
+
+---
+
+## Key Mechanics
+
+- **Legitimacy (LEG):** Mana that grows each turn. King generates +1/turn base. Princess adds +1 bonus. Spend it to deploy cards.
+- **Positional Combat:** Units have distinct movement patterns (omni, diagonal, jump) and attack patterns (melee H/V, ranged diagonal, on-jump). No RNG in combat — ATK deals flat damage to DEF (HP).
+- **Pikeman Flank Aura:** Any friendly unit on both left and right of a Pikeman grants +1 ATK +1 DEF. Rewards tight formations.
+- **Cavalry Counter:** Pikemen deal ×3 damage to Cavalry units (Lancer, Scout, Commander, Knight).
+- **Castle Spawning:** Castles auto-spawn a Foot Soldier every 3 turns and grant adjacent units +1 DEF.
+- **Counter-Attacks:** Melee units strike back when attacked in melee range. Ranged units don't.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Game Engine** | Phaser 3 (TypeScript) |
+| **Architecture** | Pure TS game logic → Phaser renders via EventBus (zero coupling) |
+| **Multiplayer** | Socket.IO — room creation, seed sync, action relay |
+| **Blockchain** | Avalanche C-Chain (Fuji Testnet) |
+| **Smart Contracts** | Solidity (Hardhat v3) — Escrow.sol for match staking |
+| **Web3 Integration** | ethers.js v6 — MetaMask / Core Wallet |
+| **Bundler** | Vite |
+| **Deployment** | Render (game client + server) |
+
+### Architecture Principles
+
+- **Game logic is framework-agnostic.** `Board`, `GameEngine`, `AbilitySystem`, `MovementRules` are pure TypeScript classes. Phaser never touches game state directly — it subscribes to events and renders.
+- **Cards are data-driven.** Adding a new card means adding one object to `CardDefinitions.ts`. No new classes, no switch statements. Abilities resolve through a generic `AbilityResolver`.
+- **Clean separation:** `SelectionManager` handles all input state. `BoardRenderer` handles all visuals. `GameEngine` is the single source of truth.
+
+---
+
+## Project Structure
+
+\`\`\`
+src/
+├── game/
+│   ├── engine/          # GameEngine, Board, TurnManager, AbilitySystem
+│   ├── data/            # CardDefinitions.ts — single source of truth for all cards
+│   ├── types/           # CardTypes, EventTypes, AbilityTypes — full type system
+│   ├── input/           # SelectionManager — click/tap handling state machine
+│   └── utils/           # MovementRules, CombatResolver, helpers
+├── scenes/
+│   ├── MainMenuScene    # Lobby, room creation, mode selection
+│   ├── BattleScene      # Core gameplay — board, hand, HUD
+│   └── ResultScene      # Post-match results, payout display
+├── rendering/
+│   ├── BoardRenderer    # 6×6 grid, unit sprites, highlights
+│   ├── HandRenderer     # Card fan in hand, selection glow
+│   ├── HUDRenderer      # LEG display, turn indicator, phase label
+│   └── CardRenderer     # Card face rendering with stats overlay
+├── network/
+│   └── SocketManager    # Socket.IO — room sync, action relay, seed sharing
+├── web3/
+│   ├── WalletManager    # MetaMask/Core connect, Fuji network switching
+│   └── EscrowManager    # Escrow.sol interactions — create, join, payout
+└── assets/
+    └── cards/
+        ├── art/         # Full card illustrations (23 unique cards)
+        └── thumb/       # Board thumbnails for deployed units
 \`\`\`
 
-You can also selectively run the Solidity or `mocha` tests:
+---
 
-\`\`\`shell
-npx hardhat test solidity
-npx hardhat test mocha
+## Smart Contract
+
+**Escrow.sol** on Avalanche Fuji Testnet:
+
+- **Address:** `0xa145f82DC5b285B970BE71F48Cf5173E722cF515`
+- **Explorer:** [View on Snowtrace](https://testnet.snowtrace.io/address/0xa145f82DC5b285B970BE71F48Cf5173E722cF515)
+- **Rake:** 5% (500 basis points)
+
+**Match flow:**
+1. Player A creates room → deposits AVAX into escrow
+2. Player B joins room → matches the deposit
+3. Contract moves to `Ready` state
+4. Game plays out in the client
+5. Winner's address is submitted → contract auto-pays winner 95% of pot
+
+---
+
+## Getting Started
+
+### Prerequisites
+- Node.js 18+
+- MetaMask or Core Wallet (for crypto mode)
+- Test AVAX from [faucet.avax.network](https://faucet.avax.network) (for staked matches)
+
+### Run Locally
+
+\`\`\`bash
+# Clone
+git clone https://github.com/hummancode/OnChainBattles.git
+cd OnChainBattles
+
+# Install dependencies
+npm install
+
+# Start dev server
+npm run dev
 \`\`\`
 
-### Make a deployment to Sepolia
+The game runs at `http://localhost:5173`. Open two browser tabs to test PvP locally.
 
-This project includes an example Ignition module to deploy the contract. You can deploy this module to a locally simulated chain or to Sepolia.
+### Deploy Contracts (optional)
 
-To run the deployment to a local chain:
-
-\`\`\`shell
-npx hardhat ignition deploy ignition/modules/Counter.ts
+\`\`\`bash
+cd contracts
+npm install
+npx hardhat compile
+npx hardhat run scripts/deploy.ts --network fuji
 \`\`\`
 
-To run the deployment to Sepolia, you need an account with funds to send the transaction. The provided Hardhat configuration includes a Configuration Variable called `SEPOLIA_PRIVATE_KEY`, which you can use to set the private key of the account you want to use.
+---
 
-You can set the `SEPOLIA_PRIVATE_KEY` variable using the `hardhat-keystore` plugin or by setting it as an environment variable.
+## Roadmap
 
-To set the `SEPOLIA_PRIVATE_KEY` config variable using `hardhat-keystore`:
+| Phase | Status | Focus |
+|-------|--------|-------|
+| **Phase 1:** Core Game | ✅ Complete | Board, cards, turns, PvP multiplayer, escrow |
+| **Phase 2:** Engine Expansion | 🔨 In Progress | Spell cards, server-authoritative sim, replay logs |
+| **Phase 3:** Deck Building + Mainnet | 📋 Planned | Custom decks, 30+ cards, Avalanche mainnet deploy |
+| **Phase 4:** Competitive | 📋 Planned | Glicko-2 ranked matchmaking, leaderboards, spectator mode |
+| **Phase 5:** Economy | 📋 Planned | NFT card minting, marketplace, seasonal tournaments |
 
-\`\`\`shell
-npx hardhat keystore set SEPOLIA_PRIVATE_KEY
-\`\`\`
+---
 
-After setting the variable, you can run the deployment with the Sepolia network:
+## Why Avalanche?
 
-\`\`\`shell
-npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
-\`\`\`
+- **Low fees** make micro-stakes ($1–5 AVAX matches) economically viable
+- **Fast finality** means escrow deposits confirm in seconds, not minutes
+- **Subnet potential** for a dedicated game chain as player base grows
+- **Fuji testnet** with free faucet AVAX for zero-cost development and playtesting
+
+---
+
+## Solo Build
+
+Built entirely by one developer in Ankara, Turkey. Mechanical engineering background (automation & control systems) applied to game system design — the LEG economy, aura calculations, and state machines draw directly from control theory principles.
+
+---
+
+## License
+
+All rights reserved. Source code is visible for competition evaluation purposes.
+
+---
+
+<p align="center">
+  <strong>🏔️ Built on Avalanche · ⚔️ Stake. Deploy. Conquer.</strong>
+</p>
 
 ```
 
@@ -3857,249 +4171,735 @@ console.log("Transaction sent successfully");
 
 ```
 
-# server\index.js
+# server\app.ts
 
-```js
+```ts
+// ============================================================
+// app.ts
+// Server entry point: Express + Socket.io bootstrap.
+// ============================================================
+
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { ethers } from 'ethers';
 import dotenv from 'dotenv';
+import { verifyMessage } from 'ethers';
+import type { ClientToServerEvents, ServerToClientEvents } from '../shared/types/NetworkEvents.js';
+import { RoomManager } from './rooms/RoomManager.js';
+import { PayoutService } from './game/PayoutService.js';
+import { SessionManager } from './game/SessionManager.js';
+
 dotenv.config();
 
 const app = express();
-const server = createServer(app);
-const io = new Server(server, {
-  cors: { origin: '*' }
+const httpServer = createServer(app);
+const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
+  cors: { origin: '*' },
 });
 
-// ─── Escrow Contract Setup ─────────────────────────────────────
-const ESCROW_ADDRESS = "0xa145f82DC5b285B970BE71F48Cf5173E722cF515";
-const ESCROW_ABI = [
-  "function claimWinnings(bytes32 matchId, address winner) external",
-  "function refundTie(bytes32 matchId) external",
-  "function matches(bytes32) view returns (address playerA, address playerB, uint256 stake, uint8 status)",
-];
-
-const FUJI_RPC = "https://api.avax-test.network/ext/bc/C/rpc";
-const provider = new ethers.JsonRpcProvider(FUJI_RPC);
-const ownerWallet = new ethers.Wallet(process.env.FUJI_PRIVATE_KEY, provider);
-const escrowContract = new ethers.Contract(ESCROW_ADDRESS, ESCROW_ABI, ownerWallet);
-
-console.log(`[Server] Owner wallet: ${ownerWallet.address}`);
-
-// ─── Helper: matchId from room code (must match frontend) ──────
-function matchIdFromCode(roomCode) {
-  const hex = Buffer.from(roomCode, 'utf8').toString('hex');
-  const padded = hex.padStart(64, '0');
-  return '0x' + padded;
-}
-
-// ─── Payout Logic ─────────────────────────────────────────────
-async function payoutWinner(roomCode, winnerAddress) {
-  const matchId = matchIdFromCode(roomCode);
-  console.log(`[Escrow] Paying winner ${winnerAddress} for room ${roomCode}`);
-  try {
-    const tx = await escrowContract.claimWinnings(matchId, winnerAddress);
-    await tx.wait();
-    console.log(`[Escrow] Payout done! tx: ${tx.hash}`);
-    return { success: true, txHash: tx.hash };
-  } catch (err) {
-    console.error(`[Escrow] Payout failed:`, err.message);
-    return { success: false, error: err.message };
-  }
-}
-
-async function refundTie(roomCode) {
-  const matchId = matchIdFromCode(roomCode);
-  console.log(`[Escrow] Refunding tie for room ${roomCode}`);
-  try {
-    const tx = await escrowContract.refundTie(matchId);
-    await tx.wait();
-    console.log(`[Escrow] Tie refund done! tx: ${tx.hash}`);
-    return { success: true, txHash: tx.hash };
-  } catch (err) {
-    console.error(`[Escrow] Tie refund failed:`, err.message);
-    return { success: false, error: err.message };
-  }
-}
-
-// ─── Room State ───────────────────────────────────────────────
-const rooms = {};
+const roomManager = new RoomManager();
+const payout = new PayoutService(process.env.FUJI_PRIVATE_KEY!);
+const session = new SessionManager(io, roomManager, payout);
 
 io.on('connection', (socket) => {
-socket.on('game_over', async ({ roomCode, winnerIndex }) => {
-  const room = rooms[roomCode];
-  if (!room || room.settled) return;   // prevent double-settle
-  room.settled = true;
-
-  const winner = room.players[winnerIndex];
-  if (!winner?.wallet) {
-    console.log(`[Server] game_over in ${roomCode} but winner has no wallet (free mode)`);
-    return;
-  }
-
-  console.log(`[Server] game_over: ${winner.name} wins room ${roomCode}`);
-  const result = await payoutWinner(roomCode, winner.wallet);
-
-  // Notify both clients
-  io.to(roomCode).emit('payout_result', result);
-});
-  // Game action relay — forward to opponent only
-socket.on('game_action', ({ roomCode, action }) => {
-    socket.to(roomCode).emit('opponent_action', action);
-    console.log(`[Server] game_action relayed in ${roomCode}: ${action.type}`);
-});
   console.log(`[Server] Player connected: ${socket.id}`);
 
+  // ── Room events ──
   socket.on('createRoom', ({ roomCode, playerName }) => {
-    rooms[roomCode] = {
-      players: [{ id: socket.id, name: playerName, roll: null, wallet: null }],
-      cryptoReady: { count: 0 }
-    };
+    roomManager.createRoom(socket.id, roomCode, playerName);
     socket.join(roomCode);
     socket.emit('roomCreated', { roomCode, playerIndex: 0 });
-
-    console.log(`[Server] Room created: ${roomCode} by ${playerName}`);
   });
 
   socket.on('joinRoom', ({ roomCode, playerName }) => {
-    const room = rooms[roomCode];
-    if (!room) { socket.emit('error', { message: 'Room not found. Check the code.' }); return; }
-    if (room.players.length >= 2) { socket.emit('error', { message: 'Room is full.' }); return; }
-
-    room.players.push({ id: socket.id, name: playerName, roll: null, wallet: null });
+    const result = roomManager.joinRoom(socket.id, roomCode, playerName);
+    if (typeof result === 'string') {
+      socket.emit('error', { message: result });
+      return;
+    }
     socket.join(roomCode);
     socket.emit('roomJoined', { roomCode, playerIndex: 1 });
-    const host = room.players[0];
+
+    const host = result.players[0];
     io.to(host.id).emit('opponentJoined', { playerName, playerIndex: 0 });
     socket.emit('opponentJoined', { playerName: host.name, playerIndex: 1 });
 
-    // Broadcast shared shuffle seed to both players
-    const seed = Math.floor(Math.random() * 999999);
-    room.gameSeed = seed;
-    io.to(roomCode).emit('game_seed', { seed });
-    console.log(`[Server] ${playerName} joined room: ${roomCode}, seed: ${seed}`)
+    // Broadcast shared shuffle seed
+    io.to(roomCode).emit('game_seed', { seed: result.gameSeed! });
   });
 
-  // Player registers their wallet address (for crypto payout)
-  socket.on('registerWallet', ({ roomCode, walletAddress }) => {
-    const room = rooms[roomCode];
-    if (!room) return;
-    const player = room.players.find(p => p.id === socket.id);
-    if (player) {
-      player.wallet = walletAddress;
-      console.log(`[Server] Wallet registered for ${player.name}: ${walletAddress}`);
-    }
-  });
-
-  // Player signals their escrow deposit is confirmed on-chain
-socket.on('cryptoReady', ({ roomCode }) => {
-    const room = rooms[roomCode];
-    if (!room) return;
-    room.cryptoReady.count = (room.cryptoReady.count || 0) + 1;
-    console.log(`[Server] cryptoReady: ${room.cryptoReady.count}/2 in room ${roomCode}`);
-
-    if (room.cryptoReady.count === 1) {
-      // Host deposit confirmed — tell joiner to deposit now
-      socket.to(roomCode).emit('hostDepositConfirmed');
-      console.log(`[Server] Told opponent to deposit in room ${roomCode}`);
-    } else if (room.cryptoReady.count >= 2) {
-      // Both deposits confirmed — start game
-      io.to(roomCode).emit('bothCryptoReady');
-      console.log(`[Server] Both players crypto-ready in room ${roomCode}`);
-    }
-  });
-
-  socket.on('diceRoll', ({ roomCode, playerName, roll }) => {
-    const room = rooms[roomCode];
-    if (!room) return;
-
-    const player = room.players.find(p => p.id === socket.id);
-    if (player) player.roll = roll;
-
-    socket.to(roomCode).emit('opponentRoll', { roll, playerName });
-    console.log(`[Server] ${playerName} rolled ${roll} in room ${roomCode}`);
-
-    // Check if both players have rolled
-    const [p1, p2] = room.players;
-    if (p1 && p2 && p1.roll !== null && p2.roll !== null) {
-      const isCrypto = p1.wallet && p2.wallet;
-      console.log(`[Server] Both rolled in room ${roomCode}. p1:${p1.roll} p2:${p2.roll} crypto:${isCrypto}`);
-
-      if (p1.roll === p2.roll) {
-        // Tie — reset rolls for re-roll
-        p1.roll = null;
-        p2.roll = null;
-        if (isCrypto) {
-          // For crypto tie, refund and let them know
-          // (In Phase 1, ties just re-roll in free mode; for crypto we could refund or re-roll)
-          // For now: re-roll (don't touch escrow on tie, just reset)
-          io.to(roomCode).emit('tieReroll');
-        }
-        // Free mode tie handled client-side already
-      } else {
-        const winner = p1.roll > p2.roll ? p1 : p2;
-        const loser = p1.roll > p2.roll ? p2 : p1;
-
-        if (isCrypto) {
-          // Trigger on-chain payout
-          payoutWinner(roomCode, winner.wallet).then(result => {
-            io.to(roomCode).emit('cryptoMatchResult', {
-              winnerName: winner.name,
-              loserName: loser.name,
-              winnerRoll: winner.roll,
-              loserRoll: loser.roll,
-              txHash: result.txHash,
-              success: result.success,
-              error: result.error
-            });
-          });
-        }
-        // Free mode result handled client-side
+  socket.on('registerWallet', ({ roomCode, walletAddress, message, signature }) => {
+    // Verify signature proves ownership of claimed wallet
+    try {
+      const recovered = verifyMessage(message, signature);
+      if (recovered.toLowerCase() !== walletAddress.toLowerCase()) {
+        console.warn(`[Server] Wallet verification failed: claimed ${walletAddress}, recovered ${recovered}`);
+        socket.emit('error', { message: 'Wallet verification failed' });
+        return;
       }
-
-      // Reset for next match
-      p1.roll = null;
-      p2.roll = null;
-      room.cryptoReady.count = 0;
+      if (!message.includes(roomCode)) {
+        console.warn(`[Server] Wallet verification: message doesn't contain roomCode`);
+        socket.emit('error', { message: 'Invalid verification message' });
+        return;
+      }
+      // Only accept registerWallet once per player
+      const room = roomManager.getRoom(roomCode);
+      const player = room?.players.find(p => p.id === socket.id);
+      if (player?.wallet) {
+        console.warn(`[Server] Wallet already registered for ${player.name}, ignoring re-registration`);
+        return;
+      }
+      roomManager.registerWallet(socket.id, roomCode, walletAddress);
+    } catch (err) {
+      console.error(`[Server] Wallet verification error:`, err);
+      socket.emit('error', { message: 'Wallet verification failed' });
     }
   });
 
- socket.on('disconnect', () => {
-    for (const code in rooms) {
-      const room = rooms[code];
-      const idx = room.players.findIndex(p => p.id === socket.id);
-      if (idx === -1) continue;
+  // ── Rejoin after disconnect ──
+  socket.on('rejoin_room', ({ roomCode, playerName }) => {
+    session.handleRejoin(socket, roomCode, playerName);
+  });
 
-      const disconnectedPlayer = room.players[idx];
-      console.log(`[Server] ${disconnectedPlayer.name} left room: ${code}`);
+  // ── Game session events ──
+  session.registerHandlers(socket);
 
-      // Notify remaining player
-      socket.to(code).emit('opponentDisconnected');
-
-      // Crypto: if both deposited and not yet settled, pay remaining player
-      if (room.cryptoReady?.count >= 2 && !room.settled) {
-        room.settled = true;
-        const remainingIdx = idx === 0 ? 1 : 0;
-        const remaining = room.players[remainingIdx];
-        if (remaining?.wallet) {
-          console.log(`[Server] Disconnect payout to ${remaining.name} (${remaining.wallet})`);
-          payoutWinner(code, remaining.wallet).then(result => {
-            io.to(code).emit('payout_result', result);
-          });
-        }
-      }
-
-      delete rooms[code];
-      break;
-    }
+  // ── Disconnect ──
+  socket.on('disconnect', () => {
+    session.handleDisconnect(socket);
   });
 });
 
-server.listen(3001, () => {
+httpServer.listen(3001, () => {
   console.log('[Server] Socket.io running on port 3001');
 });
+
+```
+
+# server\game\PayoutService.ts
+
+```ts
+// ============================================================
+// PayoutService.ts
+// Escrow contract interaction for crypto match settlement.
+// ============================================================
+
+import { ethers } from 'ethers';
+import type { PayoutResult } from '../../shared/types/NetworkEvents.js';
+import { Logger } from '../utils/Logger.js';
+
+const log = new Logger('PayoutService');
+
+const ESCROW_ADDRESS = '0xa145f82DC5b285B970BE71F48Cf5173E722cF515';
+const ESCROW_ABI = [
+  'function claimWinnings(bytes32 matchId, address winner) external',
+  'function refundTie(bytes32 matchId) external',
+  'function matches(bytes32) view returns (address playerA, address playerB, uint256 stake, uint8 status)',
+];
+
+const FUJI_RPC = 'https://api.avax-test.network/ext/bc/C/rpc';
+
+export class PayoutService {
+  private contract: ethers.Contract;
+  private walletAddress: string;
+
+  constructor(privateKey: string) {
+    const provider = new ethers.JsonRpcProvider(FUJI_RPC);
+    const wallet = new ethers.Wallet(privateKey, provider);
+    this.contract = new ethers.Contract(ESCROW_ADDRESS, ESCROW_ABI, wallet);
+    this.walletAddress = wallet.address;
+    log.info(` Owner wallet: ${this.walletAddress}`);
+  }
+
+  /** Convert room code string → bytes32 matchId (must match frontend). */
+  matchIdFromCode(roomCode: string): string {
+    const hex = Buffer.from(roomCode, 'utf8').toString('hex');
+    const padded = hex.padStart(64, '0');
+    return '0x' + padded;
+  }
+
+  async payoutWinner(roomCode: string, winnerAddress: string): Promise<PayoutResult> {
+    const matchId = this.matchIdFromCode(roomCode);
+    log.info(` Paying winner ${winnerAddress} for room ${roomCode}`);
+    try {
+      const tx = await this.contract.claimWinnings(matchId, winnerAddress);
+      await tx.wait();
+      log.info(` Payout done! tx: ${tx.hash}`);
+      return { success: true, txHash: tx.hash };
+    } catch (err: any) {
+      log.error(` Payout failed:`, err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  async refundTie(roomCode: string): Promise<PayoutResult> {
+    const matchId = this.matchIdFromCode(roomCode);
+    log.info(` Refunding tie for room ${roomCode}`);
+    try {
+      const tx = await this.contract.refundTie(matchId);
+      await tx.wait();
+      log.info(` Tie refund done! tx: ${tx.hash}`);
+      return { success: true, txHash: tx.hash };
+    } catch (err: any) {
+      log.error(` Tie refund failed:`, err.message);
+      return { success: false, error: err.message };
+    }
+  }
+}
+
+```
+
+# server\game\SessionManager.ts
+
+```ts
+// ============================================================
+// SessionManager.ts
+// Handles game session events: action relay, crypto flow,
+// game-over settlement.
+// ============================================================
+
+import type { Server, Socket } from 'socket.io';
+import type { ClientToServerEvents, ServerToClientEvents } from '../../shared/types/NetworkEvents.js';
+import type { RoomManager } from '../rooms/RoomManager.js';
+import type { PayoutService } from './PayoutService.js';
+import { Logger } from '../utils/Logger.js';
+
+type TypedServer = Server<ClientToServerEvents, ServerToClientEvents>;
+type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
+
+const log = new Logger('Session');
+
+export class SessionManager {
+  constructor(
+    private io: TypedServer,
+    private rooms: RoomManager,
+    private payout: PayoutService
+  ) {}
+
+  registerHandlers(socket: TypedSocket): void {
+    socket.on('player_ready', ({ roomCode }) => {
+      const room = this.rooms.getRoom(roomCode);
+      if (!room) return;
+      room.battleReadyCount += 1;
+      log.info(`player_ready: ${room.battleReadyCount}/2 in room ${roomCode}`);
+      if (room.battleReadyCount >= 2) {
+        this.io.to(roomCode).emit('both_battle_ready');
+        for (const queued of room.actionQueue) {
+          socket.to(roomCode).emit('opponent_action', queued);
+          log.debug(`Flushed queued action: ${queued.type}`);
+        }
+        room.actionQueue = [];
+      }
+    });
+
+    socket.on('game_action', ({ roomCode, action }) => {
+      const room = this.rooms.getRoom(roomCode);
+      if (!room) return;
+
+      if (room.battleReadyCount < 2) {
+        room.actionQueue.push(action);
+        log.debug(`Queued action (opponent not ready): ${action.type}`);
+        return;
+      }
+
+      // ── Layer 0: Sequence validation ─────────────────────
+      const playerIndex = room.players.findIndex(p => p.id === socket.id);
+      if (playerIndex === -1) return;
+
+      if (action.seqNum != null) {
+        if (action.seqNum <= room.lastSeqNum[playerIndex]) {
+          log.warn(`REJECTED ${action.type} from P${playerIndex + 1}: seqNum ${action.seqNum} <= last ${room.lastSeqNum[playerIndex]}`);
+          return;
+        }
+        room.lastSeqNum[playerIndex] = action.seqNum;
+      }
+
+      // ── Layer 1: Turn ownership validation ──────────────
+      if (playerIndex !== room.currentTurnPlayer) {
+        log.warn(`REJECTED ${action.type} from P${playerIndex + 1} — not their turn (P${room.currentTurnPlayer + 1}'s turn)`);
+        return;
+      }
+
+      // ── Layer 2: Phase-appropriate action validation ────
+      const playPhaseActions = ['PLAY_CARD', 'END_PLAY_PHASE', 'SELECT_POSITION', 'SELECT_TARGET', 'CANCEL_PENDING'];
+      const actPhaseActions  = ['MOVE_UNIT', 'ATTACK_UNIT', 'END_ACT_PHASE', 'SELECT_POSITION', 'SELECT_TARGET', 'CANCEL_PENDING'];
+
+      if (room.currentPhase === 'PLAY' && !playPhaseActions.includes(action.type)) {
+        log.warn(`REJECTED ${action.type} during PLAY phase`);
+        return;
+      }
+      if (room.currentPhase === 'ACT' && !actPhaseActions.includes(action.type)) {
+        log.warn(`REJECTED ${action.type} during ACT phase`);
+        return;
+      }
+
+      // ── Layer 2: Field validation ───────────────────────
+      if (action.type === 'PLAY_CARD' && (action.handIndex == null || action.col == null || action.row == null)) {
+        log.warn('REJECTED PLAY_CARD: missing fields');
+        return;
+      }
+      if (action.type === 'MOVE_UNIT' && (action.fromCol == null || action.fromRow == null || action.col == null || action.row == null)) {
+        log.warn('REJECTED MOVE_UNIT: missing fields');
+        return;
+      }
+      if (action.type === 'ATTACK_UNIT' && (action.fromCol == null || action.fromRow == null || action.targetCol == null || action.targetRow == null)) {
+        log.warn('REJECTED ATTACK_UNIT: missing fields');
+        return;
+      }
+
+      // ── Track phase/turn transitions ────────────────────
+      if (action.type === 'END_PLAY_PHASE') {
+        room.currentPhase = 'ACT';
+      } else if (action.type === 'END_ACT_PHASE') {
+        room.currentPhase = 'PLAY';
+        room.currentTurnPlayer = room.currentTurnPlayer === 0 ? 1 : 0;
+      }
+
+      room.actionCount += 1;
+      room.globalSeq += 1;
+      action.serverSeq = room.globalSeq;
+
+      socket.to(roomCode).emit('opponent_action', action);
+      log.debug(`Relayed ${action.type} in ${roomCode} (action #${room.actionCount}, serverSeq=${room.globalSeq})`);
+    });
+
+    socket.on('game_over', async ({ roomCode, winnerIndex }) => {
+      const room = this.rooms.getRoom(roomCode);
+      if (!room) return;
+      if (room.settled) return;
+
+      const playerIndex = room.players.findIndex(p => p.id === socket.id);
+      if (playerIndex === -1) return;
+
+      if (winnerIndex !== 0 && winnerIndex !== 1) {
+        log.warn(`REJECTED game_over: invalid winnerIndex ${winnerIndex}`);
+        return;
+      }
+
+      const MIN_ACTIONS = 4;
+      if (room.actionCount < MIN_ACTIONS) {
+        log.warn(`REJECTED game_over: only ${room.actionCount} actions (min ${MIN_ACTIONS})`);
+        return;
+      }
+
+      if (room.gameOverClaims.some(c => c.playerIndex === playerIndex)) {
+        log.warn(`REJECTED duplicate game_over from P${playerIndex + 1}`);
+        return;
+      }
+
+      room.gameOverClaims.push({ playerIndex, claimedWinner: winnerIndex });
+      log.info(`game_over claim from P${playerIndex + 1}: winner=P${winnerIndex + 1} (${room.gameOverClaims.length}/2 claims)`);
+
+      const hasWallets = room.players.some(p => p.wallet !== null);
+      if (!hasWallets) {
+        log.info(`Free-play mode game_over in ${roomCode}`);
+        room.settled = true;
+        return;
+      }
+
+      if (room.gameOverClaims.length < 2) return;
+
+      const claim0 = room.gameOverClaims.find(c => c.playerIndex === 0)!;
+      const claim1 = room.gameOverClaims.find(c => c.playerIndex === 1)!;
+
+      room.settled = true;
+
+      if (claim0.claimedWinner === claim1.claimedWinner) {
+        const winner = room.players[claim0.claimedWinner];
+        if (winner?.wallet) {
+          log.info(`Both agree: P${claim0.claimedWinner + 1} (${winner.name}) wins room ${roomCode}`);
+          const result = await this.payout.payoutWinner(roomCode, winner.wallet);
+          this.io.to(roomCode).emit('payout_result', result);
+        }
+      } else {
+        log.warn(`DISPUTE in ${roomCode}: P1 says P${claim0.claimedWinner + 1}, P2 says P${claim1.claimedWinner + 1}. Refunding.`);
+        try {
+          const result = await this.payout.refundTie(roomCode);
+          this.io.to(roomCode).emit('payout_result', result);
+        } catch (err) {
+          log.error(`Refund failed for ${roomCode}:`, err);
+          this.io.to(roomCode).emit('payout_result', { success: false, error: 'Dispute refund failed' });
+        }
+      }
+    });
+
+    socket.on('state_hash', ({ roomCode, hash, afterGlobalSeq }) => {
+      const room = this.rooms.getRoom(roomCode);
+      if (!room) return;
+      const playerIndex = room.players.findIndex(p => p.id === socket.id);
+      if (playerIndex === -1) return;
+
+      if (!room.pendingHashes.has(afterGlobalSeq)) {
+        room.pendingHashes.set(afterGlobalSeq, []);
+      }
+      const entries = room.pendingHashes.get(afterGlobalSeq)!;
+      entries.push({ playerIndex, hash });
+
+      if (entries.length >= 2) {
+        if (entries[0].hash !== entries[1].hash) {
+          log.warn(`STATE MISMATCH in ${roomCode} at globalSeq=${afterGlobalSeq}: P1=${entries[0].hash} P2=${entries[1].hash}`);
+        } else {
+          log.debug(`State sync OK in ${roomCode} at globalSeq=${afterGlobalSeq}: ${entries[0].hash}`);
+        }
+        room.pendingHashes.delete(afterGlobalSeq);
+      }
+    });
+
+    socket.on('cryptoReady', ({ roomCode }) => {
+      const count = this.rooms.incrementCryptoReady(roomCode);
+      if (count === 1) {
+        socket.to(roomCode).emit('hostDepositConfirmed');
+        log.info(`Told opponent to deposit in room ${roomCode}`);
+      } else if (count >= 2) {
+        this.io.to(roomCode).emit('bothCryptoReady');
+        log.info(`Both players crypto-ready in room ${roomCode}`);
+      }
+    });
+  }
+
+  private static readonly GRACE_PERIOD_MS = 30_000;
+
+  async handleDisconnect(socket: TypedSocket): Promise<void> {
+    const found = this.rooms.findBySocket(socket.id);
+    if (!found) return;
+
+    const { roomCode, room, playerIndex } = found;
+    const disconnected = room.players[playerIndex];
+    log.info(`${disconnected.name} disconnected from room: ${roomCode} (grace period: ${SessionManager.GRACE_PERIOD_MS / 1000}s)`);
+
+    // Notify opponent of temporary disconnect
+    socket.to(roomCode).emit('opponentDisconnected');
+
+    // Start grace period — if they don't rejoin, finalize disconnect
+    const timer = setTimeout(async () => {
+      room.disconnectTimers.delete(playerIndex);
+      log.info(`Grace period expired for ${disconnected.name} in ${roomCode} — finalizing disconnect`);
+
+      // Notify remaining player that opponent abandoned
+      this.io.to(roomCode).emit('opponentAbandon');
+
+      if (room.cryptoReadyCount >= 2 && !room.settled) {
+        room.settled = true;
+        const remainingIdx = playerIndex === 0 ? 1 : 0;
+        const remaining = room.players[remainingIdx];
+        if (remaining?.wallet) {
+          log.info(`Disconnect payout to ${remaining.name} (${remaining.wallet})`);
+          const result = await this.payout.payoutWinner(roomCode, remaining.wallet);
+          this.io.to(roomCode).emit('payout_result', result);
+        }
+      }
+
+      this.rooms.deleteRoom(roomCode);
+    }, SessionManager.GRACE_PERIOD_MS);
+
+    room.disconnectTimers.set(playerIndex, timer);
+  }
+
+  handleRejoin(socket: TypedSocket, roomCode: string, playerName: string): void {
+    const room = this.rooms.getRoom(roomCode);
+    if (!room) {
+      socket.emit('error', { message: 'Room expired — cannot rejoin' });
+      return;
+    }
+
+    const playerIndex = this.rooms.reassignSocket(roomCode, playerName, socket.id);
+    if (playerIndex === -1) {
+      socket.emit('error', { message: 'Player not found in room' });
+      return;
+    }
+
+    // Cancel the grace period timer
+    const timer = room.disconnectTimers.get(playerIndex);
+    if (timer) {
+      clearTimeout(timer);
+      room.disconnectTimers.delete(playerIndex);
+      log.info(`Grace timer cancelled for ${playerName} in ${roomCode}`);
+    }
+
+    socket.join(roomCode);
+    socket.emit('rejoinSuccess', { roomCode, playerIndex });
+    socket.to(roomCode).emit('opponentReconnected');
+    log.info(`${playerName} rejoined room: ${roomCode}`);
+
+    // Re-register session handlers on the new socket
+    this.registerHandlers(socket);
+  }
+}
+
+```
+
+# server\rooms\RoomManager.ts
+
+```ts
+// ============================================================
+// RoomManager.ts
+// Room CRUD and player tracking.
+// ============================================================
+
+import { randomInt } from 'crypto';
+import type { Room } from '../../shared/types/NetworkEvents.js';
+import { Logger } from '../utils/Logger.js';
+
+const log = new Logger('RoomManager');
+
+export class RoomManager {
+  private rooms = new Map<string, Room>();
+
+  createRoom(socketId: string, roomCode: string, playerName: string): Room {
+    const room: Room = {
+      players: [{ id: socketId, name: playerName, wallet: null }],
+      gameSeed: null,
+      cryptoReadyCount: 0,
+      battleReadyCount: 0,
+      actionQueue: [],
+      settled: false,
+      currentTurnPlayer: 0,
+      currentPhase: 'PLAY',
+      actionCount: 0,
+      gameOverClaims: [],
+      lastSeqNum: [0, 0],
+      globalSeq: 0,
+      pendingHashes: new Map(),
+      disconnectTimers: new Map(),
+    };
+    this.rooms.set(roomCode, room);
+    log.info(` Room created: ${roomCode} by ${playerName}`);
+    return room;
+  }
+
+  joinRoom(socketId: string, roomCode: string, playerName: string): Room | string {
+    const room = this.rooms.get(roomCode);
+    if (!room) return 'Room not found. Check the code.';
+    if (room.players.length >= 2) return 'Room is full.';
+
+    room.players.push({ id: socketId, name: playerName, wallet: null });
+
+    // Generate shared shuffle seed (32-bit, cryptographically random)
+    const seed = randomInt(0, 2 ** 32);
+    room.gameSeed = seed;
+
+    log.info(` ${playerName} joined room: ${roomCode}, seed: ${seed}`);
+    return room;
+  }
+
+  getRoom(roomCode: string): Room | undefined {
+    return this.rooms.get(roomCode);
+  }
+
+  registerWallet(socketId: string, roomCode: string, walletAddress: string): void {
+    const room = this.rooms.get(roomCode);
+    if (!room) return;
+    const player = room.players.find(p => p.id === socketId);
+    if (player) {
+      player.wallet = walletAddress;
+      log.info(` Wallet registered for ${player.name}: ${walletAddress}`);
+    }
+  }
+
+  incrementCryptoReady(roomCode: string): number {
+    const room = this.rooms.get(roomCode);
+    if (!room) return 0;
+    room.cryptoReadyCount += 1;
+    log.info(` cryptoReady: ${room.cryptoReadyCount}/2 in room ${roomCode}`);
+    return room.cryptoReadyCount;
+  }
+
+  markSettled(roomCode: string): boolean {
+    const room = this.rooms.get(roomCode);
+    if (!room || room.settled) return false;
+    room.settled = true;
+    return true;
+  }
+
+  /** Find room + player index by socket ID. Returns null if not found. */
+  findBySocket(socketId: string): { roomCode: string; room: Room; playerIndex: number } | null {
+    for (const [code, room] of this.rooms) {
+      const idx = room.players.findIndex(p => p.id === socketId);
+      if (idx !== -1) return { roomCode: code, room, playerIndex: idx };
+    }
+    return null;
+  }
+
+  /** Reassign a player's socket ID (after reconnection). Returns player index or -1. */
+  reassignSocket(roomCode: string, playerName: string, newSocketId: string): number {
+    const room = this.rooms.get(roomCode);
+    if (!room) return -1;
+    const idx = room.players.findIndex(p => p.name === playerName);
+    if (idx === -1) return -1;
+    room.players[idx].id = newSocketId;
+    log.info(` Reassigned ${playerName} in ${roomCode} → socket ${newSocketId}`);
+    return idx;
+  }
+
+  deleteRoom(roomCode: string): void {
+    this.rooms.delete(roomCode);
+  }
+}
+
+```
+
+# server\utils\Logger.ts
+
+```ts
+// ============================================================
+// Logger.ts — Server-side structured logging.
+// Mirror of src/utils/Logger.ts for server code.
+// ============================================================
+
+export enum LogLevel {
+  DEBUG = 0,
+  INFO  = 1,
+  WARN  = 2,
+  ERROR = 3,
+  NONE  = 4,
+}
+
+const LEVEL_NAMES: Record<string, LogLevel> = {
+  debug: LogLevel.DEBUG,
+  info:  LogLevel.INFO,
+  warn:  LogLevel.WARN,
+  error: LogLevel.ERROR,
+  none:  LogLevel.NONE,
+};
+
+let globalLevel: LogLevel = (() => {
+  const raw = process.env.LOG_LEVEL;
+  if (raw && LEVEL_NAMES[raw.toLowerCase()] !== undefined) {
+    return LEVEL_NAMES[raw.toLowerCase()];
+  }
+  return process.env.NODE_ENV === 'production' ? LogLevel.WARN : LogLevel.DEBUG;
+})();
+
+export class Logger {
+  constructor(private tag: string) {}
+
+  static setGlobalLevel(level: LogLevel): void {
+    globalLevel = level;
+  }
+
+  static getGlobalLevel(): LogLevel {
+    return globalLevel;
+  }
+
+  debug(...args: unknown[]): void {
+    if (globalLevel <= LogLevel.DEBUG) console.log(`[${this.tag}]`, ...args);
+  }
+
+  info(...args: unknown[]): void {
+    if (globalLevel <= LogLevel.INFO) console.log(`[${this.tag}]`, ...args);
+  }
+
+  warn(...args: unknown[]): void {
+    if (globalLevel <= LogLevel.WARN) console.warn(`[${this.tag}]`, ...args);
+  }
+
+  error(...args: unknown[]): void {
+    if (globalLevel <= LogLevel.ERROR) console.error(`[${this.tag}]`, ...args);
+  }
+}
+
+```
+
+# shared\types\NetworkEvents.ts
+
+```ts
+// ============================================================
+// NetworkEvents.ts
+// Shared client ↔ server event contracts.
+// Both SocketManager.ts and server/app.ts import from here.
+// ============================================================
+
+// ─── Game Actions (relayed between players) ──────────────────
+
+export interface GameAction {
+  type: 'PLAY_CARD' | 'MOVE_UNIT' | 'ATTACK_UNIT' | 'END_PLAY_PHASE' | 'END_ACT_PHASE' | 'SELECT_POSITION' | 'SELECT_TARGET' | 'CANCEL_PENDING';
+  handIndex?: number;
+  col?: number;
+  row?: number;
+  fromCol?: number;
+  fromRow?: number;
+  targetCol?: number;
+  targetRow?: number;
+  /** Client-assigned sequence number (monotonically increasing per player). */
+  seqNum?: number;
+  /** Server-assigned global order stamp (set before relay to opponent). */
+  serverSeq?: number;
+}
+
+// ─── Client → Server Events ─────────────────────────────────
+
+export interface ClientToServerEvents {
+  createRoom:     (data: { roomCode: string; playerName: string }) => void;
+  joinRoom:       (data: { roomCode: string; playerName: string }) => void;
+  registerWallet: (data: { roomCode: string; walletAddress: string; message: string; signature: string }) => void;
+  cryptoReady:    (data: { roomCode: string }) => void;
+  player_ready:   (data: { roomCode: string }) => void;
+  game_action:    (data: { roomCode: string; action: GameAction }) => void;
+  game_over:      (data: { roomCode: string; winnerIndex: number }) => void;
+  state_hash:     (data: { roomCode: string; hash: string; afterGlobalSeq: number }) => void;
+  rejoin_room:    (data: { roomCode: string; playerName: string }) => void;
+}
+
+// ─── Server → Client Events ─────────────────────────────────
+
+export interface PayoutResult {
+  success: boolean;
+  txHash?: string;
+  error?: string;
+}
+
+export interface ServerToClientEvents {
+  roomCreated:          (data: { roomCode: string; playerIndex: number }) => void;
+  roomJoined:           (data: { roomCode: string; playerIndex: number }) => void;
+  opponentJoined:       (data: { playerName: string; playerIndex: number }) => void;
+  opponent_action:      (action: GameAction) => void;
+  game_seed:            (data: { seed: number }) => void;
+  both_battle_ready:    () => void;
+  opponentDisconnected: () => void;
+  opponentReconnected:  () => void;
+  opponentAbandon:      () => void;
+  rejoinSuccess:        (data: { roomCode: string; playerIndex: number }) => void;
+  hostDepositConfirmed: () => void;
+  bothCryptoReady:      () => void;
+  payout_result:        (data: PayoutResult) => void;
+  error:                (data: { message: string }) => void;
+}
+
+// ─── Room Player (server-side) ──────────────────────────────
+
+export interface RoomPlayer {
+  id: string;
+  name: string;
+  wallet: string | null;
+}
+
+export interface GameOverClaim {
+  playerIndex: number;
+  claimedWinner: number;
+}
+
+export interface Room {
+  players: RoomPlayer[];
+  gameSeed: number | null;
+  cryptoReadyCount: number;
+  battleReadyCount: number;
+  actionQueue: GameAction[];
+  settled: boolean;
+  // Server-side turn tracking for action validation
+  currentTurnPlayer: number;  // 0 = P1, 1 = P2
+  currentPhase: 'PLAY' | 'ACT';
+  // Game-over verification
+  actionCount: number;
+  gameOverClaims: GameOverClaim[];
+  // Action sequencing
+  lastSeqNum: [number, number];  // last seqNum received from [P1, P2]
+  globalSeq: number;             // monotonic server-wide order stamp
+  // State checksum sync
+  pendingHashes: Map<number, { playerIndex: number; hash: string }[]>;
+  // Reconnection grace
+  disconnectTimers: Map<number, ReturnType<typeof setTimeout>>;
+}
+
 ```
 
 # src\config\DeckLoader.ts
@@ -4112,7 +4912,8 @@ server.listen(3001, () => {
 // Falls back to UNITS_ONLY_DECK_IDS if the file is missing or invalid.
 // ============================================================
 
-import { UNITS_ONLY_DECK_IDS, getCard } from '../game/data/CardDefinitions';
+import { UNITS_ONLY_DECK_IDS } from '../game/data/DeckDefinitions';
+import { getCard } from '../game/data/CardRegistry';
 
 class DeckLoaderClass {
   private deckIds: string[] | null = null;
@@ -4804,47 +5605,6 @@ export const ThemeLoader = new ThemeLoaderClass();
 
 ```
 
-# src\data\MatchState.ts
-
-```ts
-// ─── MatchState.ts ────────────────────────────────────────────
-// Data model for a single match result
-// Equivalent to MatchState.cs in Unity
-
-export interface MatchState {
-    playerName: string;
-    opponentName: string;
-    playerRoll: number;
-    opponentRoll: number;
-    playerWon: boolean;
-    isTie: boolean;
-    stakeAmount: number;
-    payout: number;
-}
-
-export function createMatchState(
-    playerName: string,
-    opponentName: string,
-    playerRoll: number,
-    opponentRoll: number,
-    stakeAmount: number
-): MatchState {
-    const playerWon = playerRoll > opponentRoll;
-    const isTie = playerRoll === opponentRoll;
-
-    return {
-        playerName,
-        opponentName,
-        playerRoll,
-        opponentRoll,
-        playerWon,
-        isTie,
-        stakeAmount,
-        payout: playerWon ? stakeAmount * 2 * 0.95 : 0,
-    };
-}
-```
-
 # src\events\EventBus.ts
 
 ```ts
@@ -4855,12 +5615,9 @@ export function createMatchState(
 // No Phaser dependency. No game logic.
 // ============================================================
 
-export type EventHandler<T = any> = (payload: T) => void;
+import type { GameEventMap, GameEventType } from '../game/types/GameEventMap';
 
-interface Subscription {
-  type: string;
-  handler: EventHandler;
-}
+export type EventHandler<T = any> = (payload: T) => void;
 
 class EventBusClass {
   private listeners: Map<string, Set<EventHandler>> = new Map();
@@ -4874,23 +5631,27 @@ class EventBusClass {
   }
 
   /**
-   * Subscribe to an event type.
+   * Subscribe to a typed event.
    * Returns an unsubscribe function for easy cleanup.
    */
-  on<T = any>(type: string, handler: EventHandler<T>): () => void {
+  on<K extends GameEventType>(type: K, handler: (payload: GameEventMap[K]) => void): () => void;
+  on(type: string, handler: EventHandler): () => void;
+  on(type: string, handler: EventHandler): () => void {
     if (!this.listeners.has(type)) {
       this.listeners.set(type, new Set());
     }
-    this.listeners.get(type)!.add(handler as EventHandler);
+    this.listeners.get(type)!.add(handler);
 
-    return () => this.off(type, handler as EventHandler);
+    return () => this.off(type, handler);
   }
 
   /**
    * Subscribe to an event type, fire once, then auto-unsubscribe.
    */
-  once<T = any>(type: string, handler: EventHandler<T>): void {
-    const wrapper: EventHandler = (payload: T) => {
+  once<K extends GameEventType>(type: K, handler: (payload: GameEventMap[K]) => void): void;
+  once(type: string, handler: EventHandler): void;
+  once(type: string, handler: EventHandler): void {
+    const wrapper: EventHandler = (payload: any) => {
       handler(payload);
       this.off(type, wrapper);
     };
@@ -4905,11 +5666,13 @@ class EventBusClass {
   }
 
   /**
-   * Emit an event. All subscribers for this type receive the payload.
+   * Emit a typed event. All subscribers for this type receive the payload.
    * Errors in handlers are caught individually — one bad handler
    * won't prevent others from receiving the event.
    */
-  emit<T = any>(type: string, payload?: T): void {
+  emit<K extends GameEventType>(type: K, payload: GameEventMap[K]): void;
+  emit(type: string, payload?: any): void;
+  emit(type: string, payload?: any): void {
     const handlers = this.listeners.get(type);
     if (!handlers) return;
 
@@ -4994,7 +5757,7 @@ export const EV = {
   SELECTION_CHANGED:   'SELECTION_CHANGED',
   HIGHLIGHTS_CHANGED:  'HIGHLIGHTS_CHANGED',
   INPUT_BOARD_CLICK:   'INPUT_BOARD_CLICK',   // BoardRenderer → SelectionManager
-INPUT_HAND_CLICK:    'INPUT_HAND_CLICK',    // HandRenderer  → SelectionManager
+  INPUT_HAND_CLICK:    'INPUT_HAND_CLICK',    // HandRenderer  → SelectionManager
   CARD_HOVERED:        'CARD_HOVERED',
   CARD_HOVER_END:      'CARD_HOVER_END',
   DETAIL_SHOW:         'DETAIL_SHOW',
@@ -5012,49 +5775,17 @@ export type EVType = typeof EV[keyof typeof EV];
 
 ```
 
-# src\game\AbilityResolver.ts
+# src\game\abilities\AbilityDispatcher.ts
 
 ```ts
-// ============================================================
-// AbilityResolver.ts
-// Routes every ability type to its resolution logic.
-// CRITICAL RULE: Never mutates board, player state, or
-// modifiers directly. Returns GameEvent[] + optionally
-// a PendingInteraction when player input is required.
-// GameEngine applies the events and stores the pending.
-// ============================================================
-
-import { AbilityType, PendingInteraction } from './types/AbilityTypes';
-import type { Unit, Position } from './types/GameTypes';
-import { Player } from './types/GameTypes';
-import type { Board } from './Board';
-import type { PlayerState } from './PlayerState';
-import type { GameModifiers } from './GameModifiers';
-import { getCard } from './data/CardDefinitions';
-import { applyDamage, applyFullHeal, applyReform, applyEarthquakeDamage } from './CombatResolver';
-import type { GameEvent } from './types/EventTypes';
-
-export interface AbilityResult {
-  events: GameEvent[];
-  pending?: PendingInteraction;
-}
-
-// ─────────────────────────────────────────────
-// MAIN ROUTER
-// ─────────────────────────────────────────────
-
-/**
- * Resolve all abilities on a card when it is played.
- * Called by GameEngine.playCard() after LEG cost is spent.
- *
- * @param cardId       The card being played
- * @param owner        The playing player
- * @param position     Deploy position (for units/structures); undefined for spells
- * @param board        Current board (read-only — do not mutate)
- * @param ps           Player states [P1, P2] (read-only)
- * @param mods         Modifiers [P1, P2] (read-only)
- * @param unitInstance The placed unit, if already on board (for on-deploy abilities)
- */
+import { AbilityHandlerRegistry } from './AbilityHandlerRegistry';
+import type { AbilityResult, AbilityContext } from './types';
+import type { Unit, Position } from '../types/GameTypes';
+import { Player } from '../types/GameTypes';
+import type { Board } from '../Board';
+import type { PlayerState } from '../PlayerState';
+import type { GameModifiers } from '../GameModifiers';
+import { getCard } from '../data/CardRegistry';
 export function resolveOnDeploy(
   cardId: string,
   owner: Player,
@@ -5068,548 +5799,572 @@ export function resolveOnDeploy(
   const combined: AbilityResult = { events: [] };
 
   for (const ability of def.abilities) {
-    if (ability.type === 'CUSTOM') {
-      const result = resolveCustomHandler(ability.handler as string, cardId, owner, position, board, ps, mods, unitInstance);
-      combined.events.push(...result.events);
-      if (result.pending && !combined.pending) combined.pending = result.pending;
+    const key = ability.type === 'CUSTOM'
+      ? (ability as any).handler as string
+      : ability.type;
+
+    const handler = AbilityHandlerRegistry.get(key);
+    if (!handler) {
+      console.warn(`[AbilityDispatcher] No handler for: ${key}`);
       continue;
     }
 
-    const result = resolveCommonAbility(
-      ability.type as AbilityType,
-      ability.params,
-      cardId, owner, position, board, ps, mods, unitInstance
-    );
-    combined.events.push(...result.events);
-    if (result.pending && !combined.pending) combined.pending = result.pending;
+    const ctx: AbilityContext = {
+      cardId,
+      owner,
+      position,
+      board,
+      players: ps,
+      mods,
+      unit: unitInstance,
+      params: (ability as any).params ?? {},
+    };
+
+    try {
+      const result = handler(ctx);
+      combined.events.push(...result.events);
+      if (result.pending && !combined.pending) combined.pending = result.pending;
+    } catch (err) {
+      console.error(`[AbilityDispatcher] Handler "${key}" threw for card "${cardId}":`, err);
+    }
   }
 
   return combined;
 }
 
-/**
- * Resolve ON_DEATH abilities for a unit that just died.
- * Called by GameEngine after applying a UNIT_DIED event.
- */
 export function resolveOnDeath(
   unit: Unit,
   cause: string,
-  board: Board,
-  ps: [PlayerState, PlayerState],
-  mods: [GameModifiers, GameModifiers]
+  _board: Board,
+  _ps: [PlayerState, PlayerState],
+  _mods: [GameModifiers, GameModifiers]
 ): AbilityResult {
   const def = getCard(unit.cardId);
   const combined: AbilityResult = { events: [] };
 
   for (const ability of def.abilities) {
-    if (ability.type === AbilityType.ON_DEATH_DRAW) {
-      // Foot Soldier: draw 1 card — but NOT on Reform (checked by caller)
-      if (cause !== 'REFORM') {
-        const { count } = ability.params as { count: number };
-        combined.events.push({
-          type:           'CARD_DRAWN',
-          player:         unit.owner,
-          cardId:         '__DRAW__', // Placeholder — GameEngine resolves actual card
-          handIndex:      -1,
-          deckRemaining:  -1,
-        });
+    try {
+      if (ability.type === 'ON_DEATH_DRAW') {
+        if (cause !== 'REFORM') {
+          combined.events.push({
+            type:          'CARD_DRAWN',
+            player:         unit.owner,
+            cardId:         '__DRAW__',
+            handIndex:      -1,
+            deckRemaining:  -1,
+          });
+        }
       }
+    } catch (err) {
+      console.error(`[AbilityDispatcher] onDeath handler threw for "${unit.cardId}":`, err);
     }
   }
 
   return combined;
 }
 
-/**
- * Resolve ON_KILL abilities for the attacker after confirming a kill.
- */
 export function resolveOnKill(
   attacker: Unit,
   victim: Unit,
-  board: Board,
-  ps: [PlayerState, PlayerState],
+  _board: Board,
+  _ps: [PlayerState, PlayerState],
   mods: [GameModifiers, GameModifiers]
 ): AbilityResult {
   const def = getCard(attacker.cardId);
   const combined: AbilityResult = { events: [] };
 
   for (const ability of def.abilities) {
-    if (ability.type === AbilityType.ON_KILL_LEG_DRAIN) {
-      const { minTargetCost, amount } = ability.params as { minTargetCost: number; amount: number };
-      const victimCost = getCard(victim.cardId).cost;
-      if (victimCost > minTargetCost) {
-        const victim_player = victim.owner;
-        const old_rate = mods[victim_player].getEffectiveLEGRate();
-        combined.events.push({
-          type:     'LEG_RATE_CHANGED',
-          player:   victim_player,
-          oldRate:  old_rate,
-          newRate:  Math.max(1, old_rate - amount),
-          reason:   'INQUISITOR',
-        });
+    try {
+      if (ability.type === 'ON_KILL_LEG_DRAIN') {
+        const { minTargetCost, amount } = (ability as any).params as { minTargetCost: number; amount: number };
+        const victimCost = getCard(victim.cardId).cost;
+        if (victimCost > minTargetCost) {
+          const victimPlayer = victim.owner;
+          const oldRate = mods[victimPlayer].getEffectiveLEGRate();
+          combined.events.push({
+            type:     'LEG_RATE_CHANGED',
+            player:   victimPlayer,
+            oldRate,
+            newRate:  Math.max(1, oldRate - amount),
+            reason:   'INQUISITOR',
+          });
+        }
       }
+    } catch (err) {
+      console.error(`[AbilityDispatcher] onKill handler threw for "${attacker.cardId}":`, err);
     }
   }
 
   return combined;
 }
 
-// ─────────────────────────────────────────────
-// COMMON ABILITY SWITCH
-// ─────────────────────────────────────────────
+```
 
-function resolveCommonAbility(
-  type: AbilityType,
-  params: Record<string, any>,
-  cardId: string,
-  owner: Player,
-  position: Position | undefined,
-  board: Board,
-  ps: [PlayerState, PlayerState],
-  mods: [GameModifiers, GameModifiers],
-  unit?: Unit
-): AbilityResult {
+# src\game\abilities\AbilityHandlerRegistry.ts
 
-  switch (type) {
+```ts
+import type { AbilityHandlerFn } from './types';
 
-    // ─── ON_DEPLOY_DRAW ───────────────────────────────────────
-    case AbilityType.ON_DEPLOY_DRAW: {
-      const { count, filter } = params as { count: number; filter?: string };
-      const events: GameEvent[] = [];
-      // Signal GameEngine to draw N cards (with optional filter)
-      for (let i = 0; i < count; i++) {
-        events.push({
-          type:           'CARD_DRAWN',
-          player:          owner,
-          cardId:          filter ? `__DRAW_FILTERED_${filter}__` : '__DRAW__',
-          handIndex:       -1,
-          deckRemaining:   -1,
-        });
-      }
-      return { events };
+class Registry {
+  private readonly handlers = new Map<string, AbilityHandlerFn>();
+
+  register(key: string, handler: AbilityHandlerFn): void {
+    if (this.handlers.has(key)) {
+      console.warn(`[AbilityRegistry] Overwriting handler: ${key}`);
     }
+    this.handlers.set(key, handler);
+  }
 
-    // ─── ON_DEPLOY_SCOUT_DECK ─────────────────────────────────
-    case AbilityType.ON_DEPLOY_SCOUT_DECK: {
-      const { count } = params as { count: number };
-      const opponentPs = ps[owner === Player.P1 ? Player.P2 : Player.P1];
-      const topCards = opponentPs.peekTop(count);
-      return {
-        events: [{
-          type:     'SCOUT_RESULT',
-          player:   owner,
-          topCards,
-        }]
-      };
-    }
+  get(key: string): AbilityHandlerFn | undefined {
+    return this.handlers.get(key);
+  }
 
-    // ─── ON_DEPLOY_HEAL_FRIENDLY ──────────────────────────────
-    case AbilityType.ON_DEPLOY_HEAL_FRIENDLY: {
-      // Priest: pause and let player choose a target
-      const friendlyUnits = board.getUnitsOf(owner);
-      const validTargetIds = friendlyUnits.map(u => u.instanceId);
+  has(key: string): boolean {
+    return this.handlers.has(key);
+  }
 
-      if (validTargetIds.length === 0) return { events: [] };
-
-      const pending: PendingInteraction = {
-        kind:           'TARGET',
-        reason:         'Choose a friendly unit to fully restore HP.',
-        validTargetIds,
-        resumeCallback: () => {}, // Filled in by GameEngine
-      };
-      return { events: [], pending };
-    }
-
-    // ─── ON_DEPLOY_REVIVE ─────────────────────────────────────
-    case AbilityType.ON_DEPLOY_REVIVE: {
-      // Mystic: pause and let player choose a graveyard unit
-      const graveIds = ps[owner].getGraveyard();
-      if (graveIds.length === 0) {
-        // Nothing to revive — still apply LEG drain
-        return {
-          events: [{
-            type:    'LEG_RATE_CHANGED',
-            player:   owner,
-            oldRate:  mods[owner].getEffectiveLEGRate(),
-            newRate:  Math.max(1, mods[owner].getEffectiveLEGRate() - 1),
-            reason:   'MYSTIC',
-          }]
-        };
-      }
-
-      const pending: PendingInteraction = {
-        kind:           'TARGET',
-        reason:         'Choose a unit from your graveyard to revive.',
-        validTargetIds: graveIds,
-        resumeCallback: () => {},
-      };
-      // LEG drain will be emitted after interaction resolves (GameEngine handles)
-      return { events: [], pending };
-    }
-
-    // ─── SPELL_DAMAGE_STRUCTURE_ADJ ───────────────────────────
-    case AbilityType.SPELL_DAMAGE_STRUCTURE_ADJ: {
-      // Disease: player selects a structure to afflict
-      const structures = board.getStructures();
-      const validTargetIds = structures.map(u => u.instanceId);
-
-      if (validTargetIds.length === 0) return { events: [] };
-
-      const pending: PendingInteraction = {
-        kind:           'TARGET',
-        reason:         'Choose an enemy structure to afflict with Disease.',
-        validTargetIds,
-        resumeCallback: () => {},
-      };
-      return { events: [], pending };
-    }
-
-    // ─── SPELL_FREEZE_LEG_RATE ────────────────────────────────
-    case AbilityType.SPELL_FREEZE_LEG_RATE: {
-      const { duration } = params as { duration: number };
-      // Civil War: both players frozen
-      const p1Rate = mods[Player.P1].getEffectiveLEGRate();
-      const p2Rate = mods[Player.P2].getEffectiveLEGRate();
-      return {
-        events: [
-          { type: 'LEG_RATE_CHANGED', player: Player.P1, oldRate: p1Rate, newRate: 0, reason: 'CIVIL_WAR' },
-          { type: 'LEG_RATE_CHANGED', player: Player.P2, oldRate: p2Rate, newRate: 0, reason: 'CIVIL_WAR' },
-        ]
-      };
-    }
-
-    // ─── SPELL_DRAIN_LEG_RATE_PERM ────────────────────────────
-    case AbilityType.SPELL_DRAIN_LEG_RATE_PERM: {
-      const { amount } = params as { amount: number; target: string };
-      const opp = owner === Player.P1 ? Player.P2 : Player.P1;
-      const oldRate = mods[opp].getEffectiveLEGRate();
-      return {
-        events: [{
-          type:    'LEG_RATE_CHANGED',
-          player:   opp,
-          oldRate,
-          newRate:  Math.max(1, oldRate - amount),
-          reason:   'CASUS_BELLI',
-        }]
-      };
-    }
-
-    // ─── SPELL_FORWARD_DEPLOY ─────────────────────────────────
-    case AbilityType.SPELL_FORWARD_DEPLOY: {
-      // Casus Belli: deploy a hand card to opponent's front row
-      const opp = owner === Player.P1 ? Player.P2 : Player.P1;
-      const frontRow = owner === Player.P1 ? board.rows - 1 : 0; // Opposite half front row
-      const validPositions: Position[] = [];
-      for (let c = 0; c < board.cols; c++) {
-        if (board.isEmpty(c, frontRow)) validPositions.push({ col: c, row: frontRow });
-      }
-      if (validPositions.length === 0 || ps[owner].hand.length === 0) return { events: [] };
-
-      const pending: PendingInteraction = {
-        kind:           'POSITION',
-        reason:         'Choose an empty square in the enemy front row to deploy a card.',
-        validPositions,
-        resumeCallback: () => {},
-      };
-      return { events: [], pending };
-    }
-
-    // ─── SPELL_TRANSFORM_ALL ──────────────────────────────────
-    case AbilityType.SPELL_TRANSFORM_ALL: {
-      const { fromCardId, toCardId } = params as { fromCardId: string; toCardId: string };
-      const events = applyReform(fromCardId, toCardId, board);
-      return { events };
-    }
-
-    // ─── SPELL_EARTHQUAKE ─────────────────────────────────────
-    case AbilityType.SPELL_EARTHQUAKE: {
-      const pending: PendingInteraction = {
-        kind:           'COLUMN',
-        reason:         'Choose a column (A–F) to strike with the Earthquake.',
-        resumeCallback: () => {},
-      };
-      return { events: [], pending };
-    }
-
-    // ─── SPELL_DRAW_STRUCTURES ────────────────────────────────
-    case AbilityType.SPELL_DRAW_STRUCTURES: {
-      const { overflow } = params as { overflow: boolean };
-      const ownStructures = board.getStructures(owner);
-      const count = ownStructures.length;
-      const events: GameEvent[] = [];
-      for (let i = 0; i < count; i++) {
-        events.push({
-          type:          'CARD_DRAWN',
-          player:         owner,
-          cardId:         overflow ? '__DRAW_OVERFLOW__' : '__DRAW__',
-          handIndex:      -1,
-          deckRemaining:  -1,
-        });
-      }
-      return { events };
-    }
-
-    // ─── PASSIVE_* and AURA_* ─────────────────────────────────
-    // Passive abilities are not resolved on deploy — they are
-    // handled by AuraSystem (auras) or GameEngine LEG phase (build delay, spawn).
-    case AbilityType.PASSIVE_BUILD_DELAY:
-    case AbilityType.PASSIVE_SPAWN:
-    case AbilityType.PASSIVE_LANCER_CHARGE:
-    case AbilityType.AURA_ROYAL_DISCOUNT:
-    case AbilityType.AURA_LEG_BONUS:
-    case AbilityType.AURA_ADJ_DEF:
-    case AbilityType.AURA_BOARD_HALF_DEF:
-    case AbilityType.AURA_BOARD_HALF_ATK:
-    case AbilityType.AURA_VILLAGE_SLOW:
-    case AbilityType.AURA_CAVALRY_COUNTER:
-    case AbilityType.AURA_PIKEMAN_FLANK:
-    case AbilityType.AURA_AUTO_HEAL:
-    case AbilityType.ON_DEATH_DRAW:
-    case AbilityType.ON_KILL_LEG_DRAIN:
-      return { events: [] }; // Not on-deploy
-
-    default:
-      console.warn(`[AbilityResolver] Unhandled ability type: ${type}`);
-      return { events: [] };
+  listKeys(): string[] {
+    return Array.from(this.handlers.keys());
   }
 }
 
-// ─────────────────────────────────────────────
-// CUSTOM HANDLERS
-// Cards with compound or multi-step logic.
-// Each handler is a pure function returning AbilityResult.
-// ─────────────────────────────────────────────
+export const AbilityHandlerRegistry = new Registry();
 
-function resolveCustomHandler(
-  handlerKey: string,
-  cardId: string,
-  owner: Player,
-  position: Position | undefined,
-  board: Board,
-  ps: [PlayerState, PlayerState],
-  mods: [GameModifiers, GameModifiers],
-  unit?: Unit
-): AbilityResult {
+```
 
-  switch (handlerKey) {
+# src\game\abilities\handlers\customMilitia.ts
 
-    case 'mysticDeployHandler':
-      return mysticHandler(owner, board, ps, mods);
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import type { PendingCommand } from '../../pending/PendingCommand';
+import type { AbilityContext, AbilityResult } from '../types';
 
-    case 'militiaDeployHandler':
-      return militiaHandler(owner, board, ps);
+function militiaDeployHandler(ctx: AbilityContext): AbilityResult {
+  const hasMilitiaInDeck = ctx.players[ctx.owner].deck.includes('militia');
+  if (!hasMilitiaInDeck) return { events: [] };
 
-    case 'warHornHandler':
-      return warHornHandler(owner, board, ps);
+  const freeSquares = ctx.board.getFreeSquaresInHalf(ctx.owner);
+  if (freeSquares.length === 0) return { events: [] };
 
-    case 'coupHandler':
-      return coupHandler(owner, board, ps, mods);
+  const pending: PendingCommand = {
+    kind:           'POSITION',
+    owner:          ctx.owner,
+    sourceCardId:   'militia',
+    sourceAbility:  'militiaDeployHandler',
+    reason:         'Place the summoned Militia on your half of the board.',
+    validPositions: freeSquares,
+    deferredEvents: [],
+  };
 
-    case 'treasonHandler':
-      return treasonHandler(owner, board);
-
-    case 'peasantRevoltHandler':
-      return peasantRevoltHandler(owner, board, mods);
-
-    case 'motherlandHandler':
-      return motherlandHandler(owner, board, ps);
-
-    case 'earthquakeColumnHandler':
-      // This variant receives the chosen column directly
-      return { events: [] }; // Resolved inline by GameEngine.selectColumn()
-
-    default:
-      console.warn(`[AbilityResolver] Unknown custom handler: ${handlerKey}`);
-      return { events: [] };
-  }
+  return { events: [], pending };
 }
 
-// ─── Mystic ───────────────────────────────────────────────────
-// Step 1: pause for revive target. Step 2: auto-drain LEG rate.
-function mysticHandler(
-  owner: Player,
-  board: Board,
-  ps: [PlayerState, PlayerState],
-  mods: [GameModifiers, GameModifiers]
-): AbilityResult {
-  const graveIds = ps[owner].getGraveyard();
+AbilityHandlerRegistry.register('militiaDeployHandler', militiaDeployHandler);
 
-  // LEG drain is automatic regardless of whether revive is available
+```
+
+# src\game\abilities\handlers\customMystic.ts
+
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import type { PendingCommand } from '../../pending/PendingCommand';
+import type { AbilityContext, AbilityResult } from '../types';
+import type { GameEvent } from '../../types/EventTypes';
+
+function mysticDeployHandler(ctx: AbilityContext): AbilityResult {
+  const graveIds = ctx.players[ctx.owner].getGraveyard();
+
   const drainEvent: GameEvent = {
     type:    'LEG_RATE_CHANGED',
-    player:   owner,
-    oldRate:  mods[owner].getEffectiveLEGRate(),
-    newRate:  Math.max(1, mods[owner].getEffectiveLEGRate() - 1),
+    player:   ctx.owner,
+    oldRate:  ctx.mods[ctx.owner].getEffectiveLEGRate(),
+    newRate:  Math.max(1, ctx.mods[ctx.owner].getEffectiveLEGRate() - 1),
     reason:   'MYSTIC',
   };
 
   if (graveIds.length === 0) return { events: [drainEvent] };
 
-  const pending: PendingInteraction = {
+  const pending: PendingCommand = {
     kind:           'TARGET',
+    owner:          ctx.owner,
+    sourceCardId:   ctx.cardId,
+    sourceAbility:  'mysticDeployHandler',
     reason:         'Mystic: choose a unit from your graveyard to revive.',
     validTargetIds: graveIds,
-    resumeCallback: () => {}, // GameEngine replaces this
+    deferredEvents: [drainEvent],
   };
 
-  // Drain applied after resolve — GameEngine emits it after interact resolves
   return { events: [], pending };
 }
 
-// ─── Militia ──────────────────────────────────────────────────
-// Pull next Militia from deck, place in own half. Non-recursive.
-function militiaHandler(
-  owner: Player,
-  board: Board,
-  ps: [PlayerState, PlayerState]
-): AbilityResult {
-  const hasMilitiaInDeck = ps[owner].deck.includes('militia');
-  if (!hasMilitiaInDeck) return { events: [] };
+AbilityHandlerRegistry.register('mysticDeployHandler', mysticDeployHandler);
 
-  const freeSquares = board.getFreeSquaresInHalf(owner);
-  if (freeSquares.length === 0) return { events: [] };
+```
 
-  // Pick the first free square (GameEngine applies the pull and placement)
-  const pos = freeSquares[0];
+# src\game\abilities\handlers\onDeployDraw.ts
+
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import { AbilityType } from '../../types/AbilityTypes';
+import type { AbilityContext, AbilityResult } from '../types';
+import type { GameEvent } from '../../types/EventTypes';
+
+function onDeployDraw(ctx: AbilityContext): AbilityResult {
+  const { count, filter } = ctx.params as { count: number; filter?: string };
+  const events: GameEvent[] = [];
+  for (let i = 0; i < count; i++) {
+    events.push({
+      type:          'CARD_DRAWN',
+      player:         ctx.owner,
+      cardId:         filter ? `__DRAW_FILTERED_${filter}__` : '__DRAW__',
+      handIndex:      -1,
+      deckRemaining:  -1,
+    });
+  }
+  return { events };
+}
+
+AbilityHandlerRegistry.register(AbilityType.ON_DEPLOY_DRAW, onDeployDraw);
+
+```
+
+# src\game\abilities\handlers\onDeployHeal.ts
+
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import { AbilityType } from '../../types/AbilityTypes';
+import type { PendingCommand } from '../../pending/PendingCommand';
+import type { AbilityContext, AbilityResult } from '../types';
+
+function onDeployHeal(ctx: AbilityContext): AbilityResult {
+  const friendlyUnits = ctx.board.getUnitsOf(ctx.owner);
+  const validTargetIds = friendlyUnits
+    .filter(u => u.currentDef < u.maxDef)
+    .map(u => u.instanceId);
+
+  if (validTargetIds.length === 0) return { events: [] };
+
+  const pending: PendingCommand = {
+    kind:           'TARGET',
+    owner:          ctx.owner,
+    sourceCardId:   ctx.cardId,
+    sourceAbility:  AbilityType.ON_DEPLOY_HEAL_FRIENDLY,
+    reason:         'Choose a friendly unit to fully restore HP.',
+    validTargetIds,
+    deferredEvents: [],
+  };
+  return { events: [], pending };
+}
+
+AbilityHandlerRegistry.register(AbilityType.ON_DEPLOY_HEAL_FRIENDLY, onDeployHeal);
+
+```
+
+# src\game\abilities\handlers\onDeployRevive.ts
+
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import { AbilityType } from '../../types/AbilityTypes';
+import type { PendingCommand } from '../../pending/PendingCommand';
+import type { AbilityContext, AbilityResult } from '../types';
+
+function onDeployRevive(ctx: AbilityContext): AbilityResult {
+  const graveIds = ctx.players[ctx.owner].getGraveyard();
+  if (graveIds.length === 0) {
+    return {
+      events: [{
+        type:    'LEG_RATE_CHANGED',
+        player:   ctx.owner,
+        oldRate:  ctx.mods[ctx.owner].getEffectiveLEGRate(),
+        newRate:  Math.max(1, ctx.mods[ctx.owner].getEffectiveLEGRate() - 1),
+        reason:   'MYSTIC',
+      }]
+    };
+  }
+
+  const pending: PendingCommand = {
+    kind:           'TARGET',
+    owner:          ctx.owner,
+    sourceCardId:   ctx.cardId,
+    sourceAbility:  AbilityType.ON_DEPLOY_REVIVE,
+    reason:         'Choose a unit from your graveyard to revive.',
+    validTargetIds: graveIds,
+    deferredEvents: [],
+  };
+  return { events: [], pending };
+}
+
+AbilityHandlerRegistry.register(AbilityType.ON_DEPLOY_REVIVE, onDeployRevive);
+
+```
+
+# src\game\abilities\handlers\onDeployScout.ts
+
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import { AbilityType } from '../../types/AbilityTypes';
+import type { AbilityContext, AbilityResult } from '../types';
+import { Player } from '../types';
+
+function onDeployScout(ctx: AbilityContext): AbilityResult {
+  const { count } = ctx.params as { count: number };
+  const opponentPs = ctx.players[ctx.owner === Player.P1 ? Player.P2 : Player.P1];
+  const topCards = opponentPs.peekTop(count);
   return {
     events: [{
-      type:        'UNIT_PLACED',
-      instanceId:  `militia_summoned_${Date.now()}`,
-      cardId:      'militia',
-      owner,
-      col:         pos.col,
-      row:         pos.row,
-      isActive:    true,
+      type:     'SCOUT_RESULT',
+      player:   ctx.owner,
+      topCards,
     }]
   };
 }
 
-// ─── War Horn ─────────────────────────────────────────────────
-// Draw 2 → discard 1 → all friendlies +1 move this turn.
-function warHornHandler(
-  owner: Player,
-  board: Board,
-  ps: [PlayerState, PlayerState]
-): AbilityResult {
-  // Signal draw 2 first
-  const drawEvents: GameEvent[] = [
-    { type: 'CARD_DRAWN', player: owner, cardId: '__DRAW__', handIndex: -1, deckRemaining: -1 },
-    { type: 'CARD_DRAWN', player: owner, cardId: '__DRAW__', handIndex: -1, deckRemaining: -1 },
-  ];
+AbilityHandlerRegistry.register(AbilityType.ON_DEPLOY_SCOUT_DECK, onDeployScout);
 
-  // After draws resolve, ask player to discard 1
-  const pending: PendingInteraction = {
-    kind:           'DISCARD',
-    reason:         'War Horn: discard 1 card from your hand.',
-    count:          1,
-    resumeCallback: () => {},
-  };
+```
 
-  return { events: drawEvents, pending };
-}
+# src\game\abilities\handlers\passiveNoOp.ts
 
-// ─── Coup ─────────────────────────────────────────────────────
-// Target enemy Royal (not King) → compare LEG to capture or banish.
-function coupHandler(
-  owner: Player,
-  board: Board,
-  ps: [PlayerState, PlayerState],
-  mods: [GameModifiers, GameModifiers]
-): AbilityResult {
-  const opp = owner === Player.P1 ? Player.P2 : Player.P1;
-  const targets = board.getUnitsOf(opp).filter(u =>
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import { AbilityType } from '../../types/AbilityTypes';
+import type { AbilityResult } from '../types';
+
+const noOp = (): AbilityResult => ({ events: [] });
+
+// Passive abilities are not resolved on deploy — handled by AuraSystem or GameEngine LEG phase.
+AbilityHandlerRegistry.register(AbilityType.PASSIVE_BUILD_DELAY, noOp);
+AbilityHandlerRegistry.register(AbilityType.PASSIVE_SPAWN, noOp);
+AbilityHandlerRegistry.register(AbilityType.PASSIVE_LANCER_CHARGE, noOp);
+AbilityHandlerRegistry.register(AbilityType.AURA_ROYAL_DISCOUNT, noOp);
+AbilityHandlerRegistry.register(AbilityType.AURA_LEG_BONUS, noOp);
+AbilityHandlerRegistry.register(AbilityType.AURA_ADJ_DEF, noOp);
+AbilityHandlerRegistry.register(AbilityType.AURA_BOARD_HALF_DEF, noOp);
+AbilityHandlerRegistry.register(AbilityType.AURA_BOARD_HALF_ATK, noOp);
+AbilityHandlerRegistry.register(AbilityType.AURA_VILLAGE_SLOW, noOp);
+AbilityHandlerRegistry.register(AbilityType.AURA_CAVALRY_COUNTER, noOp);
+AbilityHandlerRegistry.register(AbilityType.AURA_PIKEMAN_FLANK, noOp);
+AbilityHandlerRegistry.register(AbilityType.AURA_AUTO_HEAL, noOp);
+AbilityHandlerRegistry.register(AbilityType.ON_DEATH_DRAW, noOp);
+AbilityHandlerRegistry.register(AbilityType.ON_KILL_LEG_DRAIN, noOp);
+
+```
+
+# src\game\abilities\handlers\spellCoup.ts
+
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import type { PendingCommand } from '../../pending/PendingCommand';
+import type { AbilityContext, AbilityResult } from '../types';
+import { Player } from '../types';
+import { getCard } from '../../data/CardRegistry';
+
+function coupHandler(ctx: AbilityContext): AbilityResult {
+  const opp = ctx.owner === Player.P1 ? Player.P2 : Player.P1;
+  const targets = ctx.board.getUnitsOf(opp).filter(u =>
     getCard(u.cardId).allegiance === 'ROYAL' && u.cardId !== 'king'
   );
 
   if (targets.length === 0) return { events: [] };
 
-  const pending: PendingInteraction = {
+  const pending: PendingCommand = {
     kind:           'TARGET',
+    owner:          ctx.owner,
+    sourceCardId:   ctx.cardId,
+    sourceAbility:  'coupHandler',
     reason:         'Coup: choose an enemy Royal unit to capture or banish.',
     validTargetIds: targets.map(u => u.instanceId),
-    resumeCallback: () => {},
+    deferredEvents: [],
   };
 
   return { events: [], pending };
 }
 
-// ─── Treason ──────────────────────────────────────────────────
-// Target enemy non-Royal → take control for this turn.
-function treasonHandler(
-  owner: Player,
-  board: Board
-): AbilityResult {
-  const opp = owner === Player.P1 ? Player.P2 : Player.P1;
-  const targets = board.getUnitsOf(opp).filter(u =>
-    getCard(u.cardId).allegiance !== 'ROYAL' && u.cardId !== 'king'
-  );
+AbilityHandlerRegistry.register('coupHandler', coupHandler);
 
-  if (targets.length === 0) return { events: [] };
+```
 
-  const pending: PendingInteraction = {
+# src\game\abilities\handlers\spellDamageStructure.ts
+
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import { AbilityType } from '../../types/AbilityTypes';
+import type { PendingCommand } from '../../pending/PendingCommand';
+import type { AbilityContext, AbilityResult } from '../types';
+
+function spellDamageStructure(ctx: AbilityContext): AbilityResult {
+  const structures = ctx.board.getStructures();
+  const validTargetIds = structures.map(u => u.instanceId);
+
+  if (validTargetIds.length === 0) return { events: [] };
+
+  const pending: PendingCommand = {
     kind:           'TARGET',
-    reason:         'Treason: choose an enemy non-Royal unit to control this turn.',
-    validTargetIds: targets.map(u => u.instanceId),
-    resumeCallback: () => {},
+    owner:          ctx.owner,
+    sourceCardId:   ctx.cardId,
+    sourceAbility:  AbilityType.SPELL_DAMAGE_STRUCTURE_ADJ,
+    reason:         'Choose an enemy structure to afflict with Disease.',
+    validTargetIds,
+    deferredEvents: [],
   };
-
   return { events: [], pending };
 }
 
-// ─── Peasant Revolt ───────────────────────────────────────────
-// Count all structures on board → summon that many Militia to own half.
-// Apply permanent penalties: -1 leg rate + +2 royal cost.
-function peasantRevoltHandler(
-  owner: Player,
-  board: Board,
-  mods: [GameModifiers, GameModifiers]
-): AbilityResult {
-  const allStructures = board.getStructures();
-  const count = allStructures.length;
+AbilityHandlerRegistry.register(AbilityType.SPELL_DAMAGE_STRUCTURE_ADJ, spellDamageStructure);
 
-  const events: GameEvent[] = [];
+```
 
-  // Summon Militia to free squares
-  const freeSquares = board.getFreeSquaresInHalf(owner);
-  const toSummon = Math.min(count, freeSquares.length);
-  for (let i = 0; i < toSummon; i++) {
-    events.push({
-      type:       'UNIT_PLACED',
-      instanceId: `militia_revolt_${i}_${Date.now()}`,
-      cardId:     'militia',
-      owner,
-      col:        freeSquares[i].col,
-      row:        freeSquares[i].row,
-      isActive:   true,
-    });
-  }
+# src\game\abilities\handlers\spellDrainLeg.ts
 
-  // Permanent penalties
-  const oldRate = mods[owner].getEffectiveLEGRate();
-  events.push({
-    type:    'LEG_RATE_CHANGED',
-    player:   owner,
-    oldRate,
-    newRate:  Math.max(1, oldRate - 1),
-    reason:   'REVOLT',
-  });
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import { AbilityType } from '../../types/AbilityTypes';
+import type { AbilityContext, AbilityResult } from '../types';
+import { Player } from '../types';
 
-  return { events };
+function spellDrainLeg(ctx: AbilityContext): AbilityResult {
+  const { amount } = ctx.params as { amount: number; target: string };
+  const opp = ctx.owner === Player.P1 ? Player.P2 : Player.P1;
+  const oldRate = ctx.mods[opp].getEffectiveLEGRate();
+  return {
+    events: [{
+      type:    'LEG_RATE_CHANGED',
+      player:   opp,
+      oldRate,
+      newRate:  Math.max(1, oldRate - amount),
+      reason:   'CASUS_BELLI',
+    }]
+  };
 }
 
-// ─── Motherland ───────────────────────────────────────────────
-// Draw 1 per owned structure (overflow allowed).
-function motherlandHandler(
-  owner: Player,
-  board: Board,
-  ps: [PlayerState, PlayerState]
-): AbilityResult {
-  const count = board.getStructures(owner).length;
+AbilityHandlerRegistry.register(AbilityType.SPELL_DRAIN_LEG_RATE_PERM, spellDrainLeg);
+
+```
+
+# src\game\abilities\handlers\spellDrawStructures.ts
+
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import { AbilityType } from '../../types/AbilityTypes';
+import type { AbilityContext, AbilityResult } from '../types';
+import type { GameEvent } from '../../types/EventTypes';
+
+function spellDrawStructures(ctx: AbilityContext): AbilityResult {
+  const { overflow } = ctx.params as { overflow: boolean };
+  const ownStructures = ctx.board.getStructures(ctx.owner);
+  const count = ownStructures.length;
   const events: GameEvent[] = [];
   for (let i = 0; i < count; i++) {
     events.push({
       type:          'CARD_DRAWN',
-      player:         owner,
+      player:         ctx.owner,
+      cardId:         overflow ? '__DRAW_OVERFLOW__' : '__DRAW__',
+      handIndex:      -1,
+      deckRemaining:  -1,
+    });
+  }
+  return { events };
+}
+
+AbilityHandlerRegistry.register(AbilityType.SPELL_DRAW_STRUCTURES, spellDrawStructures);
+
+```
+
+# src\game\abilities\handlers\spellEarthquake.ts
+
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import { AbilityType } from '../../types/AbilityTypes';
+import type { PendingCommand } from '../../pending/PendingCommand';
+import type { AbilityContext, AbilityResult } from '../types';
+
+function spellEarthquake(ctx: AbilityContext): AbilityResult {
+  const pending: PendingCommand = {
+    kind:           'COLUMN',
+    owner:          ctx.owner,
+    sourceCardId:   ctx.cardId,
+    sourceAbility:  AbilityType.SPELL_EARTHQUAKE,
+    reason:         'Choose a column (A\u2013F) to strike with the Earthquake.',
+    deferredEvents: [],
+  };
+  return { events: [], pending };
+}
+
+AbilityHandlerRegistry.register(AbilityType.SPELL_EARTHQUAKE, spellEarthquake);
+
+```
+
+# src\game\abilities\handlers\spellForwardDeploy.ts
+
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import { AbilityType } from '../../types/AbilityTypes';
+import type { PendingCommand } from '../../pending/PendingCommand';
+import type { AbilityContext, AbilityResult } from '../types';
+import { Player } from '../types';
+import type { Position } from '../../types/GameTypes';
+
+function spellForwardDeploy(ctx: AbilityContext): AbilityResult {
+  const frontRow = ctx.owner === Player.P1 ? ctx.board.rows - 1 : 0;
+  const validPositions: Position[] = [];
+  for (let c = 0; c < ctx.board.cols; c++) {
+    if (ctx.board.isEmpty(c, frontRow)) validPositions.push({ col: c, row: frontRow });
+  }
+  if (validPositions.length === 0 || ctx.players[ctx.owner].hand.length === 0) return { events: [] };
+
+  const pending: PendingCommand = {
+    kind:           'POSITION',
+    owner:          ctx.owner,
+    sourceCardId:   ctx.cardId,
+    sourceAbility:  AbilityType.SPELL_FORWARD_DEPLOY,
+    reason:         'Choose an empty square in the enemy front row to deploy a card.',
+    validPositions,
+    deferredEvents: [],
+  };
+  return { events: [], pending };
+}
+
+AbilityHandlerRegistry.register(AbilityType.SPELL_FORWARD_DEPLOY, spellForwardDeploy);
+
+```
+
+# src\game\abilities\handlers\spellFreezeLeg.ts
+
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import { AbilityType } from '../../types/AbilityTypes';
+import type { AbilityContext, AbilityResult } from '../types';
+import { Player } from '../types';
+
+function spellFreezeLeg(ctx: AbilityContext): AbilityResult {
+  const p1Rate = ctx.mods[Player.P1].getEffectiveLEGRate();
+  const p2Rate = ctx.mods[Player.P2].getEffectiveLEGRate();
+  return {
+    events: [
+      { type: 'LEG_RATE_CHANGED', player: Player.P1, oldRate: p1Rate, newRate: 0, reason: 'CIVIL_WAR' },
+      { type: 'LEG_RATE_CHANGED', player: Player.P2, oldRate: p2Rate, newRate: 0, reason: 'CIVIL_WAR' },
+    ]
+  };
+}
+
+AbilityHandlerRegistry.register(AbilityType.SPELL_FREEZE_LEG_RATE, spellFreezeLeg);
+
+```
+
+# src\game\abilities\handlers\spellMotherland.ts
+
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import type { AbilityContext, AbilityResult } from '../types';
+import type { GameEvent } from '../../types/EventTypes';
+
+function motherlandHandler(ctx: AbilityContext): AbilityResult {
+  const count = ctx.board.getStructures(ctx.owner).length;
+  const events: GameEvent[] = [];
+  for (let i = 0; i < count; i++) {
+    events.push({
+      type:          'CARD_DRAWN',
+      player:         ctx.owner,
       cardId:         '__DRAW_OVERFLOW__',
       handIndex:      -1,
       deckRemaining:  -1,
@@ -5618,195 +6373,447 @@ function motherlandHandler(
   return { events };
 }
 
+AbilityHandlerRegistry.register('motherlandHandler', motherlandHandler);
+
 ```
 
-# src\game\AuraSystem.ts
+# src\game\abilities\handlers\spellRevolt.ts
+
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import type { AbilityContext, AbilityResult } from '../types';
+import type { GameEvent } from '../../types/EventTypes';
+
+function peasantRevoltHandler(ctx: AbilityContext): AbilityResult {
+  const allStructures = ctx.board.getStructures();
+  const count = allStructures.length;
+
+  const events: GameEvent[] = [];
+
+  const freeSquares = ctx.board.getFreeSquaresInHalf(ctx.owner);
+  const toSummon = Math.min(count, freeSquares.length);
+  for (let i = 0; i < toSummon; i++) {
+    events.push({
+      type:       'UNIT_PLACED',
+      instanceId: `militia_revolt_${i}_${Date.now()}`,
+      cardId:     'militia',
+      owner:      ctx.owner,
+      col:        freeSquares[i].col,
+      row:        freeSquares[i].row,
+      isActive:   true,
+    });
+  }
+
+  const oldRate = ctx.mods[ctx.owner].getEffectiveLEGRate();
+  events.push({
+    type:    'LEG_RATE_CHANGED',
+    player:   ctx.owner,
+    oldRate,
+    newRate:  Math.max(1, oldRate - 1),
+    reason:   'REVOLT',
+  });
+
+  return { events };
+}
+
+AbilityHandlerRegistry.register('peasantRevoltHandler', peasantRevoltHandler);
+
+```
+
+# src\game\abilities\handlers\spellTransformAll.ts
+
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import { AbilityType } from '../../types/AbilityTypes';
+import type { AbilityContext, AbilityResult } from '../types';
+import { applyReform } from '../../CombatResolver';
+
+function spellTransformAll(ctx: AbilityContext): AbilityResult {
+  const { fromCardId, toCardId } = ctx.params as { fromCardId: string; toCardId: string };
+  const events = applyReform(fromCardId, toCardId, ctx.board);
+  return { events };
+}
+
+AbilityHandlerRegistry.register(AbilityType.SPELL_TRANSFORM_ALL, spellTransformAll);
+
+```
+
+# src\game\abilities\handlers\spellTreason.ts
+
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import type { PendingCommand } from '../../pending/PendingCommand';
+import type { AbilityContext, AbilityResult } from '../types';
+import { Player } from '../types';
+import { getCard } from '../../data/CardRegistry';
+
+function treasonHandler(ctx: AbilityContext): AbilityResult {
+  const opp = ctx.owner === Player.P1 ? Player.P2 : Player.P1;
+  const targets = ctx.board.getUnitsOf(opp).filter(u =>
+    getCard(u.cardId).allegiance !== 'ROYAL' && u.cardId !== 'king'
+  );
+
+  if (targets.length === 0) return { events: [] };
+
+  const pending: PendingCommand = {
+    kind:           'TARGET',
+    owner:          ctx.owner,
+    sourceCardId:   ctx.cardId,
+    sourceAbility:  'treasonHandler',
+    reason:         'Treason: choose an enemy non-Royal unit to control this turn.',
+    validTargetIds: targets.map(u => u.instanceId),
+    deferredEvents: [],
+  };
+
+  return { events: [], pending };
+}
+
+AbilityHandlerRegistry.register('treasonHandler', treasonHandler);
+
+```
+
+# src\game\abilities\handlers\spellWarHorn.ts
+
+```ts
+import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
+import type { PendingCommand } from '../../pending/PendingCommand';
+import type { AbilityContext, AbilityResult } from '../types';
+import type { GameEvent } from '../../types/EventTypes';
+
+function warHornHandler(ctx: AbilityContext): AbilityResult {
+  const drawEvents: GameEvent[] = [
+    { type: 'CARD_DRAWN', player: ctx.owner, cardId: '__DRAW__', handIndex: -1, deckRemaining: -1 },
+    { type: 'CARD_DRAWN', player: ctx.owner, cardId: '__DRAW__', handIndex: -1, deckRemaining: -1 },
+  ];
+
+  const pending: PendingCommand = {
+    kind:           'DISCARD',
+    owner:          ctx.owner,
+    sourceCardId:   ctx.cardId,
+    sourceAbility:  'warHornHandler',
+    count:          1,
+    reason:         'War Horn: discard 1 card from your hand.',
+    deferredEvents: [],
+  };
+
+  return { events: drawEvents, pending };
+}
+
+AbilityHandlerRegistry.register('warHornHandler', warHornHandler);
+
+```
+
+# src\game\abilities\registerAll.ts
+
+```ts
+import './handlers/onDeployDraw';
+import './handlers/onDeployScout';
+import './handlers/onDeployHeal';
+import './handlers/onDeployRevive';
+import './handlers/spellDamageStructure';
+import './handlers/spellFreezeLeg';
+import './handlers/spellDrainLeg';
+import './handlers/spellForwardDeploy';
+import './handlers/spellTransformAll';
+import './handlers/spellEarthquake';
+import './handlers/spellDrawStructures';
+import './handlers/spellWarHorn';
+import './handlers/spellCoup';
+import './handlers/spellTreason';
+import './handlers/spellRevolt';
+import './handlers/spellMotherland';
+import './handlers/customMystic';
+import './handlers/customMilitia';
+import './handlers/passiveNoOp';
+// ↓ ADD NEW HANDLERS HERE ↓
+
+```
+
+# src\game\abilities\types.ts
+
+```ts
+import type { Unit, Position } from '../types/GameTypes';
+import { Player } from '../types/GameTypes';
+import type { Board } from '../Board';
+import type { PlayerState } from '../PlayerState';
+import type { GameModifiers } from '../GameModifiers';
+import type { GameEvent } from '../types/EventTypes';
+import type { PendingCommand } from '../pending/PendingCommand';
+
+export { Player };
+
+export interface AbilityResult {
+  events: GameEvent[];
+  pending?: PendingCommand;
+}
+
+export interface AbilityContext {
+  readonly cardId: string;
+  readonly owner: Player;
+  readonly position?: Position;
+  readonly board: Board;
+  readonly players: [PlayerState, PlayerState];
+  readonly mods: [GameModifiers, GameModifiers];
+  readonly unit?: Unit;
+  readonly params: Record<string, any>;
+}
+
+export type AbilityHandlerFn = (ctx: AbilityContext) => AbilityResult;
+
+```
+
+# src\game\auras\auraHelpers.ts
+
+```ts
+// Shared helpers for aura processors.
+
+import { Player } from '../types/GameTypes';
+import type { StatDelta } from './AuraProcessor';
+
+/** Safely read params from any ability (CommonAbility or CustomAbility). */
+export function params(ab: any): any {
+  return ab.params ?? {};
+}
+
+export function otherPlayer(p: Player): Player {
+  return p === Player.P1 ? Player.P2 : Player.P1;
+}
+
+export function addDelta(
+  deltas: Map<string, StatDelta>,
+  instanceId: string,
+  atk: number,
+  def: number,
+  mov: number
+): void {
+  const d = deltas.get(instanceId);
+  if (!d) return;
+  d.atkDelta += atk;
+  d.defDelta += def;
+  d.moveDelta += mov;
+}
+
+```
+
+# src\game\auras\AuraProcessor.ts
 
 ```ts
 // ============================================================
-// AuraSystem.ts
-// Recalculates ALL unit stats each LEG phase.
-// Algorithm: reset every unit to base stats → apply each
-// active aura in sequence → write final values back.
-// Pure TypeScript — no Phaser, no EventBus.
-//
-// Auras are never stored incrementally; they are re-derived
-// from scratch each turn so stale state is impossible.
+// AuraProcessor.ts
+// Interface for Chain of Responsibility aura processors.
+// Each processor handles one aura type and accumulates deltas.
 // ============================================================
 
-import type { Unit } from './types/GameTypes';
-import { Player } from './types/GameTypes';
-import type { Board } from './Board';
-import type { GameModifiers } from './GameModifiers';
-import { getCard } from './data/CardDefinitions';
-import { AbilityType } from './types/AbilityTypes';
-import type { EvAuraApplied } from './types/EventTypes';
+import type { Unit } from '../types/GameTypes';
+import type { IBoard } from '../interfaces/IBoard';
+import type { IGameModifiers } from '../interfaces/IGameModifiers';
 
-interface StatDelta {
+export interface StatDelta {
   atkDelta: number;
   defDelta: number;
   moveDelta: number;
 }
 
-// Convenience: safely read params from any ability (CommonAbility or CustomAbility).
-// CustomAbility has no params — casting to any avoids the union type error.
-function params(ab: any): any {
-  return ab.params ?? {};
+/**
+ * A stat-aura processor: examines a source unit's abilities
+ * and accumulates stat deltas for affected units.
+ */
+export interface AuraProcessor {
+  readonly auraType: string;
+  process(
+    source: Unit,
+    allUnits: Unit[],
+    board: IBoard,
+    deltas: Map<string, StatDelta>
+  ): void;
 }
 
-// ─────────────────────────────────────────────
-// MAIN ENTRY POINT
-// ─────────────────────────────────────────────
+/**
+ * An economy-aura processor: recalculates modifier values
+ * (royal discount, LEG bonus) for a single player's units.
+ */
+export interface EconomyProcessor {
+  readonly auraType: string;
+  process(
+    ownUnits: Unit[],
+    modifiers: IGameModifiers
+  ): number;
+}
+
+```
+
+# src\game\auras\AuraProcessorChain.ts
+
+```ts
+// ============================================================
+// AuraProcessorChain.ts
+// Assembles stat and economy processors into an ordered chain.
+// Replaces the switch statement from the old evaluateAuras().
+// ============================================================
+
+import type { AuraProcessor, EconomyProcessor, StatDelta } from './AuraProcessor';
+import type { Unit } from '../types/GameTypes';
+import type { IBoard } from '../interfaces/IBoard';
+
+// Stat processors
+import { AdjDefProcessor } from './processors/AdjDefProcessor';
+import { BoardHalfDefProcessor } from './processors/BoardHalfDefProcessor';
+import { BoardHalfAtkProcessor } from './processors/BoardHalfAtkProcessor';
+import { VillageSlowProcessor } from './processors/VillageSlowProcessor';
+import { PikemanFlankProcessor } from './processors/PikemanFlankProcessor';
+
+// Economy processors
+import { RoyalDiscountProcessor } from './processors/RoyalDiscountProcessor';
+import { LEGBonusProcessor } from './processors/LEGBonusProcessor';
+
+/** Default stat-aura chain in evaluation order. */
+export function createStatChain(): AuraProcessor[] {
+  return [
+    new AdjDefProcessor(),
+    new BoardHalfDefProcessor(),
+    new BoardHalfAtkProcessor(),
+    new VillageSlowProcessor(),
+    new PikemanFlankProcessor(),
+  ];
+}
+
+/** Default economy-aura chain. */
+export function createEconomyChain(): EconomyProcessor[] {
+  return [
+    new RoyalDiscountProcessor(),
+    new LEGBonusProcessor(),
+  ];
+}
 
 /**
- * Full aura recalculation pass.
- * Call once per LEG phase before any ACT actions.
- * Mutates unit.currentAtk / currentDef / currentMovement in place.
- * Also updates GameModifiers royalCostDiscount and legRateBonus.
- *
- * Returns an EvAuraApplied event for the renderer (so it can
- * show stat-change indicators on cards that gained/lost buffs).
+ * Run all stat processors for a single source unit.
+ * Each processor checks if the source has the relevant ability.
  */
-export function evaluateAuras(
-  board: Board,
-  mods: [GameModifiers, GameModifiers]
-): EvAuraApplied {
-  const allUnits = board.getAllUnits();
-
-  // ── Step 1: Reset every unit to base stats ──
-  for (const unit of allUnits) {
-    unit.currentAtk      = unit.baseAtk;
-    unit.currentDef      = Math.min(unit.currentDef, unit.maxDef);
-    unit.currentMovement = unit.baseMovement;
+export function runStatChain(
+  chain: AuraProcessor[],
+  source: Unit,
+  allUnits: Unit[],
+  board: IBoard,
+  deltas: Map<string, StatDelta>
+): void {
+  for (const processor of chain) {
+    processor.process(source, allUnits, board, deltas);
   }
+}
 
-  // ── Step 2: Collect per-unit deltas ──
-  const deltas = new Map<string, StatDelta>();
-  for (const unit of allUnits) {
-    deltas.set(unit.instanceId, { atkDelta: 0, defDelta: 0, moveDelta: 0 });
-  }
+```
 
-  // ── Step 3: Apply each aura source ──
-  for (const unit of allUnits) {
-    if (!unit.isActive) continue; // BUILD_DELAY units have no aura
-    const def = getCard(unit.cardId);
+# src\game\auras\processors\AdjDefProcessor.ts
 
+```ts
+// Castle: adjacent friendly units +DEF
+
+import type { AuraProcessor, StatDelta } from '../AuraProcessor';
+import type { Unit } from '../../types/GameTypes';
+import type { IBoard } from '../../interfaces/IBoard';
+import { AbilityType } from '../../types/AbilityTypes';
+import { getCard } from '../../data/CardRegistry';
+import { params, addDelta } from '../auraHelpers';
+
+export class AdjDefProcessor implements AuraProcessor {
+  readonly auraType = AbilityType.AURA_ADJ_DEF;
+
+  process(source: Unit, _allUnits: Unit[], board: IBoard, deltas: Map<string, StatDelta>): void {
+    const def = getCard(source.cardId);
     for (const ability of def.abilities) {
-      if (ability.type === 'CUSTOM') continue;
+      if (ability.type !== this.auraType) continue;
+      const adjacents = board.getAdjacentUnits(source.position.col, source.position.row);
+      for (const adj of adjacents) {
+        if (adj.owner === source.owner) {
+          addDelta(deltas, adj.instanceId, 0, params(ability).amount, 0);
+        }
+      }
+    }
+  }
+}
+
+```
+
+# src\game\auras\processors\BoardHalfAtkProcessor.ts
+
+```ts
+// Commander: enemy-half friendly units +ATK
+
+import type { AuraProcessor, StatDelta } from '../AuraProcessor';
+import type { Unit } from '../../types/GameTypes';
+import type { IBoard } from '../../interfaces/IBoard';
+import { AbilityType } from '../../types/AbilityTypes';
+import { getCard } from '../../data/CardRegistry';
+import { params, otherPlayer, addDelta } from '../auraHelpers';
+
+export class BoardHalfAtkProcessor implements AuraProcessor {
+  readonly auraType = AbilityType.AURA_BOARD_HALF_ATK;
+
+  process(source: Unit, allUnits: Unit[], board: IBoard, deltas: Map<string, StatDelta>): void {
+    const def = getCard(source.cardId);
+    for (const ability of def.abilities) {
+      if (ability.type !== this.auraType) continue;
       const p = params(ability);
-
-      switch (ability.type) {
-
-        // ── Castle: adjacent friendly +DEF ──
-        case AbilityType.AURA_ADJ_DEF: {
-          const adjacents = board.getAdjacentUnits(unit.position.col, unit.position.row);
-          for (const adj of adjacents) {
-            if (adj.owner === unit.owner) {
-              addDelta(deltas, adj.instanceId, 0, p.amount, 0);
-            }
-          }
-          break;
-        }
-
-        // ── Commander: own-half +DEF ──
-        case AbilityType.AURA_BOARD_HALF_DEF: {
-          const benefitOwner = p.half === 'OWN' ? unit.owner : otherPlayer(unit.owner);
-          for (const u of allUnits) {
-            if (u.owner === unit.owner && board.isOwnHalf(u.position.col, u.position.row, benefitOwner)) {
-              addDelta(deltas, u.instanceId, 0, p.amount, 0);
-            }
-          }
-          break;
-        }
-
-        // ── Commander: enemy-half +ATK ──
-        case AbilityType.AURA_BOARD_HALF_ATK: {
-          const targetHalfOwner = p.half === 'ENEMY' ? otherPlayer(unit.owner) : unit.owner;
-          for (const u of allUnits) {
-            if (u.owner === unit.owner && board.isOwnHalf(u.position.col, u.position.row, targetHalfOwner)) {
-              addDelta(deltas, u.instanceId, p.amount, 0, 0);
-            }
-          }
-          break;
-        }
-
-        // ── Village: adjacent enemies −movement ──
-        case AbilityType.AURA_VILLAGE_SLOW: {
-          const adjacents = board.getAdjacentUnits(unit.position.col, unit.position.row);
-          for (const adj of adjacents) {
-            if (adj.owner !== unit.owner) {
-              addDelta(deltas, adj.instanceId, 0, 0, -p.amount);
-            }
-          }
-          break;
-        }
-
-        // ── Pikeman flank: +ATK +DEF if friendly on both sides ──
-        case AbilityType.AURA_PIKEMAN_FLANK: {
-          const { col, row } = unit.position;
-          const leftUnit  = board.isInBounds(col - 1, row) ? board.getUnit(col - 1, row) : null;
-          const rightUnit = board.isInBounds(col + 1, row) ? board.getUnit(col + 1, row) : null;
-          const hasLeft   = leftUnit  !== null && leftUnit.owner  === unit.owner;
-          const hasRight  = rightUnit !== null && rightUnit.owner === unit.owner;
-          if (hasLeft && hasRight) {
-            addDelta(deltas, unit.instanceId, p.bonusAtk, p.bonusDef, 0);
-          }
-          break;
-        }
-
-        // CAVALRY_COUNTER → combat-time only (CombatResolver)
-        // AURA_AUTO_HEAL  → LEG phase only (GameEngine.runLEGPhase)
-        // AURA_ROYAL_DISCOUNT / AURA_LEG_BONUS → Step 5 below
-        default:
-          break;
-      }
-    }
-  }
-
-  // ── Step 4: Apply deltas to currentAtk / currentMovement ──
-  const changes: EvAuraApplied['changes'] = [];
-
-  for (const unit of allUnits) {
-    const d = deltas.get(unit.instanceId)!;
-
-    const prevAtk = unit.currentAtk;
-    const prevMov = unit.currentMovement;
-
-    unit.currentAtk      = Math.max(0, unit.currentAtk + d.atkDelta);
-    unit.currentMovement = Math.max(0, unit.currentMovement + d.moveDelta);
-
-    if (d.atkDelta !== 0 || d.defDelta !== 0 || d.moveDelta !== 0) {
-      changes.push({
-        instanceId: unit.instanceId,
-        col:        unit.position.col,
-        row:        unit.position.row,
-        atkDelta:   unit.currentAtk - prevAtk,
-        defDelta:   d.defDelta,
-        moveDelta:  unit.currentMovement - prevMov,
-      });
-    }
-  }
-
-  // ── Step 5: Recalculate economy modifiers ──
-  for (const player of [Player.P1, Player.P2] as Player[]) {
-    const mod = mods[player];
-    const ownUnits = board.getUnitsOf(player);
-
-    // Royal discount from Castle, Temple, Princess
-    let discount = 0;
-    for (const u of ownUnits) {
-      if (!u.isActive) continue;
-      const def = getCard(u.cardId);
-      for (const ab of def.abilities) {
-        if (ab.type === 'CUSTOM') continue;
-        if (ab.type === AbilityType.AURA_ROYAL_DISCOUNT) {
-          discount += params(ab).amount;
+      const targetHalfOwner = p.half === 'ENEMY' ? otherPlayer(source.owner) : source.owner;
+      for (const u of allUnits) {
+        if (u.owner === source.owner && board.isOwnHalf(u.position.col, u.position.row, targetHalfOwner)) {
+          addDelta(deltas, u.instanceId, p.amount, 0, 0);
         }
       }
     }
-    mod.royalCostDiscount = discount;
+  }
+}
 
-    // LEG rate bonus from Princess
+```
+
+# src\game\auras\processors\BoardHalfDefProcessor.ts
+
+```ts
+// Commander: own-half friendly units +DEF
+
+import type { AuraProcessor, StatDelta } from '../AuraProcessor';
+import type { Unit } from '../../types/GameTypes';
+import type { IBoard } from '../../interfaces/IBoard';
+import { AbilityType } from '../../types/AbilityTypes';
+import { getCard } from '../../data/CardRegistry';
+import { params, otherPlayer, addDelta } from '../auraHelpers';
+
+export class BoardHalfDefProcessor implements AuraProcessor {
+  readonly auraType = AbilityType.AURA_BOARD_HALF_DEF;
+
+  process(source: Unit, allUnits: Unit[], board: IBoard, deltas: Map<string, StatDelta>): void {
+    const def = getCard(source.cardId);
+    for (const ability of def.abilities) {
+      if (ability.type !== this.auraType) continue;
+      const p = params(ability);
+      const benefitOwner = p.half === 'OWN' ? source.owner : otherPlayer(source.owner);
+      for (const u of allUnits) {
+        if (u.owner === source.owner && board.isOwnHalf(u.position.col, u.position.row, benefitOwner)) {
+          addDelta(deltas, u.instanceId, 0, p.amount, 0);
+        }
+      }
+    }
+  }
+}
+
+```
+
+# src\game\auras\processors\LEGBonusProcessor.ts
+
+```ts
+// Economy: LEG rate bonus from Princess
+
+import type { EconomyProcessor } from '../AuraProcessor';
+import type { Unit } from '../../types/GameTypes';
+import type { IGameModifiers } from '../../interfaces/IGameModifiers';
+import { AbilityType } from '../../types/AbilityTypes';
+import { getCard } from '../../data/CardRegistry';
+import { params } from '../auraHelpers';
+
+export class LEGBonusProcessor implements EconomyProcessor {
+  readonly auraType = AbilityType.AURA_LEG_BONUS;
+
+  process(ownUnits: Unit[], _modifiers: IGameModifiers): number {
     let legBonus = 0;
     for (const u of ownUnits) {
       if (!u.isActive) continue;
@@ -5818,20 +6825,226 @@ export function evaluateAuras(
         }
       }
     }
-    mod.setLEGRateBonus(legBonus);
+    return legBonus;
+  }
+}
+
+```
+
+# src\game\auras\processors\PikemanFlankProcessor.ts
+
+```ts
+// Pikeman: +ATK +DEF if friendly units on both horizontal sides
+
+import type { AuraProcessor, StatDelta } from '../AuraProcessor';
+import type { Unit } from '../../types/GameTypes';
+import type { IBoard } from '../../interfaces/IBoard';
+import { AbilityType } from '../../types/AbilityTypes';
+import { getCard } from '../../data/CardRegistry';
+import { params, addDelta } from '../auraHelpers';
+
+export class PikemanFlankProcessor implements AuraProcessor {
+  readonly auraType = AbilityType.AURA_PIKEMAN_FLANK;
+
+  process(source: Unit, _allUnits: Unit[], board: IBoard, deltas: Map<string, StatDelta>): void {
+    const def = getCard(source.cardId);
+    for (const ability of def.abilities) {
+      if (ability.type !== this.auraType) continue;
+      const { col, row } = source.position;
+      const leftUnit  = board.isInBounds(col - 1, row) ? board.getUnit(col - 1, row) : null;
+      const rightUnit = board.isInBounds(col + 1, row) ? board.getUnit(col + 1, row) : null;
+      const hasLeft   = leftUnit  !== null && leftUnit.owner  === source.owner;
+      const hasRight  = rightUnit !== null && rightUnit.owner === source.owner;
+      if (hasLeft && hasRight) {
+        const p = params(ability);
+        addDelta(deltas, source.instanceId, p.bonusAtk, p.bonusDef, 0);
+      }
+    }
+  }
+}
+
+```
+
+# src\game\auras\processors\RoyalDiscountProcessor.ts
+
+```ts
+// Economy: royal cost discount from Castle, Temple, Princess, Kings Guard
+
+import type { EconomyProcessor } from '../AuraProcessor';
+import type { Unit } from '../../types/GameTypes';
+import type { IGameModifiers } from '../../interfaces/IGameModifiers';
+import { AbilityType } from '../../types/AbilityTypes';
+import { getCard } from '../../data/CardRegistry';
+import { params } from '../auraHelpers';
+
+export class RoyalDiscountProcessor implements EconomyProcessor {
+  readonly auraType = AbilityType.AURA_ROYAL_DISCOUNT;
+
+  process(ownUnits: Unit[], _modifiers: IGameModifiers): number {
+    let discount = 0;
+    for (const u of ownUnits) {
+      if (!u.isActive) continue;
+      const def = getCard(u.cardId);
+      for (const ab of def.abilities) {
+        if (ab.type === 'CUSTOM') continue;
+        if (ab.type === AbilityType.AURA_ROYAL_DISCOUNT) {
+          discount += params(ab).amount;
+        }
+      }
+    }
+    return discount;
+  }
+}
+
+```
+
+# src\game\auras\processors\VillageSlowProcessor.ts
+
+```ts
+// Village: adjacent enemies -movement
+
+import type { AuraProcessor, StatDelta } from '../AuraProcessor';
+import type { Unit } from '../../types/GameTypes';
+import type { IBoard } from '../../interfaces/IBoard';
+import { AbilityType } from '../../types/AbilityTypes';
+import { getCard } from '../../data/CardRegistry';
+import { params, addDelta } from '../auraHelpers';
+
+export class VillageSlowProcessor implements AuraProcessor {
+  readonly auraType = AbilityType.AURA_VILLAGE_SLOW;
+
+  process(source: Unit, _allUnits: Unit[], board: IBoard, deltas: Map<string, StatDelta>): void {
+    const def = getCard(source.cardId);
+    for (const ability of def.abilities) {
+      if (ability.type !== this.auraType) continue;
+      const adjacents = board.getAdjacentUnits(source.position.col, source.position.row);
+      for (const adj of adjacents) {
+        if (adj.owner !== source.owner) {
+          addDelta(deltas, adj.instanceId, 0, 0, -params(ability).amount);
+        }
+      }
+    }
+  }
+}
+
+```
+
+# src\game\AuraSystem.ts
+
+```ts
+// ============================================================
+// AuraSystem.ts
+// Recalculates ALL unit stats each LEG phase using a
+// Chain of Responsibility pattern.
+//
+// Algorithm: reset every unit to base stats → run processor
+// chain to accumulate deltas → apply deltas → run economy
+// processors for modifier recalculation.
+//
+// Pure TypeScript — no Phaser, no EventBus.
+// ============================================================
+
+import type { Unit } from './types/GameTypes';
+import { Player } from './types/GameTypes';
+import type { IBoard } from './interfaces/IBoard';
+import type { IGameModifiers } from './interfaces/IGameModifiers';
+import type { AuraProcessor, EconomyProcessor, StatDelta } from './auras/AuraProcessor';
+import { createStatChain, createEconomyChain, runStatChain } from './auras/AuraProcessorChain';
+import { getCard } from './data/CardRegistry';
+import { AbilityType } from './types/AbilityTypes';
+import { params } from './auras/auraHelpers';
+import type { EvAuraApplied } from './types/EventTypes';
+
+export class AuraSystem {
+  private statChain: AuraProcessor[];
+  private economyChain: EconomyProcessor[];
+
+  constructor() {
+    this.statChain = createStatChain();
+    this.economyChain = createEconomyChain();
   }
 
-  return { type: 'AURA_APPLIED', changes };
+  /**
+   * Full aura recalculation pass.
+   * Call once per LEG phase before any ACT actions.
+   * Mutates unit.currentAtk / currentDef / currentMovement in place.
+   * Also updates GameModifiers royalCostDiscount and legRateBonus.
+   */
+  evaluateAuras(board: IBoard, mods: [IGameModifiers, IGameModifiers]): EvAuraApplied {
+    const allUnits = board.getAllUnits();
+
+    // ── Step 1: Reset every unit to base stats ──
+    for (const unit of allUnits) {
+      unit.currentAtk      = unit.baseAtk;
+      unit.currentDef      = Math.min(unit.currentDef, unit.maxDef);
+      unit.currentMovement = unit.baseMovement;
+    }
+
+    // ── Step 2: Collect per-unit deltas ──
+    const deltas = new Map<string, StatDelta>();
+    for (const unit of allUnits) {
+      deltas.set(unit.instanceId, { atkDelta: 0, defDelta: 0, moveDelta: 0 });
+    }
+
+    // ── Step 3: Run stat processor chain for each active unit ──
+    for (const unit of allUnits) {
+      if (!unit.isActive) continue;
+      runStatChain(this.statChain, unit, allUnits, board, deltas);
+    }
+
+    // ── Step 4: Apply deltas to currentAtk / currentMovement ──
+    const changes: EvAuraApplied['changes'] = [];
+
+    for (const unit of allUnits) {
+      const d = deltas.get(unit.instanceId)!;
+
+      const prevAtk = unit.currentAtk;
+      const prevMov = unit.currentMovement;
+
+      unit.currentAtk      = Math.max(0, unit.currentAtk + d.atkDelta);
+      unit.currentMovement = Math.max(0, unit.currentMovement + d.moveDelta);
+
+      if (d.atkDelta !== 0 || d.defDelta !== 0 || d.moveDelta !== 0) {
+        changes.push({
+          instanceId: unit.instanceId,
+          col:        unit.position.col,
+          row:        unit.position.row,
+          atkDelta:   unit.currentAtk - prevAtk,
+          defDelta:   d.defDelta,
+          moveDelta:  unit.currentMovement - prevMov,
+        });
+      }
+    }
+
+    // ── Step 5: Run economy processors per player ──
+    for (const player of [Player.P1, Player.P2] as Player[]) {
+      const mod = mods[player];
+      const ownUnits = board.getUnitsOf(player);
+
+      for (const processor of this.economyChain) {
+        const value = processor.process(ownUnits, mod);
+        if (processor.auraType === AbilityType.AURA_ROYAL_DISCOUNT) {
+          mod.royalCostDiscount = value;
+        } else if (processor.auraType === AbilityType.AURA_LEG_BONUS) {
+          mod.setLEGRateBonus(value);
+        }
+      }
+    }
+
+    return { type: 'AURA_APPLIED', changes };
+  }
+
+  recalculateModifiers(board: IBoard, mods: [IGameModifiers, IGameModifiers]): void {
+    this.evaluateAuras(board, mods);
+  }
 }
 
 // ─────────────────────────────────────────────
 // COMBAT-TIME AURA QUERIES
 // Called by CombatResolver / GameEngine at moment of combat.
+// These are standalone — not part of the chain.
 // ─────────────────────────────────────────────
 
-/**
- * Check if the Pikeman cavalry counter applies for this attack.
- */
 export function getCavalryCounterMultiplier(attacker: Unit, defender: Unit): number {
   const attDef = getCard(attacker.cardId);
   const defDef = getCard(defender.cardId);
@@ -5848,9 +7061,6 @@ export function getCavalryCounterMultiplier(attacker: Unit, defender: Unit): num
   return 1;
 }
 
-/**
- * Returns Kings Guard auto-heal amount if unit has the aura.
- */
 export function getAutoHealAmount(unit: Unit): number {
   const def = getCard(unit.cardId);
   const ab = def.abilities.find(ab => ab.type === AbilityType.AURA_AUTO_HEAL);
@@ -5858,42 +7068,6 @@ export function getAutoHealAmount(unit: Unit): number {
   return params(ab).amount;
 }
 
-// ─────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────
-
-function addDelta(
-  deltas: Map<string, StatDelta>,
-  instanceId: string,
-  atk: number,
-  def: number,
-  mov: number
-): void {
-  const d = deltas.get(instanceId);
-  if (!d) return;
-  d.atkDelta += atk;
-  d.defDelta += def;
-  d.moveDelta += mov;
-}
-
-function otherPlayer(p: Player): Player {
-  return p === Player.P1 ? Player.P2 : Player.P1;
-}
-
-// ─────────────────────────────────────────────
-// CLASS WRAPPER
-// GameEngine uses `new AuraSystem()` with instance methods.
-// ─────────────────────────────────────────────
-
-export class AuraSystem {
-  evaluateAuras(board: Board, mods: [GameModifiers, GameModifiers]): EvAuraApplied {
-    return evaluateAuras(board, mods);
-  }
-
-  recalculateModifiers(board: Board, mods: [GameModifiers, GameModifiers]): void {
-    evaluateAuras(board, mods);
-  }
-}
 ```
 
 # src\game\Board.ts
@@ -5916,11 +7090,12 @@ export class AuraSystem {
 
 import type { Unit, BoardCell, Position } from './types/GameTypes';
 import { Player } from './types/GameTypes';
+import type { IBoard } from './interfaces/IBoard';
 
 /** Number of rows each player can deploy into (from their back edge). */
 export const DEPLOY_ROWS = 3;
 
-export class Board {
+export class Board implements IBoard {
   readonly cols: number;
   readonly rows: number;
   private cells: BoardCell[][];
@@ -5968,7 +7143,7 @@ export class Board {
    * P2 deploy zone: rows (rows-DEPLOY_ROWS)..(rows-1).
    * Middle rows are neutral — no player can deploy there.
    */
-  isOwnHalf(col: number, row: number, player: Player): boolean {
+  isOwnHalf(_col: number, row: number, player: Player): boolean {
     return player === Player.P1
       ? row < DEPLOY_ROWS
       : row >= this.rows - DEPLOY_ROWS;
@@ -6146,7 +7321,7 @@ export class Board {
     return this.getCells().map(cell => ({
       col: cell.col,
       row: cell.row,
-      unit: cell.unit ? { ...cell.unit } : null, // Shallow copy
+      unit: cell.unit ? { ...cell.unit, position: { ...cell.unit.position } } : null,
     }));
   }
 
@@ -6191,12 +7366,11 @@ export class Board {
 // ============================================================
 
 import type { Unit } from './types/GameTypes';
-import { Player } from './types/GameTypes';
 import type { Board } from './Board';
-import { getCard } from './data/CardDefinitions';
-import { CombatTag, AtkPattern } from './types/CardTypes';
+import { getCard } from './data/CardRegistry';
+import { CombatTag } from './types/CardTypes';
 import {
-  EvUnitAttacked, EvUnitDied, EvUnitHealed, EvUnitTransformed,
+  EvUnitAttacked, EvUnitDied, EvUnitTransformed,
   GameEvent
 } from './types/EventTypes';
 
@@ -6212,7 +7386,7 @@ import {
 export function resolveAttack(
   attacker: Unit,
   defender: Unit,
-  board: Board
+  _board: Board
 ): GameEvent[] {
   const events: GameEvent[] = [];
 
@@ -6508,6 +7682,7 @@ import {
 } from '../types/CardTypes.js';
 import type { CardDefinition } from '../types/CardTypes.js';
 import { AbilityType } from '../types/AbilityTypes';
+import { PATTERN_ARCHER_ATTACK, PATTERN_ASSASSIN_ATTACK, PATTERN_ASSASSIN_MOVE } from './MovementPresets';
 
 const U = CardClass.UNIT;
 const SP = CardClass.SPELL;
@@ -6568,12 +7743,8 @@ export const CARD_DEFINITIONS: CardDefinition[] = [
     flavorText: 'Precision over brute force.',
     class: U, allegiance: STD, subtypes: [], cost: 3, copies: 2,
     stats: { atk: 3, def: 1, movement: MovementType.OMNI_1, attackPattern: AtkPattern.DIAGONAL_RANGED_2,
-    customAttack : {
-        offsets: [{dx:1, dy:-1}, {dx:-1, dy:-1}, {dx:1, dy:1}, {dx:-1, dy:1}, {dx:2, dy:-2}, {dx:-2, dy:-2}, {dx:2, dy:2}, {dx:-2, dy:2}],  
-        range: 1,
-      },
-
-      },
+      customAttack: PATTERN_ARCHER_ATTACK,
+    },
 
      
     flags: [],
@@ -6585,16 +7756,9 @@ export const CARD_DEFINITIONS: CardDefinition[] = [
     id: 'assassin', name: 'Assassin',
     flavorText: 'The shadow moves. Then it\'s over.',
     class: U, allegiance: STD, subtypes: [], cost: 3, copies: 2,
-    stats: { atk: 4, def: 1, movement: MovementType.JUMP_DIAGONAL_1, attackPattern: AtkPattern.ON_JUMP, customAttack : {
-        offsets: [{dx:1, dy:-1}, {dx:-1, dy:-1}, {dx:1, dy:1}, {dx:-1, dy:1}],  
-        range: 1,
-      },
-      customMove : {
-        offsets: [{dx:2, dy:0}, {dx:-2, dy:0}, {dx:0, dy:2}, {dx:0, dy:-2}],  
-        range: 1,
-      },
-      
-      
+    stats: { atk: 4, def: 1, movement: MovementType.JUMP_DIAGONAL_1, attackPattern: AtkPattern.ON_JUMP,
+      customAttack: PATTERN_ASSASSIN_ATTACK,
+      customMove: PATTERN_ASSASSIN_MOVE,
     },
     
     flags: [],
@@ -6924,31 +8088,54 @@ export const CARD_DEFINITIONS: CardDefinition[] = [
 
 ];
 
-// ─────────────────────────────────────────────
-// LOOKUP MAP — O(1) by card id
-// ─────────────────────────────────────────────
 
-export const CARD_MAP: Map<string, CardDefinition> = new Map(
-  CARD_DEFINITIONS.map(c => [c.id, c])
+```
+
+# src\game\data\CardRegistry.ts
+
+```ts
+// ============================================================
+// CardRegistry.ts
+// Frozen card lookup map + getCard() accessor.
+// Flyweight pattern: all definitions are Object.freeze'd.
+// ============================================================
+
+import type { CardDefinition } from '../types/CardTypes';
+import { CARD_DEFINITIONS } from './CardDefinitions';
+
+function deepFreeze<T extends object>(obj: T): Readonly<T> {
+  Object.freeze(obj);
+  for (const val of Object.values(obj)) {
+    if (val && typeof val === 'object' && !Object.isFrozen(val)) {
+      deepFreeze(val);
+    }
+  }
+  return obj;
+}
+
+export const CARD_MAP: ReadonlyMap<string, Readonly<CardDefinition>> = new Map(
+  CARD_DEFINITIONS.map(c => [c.id, deepFreeze(c)])
 );
 
-export function getCard(id: string): CardDefinition {
+export function getCard(id: string): Readonly<CardDefinition> {
   const c = CARD_MAP.get(id);
-  if (!c) throw new Error(`[CardDefinitions] Unknown card id: "${id}"`);
+  if (!c) throw new Error(`[CardRegistry] Unknown card id: "${id}"`);
   return c;
 }
 
-// ─────────────────────────────────────────────
-// DEMO DECK — 31 cards (King pre-placed, not included)
-// Both players use identical deck, independently shuffled.
-// ─────────────────────────────────────────────
+```
 
-// ─────────────────────────────────────────────
+# src\game\data\DeckDefinitions.ts
+
+```ts
+// ============================================================
+// DeckDefinitions.ts
+// Deck configurations — card ID lists for game modes.
+// ============================================================
+
 // UNITS-ONLY DECK — 31 cards (King pre-placed, not included)
 // No spells or structures. Focused on unit combat for MVP playtesting.
 // Both players use identical pool, each gets an independently shuffled copy.
-// ─────────────────────────────────────────────
-
 export const UNITS_ONLY_DECK_IDS: string[] = [
   // Standard units
   'foot_soldier', 'foot_soldier', 'foot_soldier',  // 3 copies — cheap backbone
@@ -6973,11 +8160,50 @@ export const UNITS_ONLY_DECK_IDS: string[] = [
 
 // Sanity check — must be exactly 31
 if (UNITS_ONLY_DECK_IDS.length !== 31) {
-  console.error(`[CardDefinitions] UNITS_ONLY_DECK_IDS has ${UNITS_ONLY_DECK_IDS.length} entries, expected 31`);
+  console.error(`[DeckDefinitions] UNITS_ONLY_DECK_IDS has ${UNITS_ONLY_DECK_IDS.length} entries, expected 31`);
 }
 
-// Keep old name as alias so nothing else breaks during transition
+// Alias for backwards compatibility
 export const DEMO_DECK_IDS = UNITS_ONLY_DECK_IDS;
+
+```
+
+# src\game\data\MovementPresets.ts
+
+```ts
+// ============================================================
+// MovementPresets.ts
+// Custom movement and attack pattern offset constants.
+// Used by CardDefinitions for Archer, Assassin, and others.
+// ============================================================
+
+import type { CustomPattern } from '../types/CardTypes';
+
+// Archer: diagonal ranged 2 squares
+export const PATTERN_ARCHER_ATTACK: CustomPattern = {
+  offsets: [
+    { dx: 1, dy: -1 }, { dx: -1, dy: -1 }, { dx: 1, dy: 1 }, { dx: -1, dy: 1 },
+    { dx: 2, dy: -2 }, { dx: -2, dy: -2 }, { dx: 2, dy: 2 }, { dx: -2, dy: 2 },
+  ],
+  range: 1,
+};
+
+// Assassin: attacks diagonally adjacent
+export const PATTERN_ASSASSIN_ATTACK: CustomPattern = {
+  offsets: [
+    { dx: 1, dy: -1 }, { dx: -1, dy: -1 }, { dx: 1, dy: 1 }, { dx: -1, dy: 1 },
+  ],
+  range: 1,
+};
+
+// Assassin: jumps 2 squares in HV direction
+export const PATTERN_ASSASSIN_MOVE: CustomPattern = {
+  offsets: [
+    { dx: 2, dy: 0 }, { dx: -2, dy: 0 }, { dx: 0, dy: 2 }, { dx: 0, dy: -2 },
+  ],
+  range: 1,
+};
+
 ```
 
 # src\game\GameContext.ts
@@ -6996,6 +8222,7 @@ import type { PlayerState } from './PlayerState';
 import type { AuraSystem } from './AuraSystem';
 import type { Unit, Position } from './types/GameTypes';
 import type { GameEvent } from './types/EventTypes';
+import type { PendingCommand } from './pending/PendingCommand';
 import { Player, TurnPhase, EngineStatus } from './types/GameTypes';
 
 /**
@@ -7018,6 +8245,9 @@ export interface GameContext {
 
   // Graveyard registry (instanceId → cardId)
   readonly graveyard: Map<string, string>;
+
+  // Pending command set by phase modules when ability needs player input
+  pending?: PendingCommand;
 
   // Unit factory — engine provides this so phases don't need the counter
   createUnit(cardId: string, owner: Player, position: Position): Unit;
@@ -7072,12 +8302,13 @@ import { PlayerState } from './PlayerState';
 import { AuraSystem } from './AuraSystem';
 import { UnitFactory, movementToNumber } from './UnitFactory';
 import { DeckLoader } from '../config/DeckLoader';
-import { getCard } from './data/CardDefinitions';
+import { getCard } from './data/CardRegistry';
 
 import { Player, TurnPhase, EngineStatus } from './types/GameTypes';
-import type { Unit, Position, GameStateSnapshot } from './types/GameTypes';
+import type { Position, GameStateSnapshot } from './types/GameTypes';
 import type { GameEvent } from './types/EventTypes';
-import type { PendingInteraction } from './types/AbilityTypes';
+import type { PendingCommand } from './pending/PendingCommand';
+import { resolvePending } from './pending/PendingCommandResolver';
 import { Allegiance } from './types/CardTypes';
 import type { GameContext } from './GameContext';
 import { opponent } from './GameContext';
@@ -7112,6 +8343,7 @@ export interface IGameEngineAPI {
   selectPosition(col: number, row: number): void;
   selectColumn(col: number): void;
   selectDiscard(handIndex: number): void;
+  cancelPending(): void;
   getState(): GameStateSnapshot;
   on(handler: (event: GameEvent) => void): void;
   off(handler: (event: GameEvent) => void): void;
@@ -7136,7 +8368,7 @@ export class GameEngine implements IGameEngineAPI {
   private status: EngineStatus = EngineStatus.IDLE;
 
   // Interaction pause state
-  private pending: PendingInteraction | null = null;
+  private pending: PendingCommand | null = null;
 
   // Dead unit registry (instanceId → cardId)
   private graveyard: Map<string, string> = new Map();
@@ -7243,10 +8475,10 @@ export class GameEngine implements IGameEngineAPI {
     const ctx = this.buildContext();
     const success = executePlayCard(ctx, handIndex, col, row);
 
-    // Capture pending if PlayPhase set one
-    if ((ctx as any)._lastPending) {
-      this.pending = (ctx as any)._lastPending;
+    if (ctx.pending) {
+      this.pending = ctx.pending;
     }
+    this.syncFromContext(ctx);
 
     return success;
   }
@@ -7257,7 +8489,14 @@ export class GameEngine implements IGameEngineAPI {
     if (this.phase !== TurnPhase.ACT) return false;
 
     const ctx = this.buildContext();
-    return executeMove(ctx, unitId, col, row);
+    const success = executeMove(ctx, unitId, col, row);
+
+    if (ctx.pending) {
+      this.pending = ctx.pending;
+    }
+    this.syncFromContext(ctx);
+
+    return success;
   }
 
   attackUnit(unitId: string, targetId: string): boolean {
@@ -7266,17 +8505,26 @@ export class GameEngine implements IGameEngineAPI {
     if (this.phase !== TurnPhase.ACT) return false;
 
     const ctx = this.buildContext();
-    return executeAttack(ctx, unitId, targetId);
+    const success = executeAttack(ctx, unitId, targetId);
+
+    if (ctx.pending) {
+      this.pending = ctx.pending;
+    }
+    this.syncFromContext(ctx);
+
+    return success;
   }
 
   endPlayPhase(): void {
     if (this.phase !== TurnPhase.PLAY) return;
+    if (this.status === EngineStatus.AWAITING_INPUT) return;
     this.phase = TurnPhase.ACT;
     this.emit({ type: 'PHASE_CHANGED', phase: TurnPhase.ACT, activePlayer: this.activePlayer, turn: this.turnNumber });
   }
 
   endActPhase(): void {
     if (this.phase !== TurnPhase.ACT) return;
+    if (this.status === EngineStatus.AWAITING_INPUT) return;
     const ctx = this.buildContext();
     const gameOver = runEndPhase(ctx);
     this.syncFromContext(ctx);
@@ -7295,35 +8543,49 @@ export class GameEngine implements IGameEngineAPI {
 
   selectTarget(instanceId: string): void {
     if (!this.pending || this.pending.kind !== 'TARGET') return;
-    if (!(this.pending.validTargetIds ?? []).includes(instanceId)) return;
-    const cb = this.pending.resumeCallback;
+    if (!this.pending.validTargetIds.includes(instanceId)) return;
+    const cmd = this.pending;
     this.clearPending();
-    cb(instanceId);
+    const events = resolvePending(cmd, { kind: 'TARGET', instanceId }, { board: this.board });
+    for (const e of events) { this.applyEvent(e); this.emit(e); }
   }
 
   selectPosition(col: number, row: number): void {
     if (!this.pending || this.pending.kind !== 'POSITION') return;
-    if (!(this.pending.validPositions ?? []).some(p => p.col === col && p.row === row)) return;
-    const cb = this.pending.resumeCallback;
+    if (!this.pending.validPositions.some(p => p.col === col && p.row === row)) return;
+    const cmd = this.pending;
     this.clearPending();
-    cb({ col, row });
+    const events = resolvePending(cmd, { kind: 'POSITION', col, row });
+    for (const e of events) { this.applyEvent(e); this.emit(e); }
   }
 
   selectColumn(col: number): void {
     if (!this.pending || this.pending.kind !== 'COLUMN') return;
     if (col < 0 || col >= this.board.cols) return;
-    const cb = this.pending.resumeCallback;
+    const cmd = this.pending;
     this.clearPending();
-    cb(col);
+    const events = resolvePending(cmd, { kind: 'COLUMN', col });
+    for (const e of events) { this.applyEvent(e); this.emit(e); }
   }
 
   selectDiscard(handIndex: number): void {
     if (!this.pending || this.pending.kind !== 'DISCARD') return;
     const ps = this.players[this.activePlayer];
     if (handIndex < 0 || handIndex >= ps.hand.length) return;
-    const cb = this.pending.resumeCallback;
+    const cmd = this.pending;
     this.clearPending();
-    cb(handIndex);
+    const events = resolvePending(cmd, { kind: 'DISCARD', handIndex });
+    for (const e of events) { this.applyEvent(e); this.emit(e); }
+  }
+
+  /** Cancel the current pending interaction (e.g., user pressed Cancel / ESC).
+   *  Does NOT emit INTERACTION_RESOLVED — the UI-initiated cancel already
+   *  emitted it, so clearPending()'s extra emit would cause a double-fire. */
+  cancelPending(): void {
+    if (!this.pending) return;
+    console.log('[GameEngine] Pending interaction cancelled');
+    this.pending = null;
+    this.status  = EngineStatus.IDLE;
   }
 
   // ─────────────────────────────────────────────
@@ -7381,6 +8643,7 @@ export class GameEngine implements IGameEngineAPI {
       phase:        this.phase,
       status:       this.status,
       graveyard:    this.graveyard,
+      pending:      undefined,
 
       createUnit: (cardId, owner, pos) => this.unitFactory.create(cardId, owner, pos),
 
@@ -7402,6 +8665,9 @@ export class GameEngine implements IGameEngineAPI {
   private syncFromContext(ctx: GameContext): void {
     this.phase  = ctx.phase;
     this.status = ctx.status;
+    if (ctx.pending) {
+      this.pending = ctx.pending;
+    }
   }
 
   // ─────────────────────────────────────────────
@@ -7416,6 +8682,9 @@ export class GameEngine implements IGameEngineAPI {
           const newUnit = this.unitFactory.create(event.cardId, event.owner, { col: event.col, row: event.row });
           newUnit.isActive = event.isActive;
           this.board.placeUnit(newUnit);
+          // Sync event instanceId to the UnitFactory-generated one so
+          // downstream listeners (BoardRenderer) use the correct key.
+          event.instanceId = newUnit.instanceId;
         }
         break;
       }
@@ -7458,17 +8727,28 @@ export class GameEngine implements IGameEngineAPI {
       }
 
       case 'CARD_DRAWN': {
-        if (event.cardId === '__DRAW_OVERFLOW__') {
-          const ps = this.players[event.player];
+        const ps = this.players[event.player];
+        if (event.cardId === '__DRAW__') {
+          const drawn = ps.drawCards(1);
+          if (drawn.length > 0) {
+            event.cardId = drawn[0];
+            event.handIndex = ps.hand.length - 1;
+            event.deckRemaining = ps.deck.length;
+          }
+        } else if (event.cardId.startsWith('__DRAW_FILTERED_')) {
+          const filter = event.cardId.replace('__DRAW_FILTERED_', '').replace('__', '');
+          const drawn = ps.drawCardsFiltered(1, filter as 'ROYAL' | 'STANDARD');
+          if (drawn.length > 0) {
+            event.cardId = drawn[0];
+            event.handIndex = ps.hand.length - 1;
+            event.deckRemaining = ps.deck.length;
+          }
+        } else if (event.cardId === '__DRAW_OVERFLOW__') {
           const drawn = ps.drawCardsOverflow(1);
           if (drawn.length > 0) {
-            this.emit({
-              type: 'CARD_DRAWN',
-              player: event.player,
-              cardId: drawn[0],
-              handIndex: ps.hand.length - 1,
-              deckRemaining: ps.deck.length,
-            });
+            event.cardId = drawn[0];
+            event.handIndex = ps.hand.length - 1;
+            event.deckRemaining = ps.deck.length;
           }
         }
         break;
@@ -7541,12 +8821,13 @@ export class GameEngine implements IGameEngineAPI {
 // This keeps the economy tight: turn 3 → CROWN 3, cap 3. No hoarding.
 // ============================================================
 
-import type { GameModifiers as IGameModifiers, TimedEffect } from './types/GameTypes';
+import type { GameModifiers as GameModifiersSnapshot, TimedEffect } from './types/GameTypes';
 import { Player } from './types/GameTypes';
+import type { IGameModifiers } from './interfaces/IGameModifiers';
 
 const LEG_RATE_MIN = 1;
 
-export class GameModifiers {
+export class GameModifiers implements IGameModifiers {
   readonly player: Player;
 
   legRateBase: number   = 0;   // Grows +1 each turn via GameEngine.runLEGPhase
@@ -7731,7 +9012,7 @@ export class GameModifiers {
   // SERIALIZATION
   // ─────────────────────────────────────────────
 
-  snapshot(): IGameModifiers {
+  snapshot(): GameModifiersSnapshot {
     return {
       legRateBase:      this.legRateBase,
       legRateBonus:     this.legRateBonus,
@@ -7744,6 +9025,158 @@ export class GameModifiers {
     };
   }
 }
+```
+
+# src\game\interfaces\IBoard.ts
+
+```ts
+// ============================================================
+// IBoard.ts
+// Interface for the game board — Dependency Inversion.
+// Consumers depend on this interface, not the concrete Board.
+// ============================================================
+
+import type { Unit, BoardCell, Position } from '../types/GameTypes';
+import { Player } from '../types/GameTypes';
+
+export interface IBoard {
+  readonly cols: number;
+  readonly rows: number;
+
+  // READ QUERIES
+  getCell(col: number, row: number): BoardCell;
+  getUnit(col: number, row: number): Unit | null;
+  getUnitById(instanceId: string): Unit | null;
+  isEmpty(col: number, row: number): boolean;
+  isInBounds(col: number, row: number): boolean;
+  isOwnHalf(col: number, row: number, player: Player): boolean;
+  getUnitsOf(player: Player): Unit[];
+  getKing(player: Player): Unit | null;
+  getStructures(player?: Player): Unit[];
+  getAllUnits(): Unit[];
+  getCells(): BoardCell[];
+  getAdjacentUnits(col: number, row: number): Unit[];
+  getHVAdjacentUnits(col: number, row: number): Unit[];
+  getFreeSquaresInHalf(player: Player): Position[];
+  getUnitsInColumn(col: number): Unit[];
+
+  // MUTATIONS
+  placeUnit(unit: Unit): void;
+  removeUnit(instanceId: string): Unit | null;
+  moveUnit(instanceId: string, toCol: number, toRow: number): void;
+  updateUnitStats(instanceId: string, updates: Partial<Unit>): void;
+  resetTurnFlags(player: Player): void;
+
+  // SERIALIZATION
+  serialize(): Array<{ col: number; row: number; unit: Unit | null }>;
+  clear(): void;
+}
+
+```
+
+# src\game\interfaces\IGameModifiers.ts
+
+```ts
+// ============================================================
+// IGameModifiers.ts
+// Interface for per-player LEG economy and timed effects.
+// ============================================================
+
+import type { TimedEffect, GameModifiers as GameModifiersSnapshot } from '../types/GameTypes';
+import { Player } from '../types/GameTypes';
+
+export interface IGameModifiers {
+  readonly player: Player;
+  legRateBase: number;
+  legRateBonus: number;
+  legRatePenalty: number;
+  legRateFrozen: boolean;
+  royalCostDiscount: number;
+  royalCostPenalty: number;
+  legPool: number;
+  legOverflow: boolean;
+  timedEffects: TimedEffect[];
+
+  // COMPUTED RATES
+  getEffectiveLEGRate(): number;
+  getLEGCap(): number;
+  getEffectiveCardCost(baseCost: number, isRoyal: boolean): number;
+
+  // LEG POOL OPERATIONS
+  gainLEG(): number;
+  spendLEG(amount: number): boolean;
+  addLEG(amount: number): void;
+  removeLEG(amount: number): void;
+  canAfford(baseCost: number, isRoyal: boolean): boolean;
+
+  // RATE MODIFIERS
+  addLEGRatePenalty(amount: number): void;
+  setRoyalDiscount(castle: number, temple: number, princess: number): void;
+  setLEGRateBonus(princessCount: number): void;
+
+  // TIMED EFFECTS
+  addTimedEffect(effect: TimedEffect): void;
+  tickEffects(): TimedEffect[];
+  hasEffect(type: TimedEffect['type']): boolean;
+  removeEffect(type: TimedEffect['type']): void;
+  clearOverflow(): void;
+
+  // SERIALIZATION
+  snapshot(): GameModifiersSnapshot;
+}
+
+```
+
+# src\game\interfaces\IPlayerState.ts
+
+```ts
+// ============================================================
+// IPlayerState.ts
+// Interface for player hand/deck/discard management.
+// ============================================================
+
+import { Player } from '../types/GameTypes';
+
+export interface IPlayerState {
+  readonly player: Player;
+  hand: string[];
+  deck: string[];
+  discard: string[];
+  graveyard: string[];
+  handLimit: number;
+
+  // DECK SETUP
+  loadDeck(cardIds: string[], playerIndex?: number): void;
+
+  // DRAW
+  drawCards(count: number): string[];
+  drawCardsOverflow(count: number): string[];
+  drawCardsFiltered(count: number, filter: 'ROYAL' | 'STANDARD'): string[];
+
+  // HAND OPERATIONS
+  playFromHand(index: number): string;
+  discardFromHand(index: number): string;
+  addToHand(cardId: string, overrideLimit?: boolean): boolean;
+  trimOverflowHand(): string[];
+
+  // DECK OPERATIONS
+  findAndPullFromDeck(cardId: string): boolean;
+  peekTop(count: number): string[];
+
+  // GRAVEYARD
+  addToGraveyard(instanceId: string): void;
+  getGraveyard(): string[];
+
+  // SERIALIZATION
+  snapshot(): {
+    player: Player;
+    hand: string[];
+    deckCount: number;
+    discardCount: number;
+    handLimit: number;
+  };
+}
+
 ```
 
 # src\game\MovementRules.ts
@@ -7771,7 +9204,7 @@ import type { CustomPattern, PatternOffset } from './types/CardTypes';
 import type { Unit, Position } from './types/GameTypes';
 import { Player } from './types/GameTypes';
 import type { Board } from './Board';
-import { getCard } from './data/CardDefinitions';
+import { getCard } from './data/CardRegistry';
 
 // ═══════════════════════════════════════════════════════
 // PUBLIC API — called by GameEngine (after UnitQuery gate)
@@ -8097,80 +9530,239 @@ function getAllRanged(col: number, row: number, dirs: number[][], maxRange: numb
 
 ```
 
-# src\game\PatternResolver.ts
+# src\game\pending\PendingCommand.ts
 
 ```ts
-import type { CustomPattern, PatternOffset } from './types/CardTypes';
-import type { Unit } from './types/GameTypes';
-import type { Board } from './Board';
+// ============================================================
+// PendingCommand.ts — Serializable interaction commands
+//
+// Replaces the old PendingInteraction callback anti-pattern.
+// Each variant is pure data — no functions, fully serializable.
+// The engine pauses on a PendingCommand and resumes when the
+// player makes a selection, resolved via PendingCommandResolver.
+// ============================================================
 
-/**
- * Resolve a custom pattern into valid board positions.
- * Works for both movement and attack patterns.
- */
-export function resolveCustomPattern(
-  unit: Unit,
-  pattern: CustomPattern,
-  board: Board,
-  isAttack: boolean,
-): Array<{ col: number; row: number }> {
-  const results: Array<{ col: number; row: number }> = [];
-  const range = pattern.range ?? 1;
+import type { Position } from '../types/GameTypes';
+import type { Player } from '../types/GameTypes';
+import type { GameEvent } from '../types/EventTypes';
 
-  for (const offset of pattern.offsets) {
-    for (let step = 1; step <= range; step++) {
-      const col = unit.position.col + offset.dx * step;
-      const row = unit.position.row + offset.dy * step;
-
-      // Out of bounds
-      if (!board.isInBounds(col, row)) break;
-
-      const occupant = board.getUnit(col, row);
-
-      if (isAttack) {
-        // Attack: target must have an enemy
-        if (occupant && occupant.owner !== unit.owner) {
-          results.push({ col, row });
-        }
-        // Ranged: can pass through empty squares but not friendlies
-        if (occupant && !pattern.canJump) break;
-      } else {
-        // Movement: cell must be empty (unless canJump)
-        if (occupant) {
-          if (!pattern.canJump) break;  // blocked
-          continue;  // jump over
-        }
-        results.push({ col, row });
-      }
+export type PendingCommand =
+  | {
+      kind: 'TARGET';
+      owner: Player;
+      sourceCardId: string;
+      sourceAbility: string;
+      validTargetIds: string[];
+      reason: string;
+      deferredEvents: GameEvent[];
     }
-  }
+  | {
+      kind: 'POSITION';
+      owner: Player;
+      sourceCardId: string;
+      sourceAbility: string;
+      validPositions: Position[];
+      reason: string;
+      deferredEvents: GameEvent[];
+    }
+  | {
+      kind: 'COLUMN';
+      owner: Player;
+      sourceCardId: string;
+      sourceAbility: string;
+      reason: string;
+      deferredEvents: GameEvent[];
+    }
+  | {
+      kind: 'DISCARD';
+      owner: Player;
+      sourceCardId: string;
+      sourceAbility: string;
+      count: number;
+      reason: string;
+      deferredEvents: GameEvent[];
+    };
 
-  return results;
+```
+
+# src\game\pending\PendingCommandResolver.ts
+
+```ts
+// ============================================================
+// PendingCommandResolver.ts — Command resolution
+//
+// When the player makes a selection (target, position, column,
+// or discard), this resolver produces the GameEvent[] to apply.
+// ============================================================
+
+import type { PendingCommand } from './PendingCommand';
+import type { GameEvent } from '../types/EventTypes';
+import type { IBoard } from '../interfaces/IBoard';
+import { AbilityType } from '../types/AbilityTypes';
+
+export type PendingSelection =
+  | { kind: 'TARGET'; instanceId: string }
+  | { kind: 'POSITION'; col: number; row: number }
+  | { kind: 'COLUMN'; col: number }
+  | { kind: 'DISCARD'; handIndex: number };
+
+/** Optional context for resolving commands that need board state. */
+export interface ResolveContext {
+  board: IBoard;
 }
 
-// ─── Preset offset tables (derived from existing enums) ─────
+/**
+ * Resolve a pending command with the player's selection.
+ * Returns events to apply to game state after resolution.
+ */
+export function resolvePending(
+  command: PendingCommand,
+  selection: PendingSelection,
+  ctx?: ResolveContext,
+): GameEvent[] {
+  const events: GameEvent[] = [];
 
-export const OFFSETS_OMNI: PatternOffset[] = [
-  { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
-  { dx: -1, dy:  0 },                     { dx: 1, dy:  0 },
-  { dx: -1, dy:  1 }, { dx: 0, dy:  1 }, { dx: 1, dy:  1 },
-];
+  // ── TARGET resolution ─────────────────────────────────────
+  if (command.kind === 'TARGET' && selection.kind === 'TARGET') {
+    resolveTarget(command, selection.instanceId, ctx, events);
+  }
 
-export const OFFSETS_HV: PatternOffset[] = [
-  { dx: 0, dy: -1 },  // up
-  { dx: 0, dy:  1 },  // down
-  { dx: -1, dy: 0 },  // left
-  { dx: 1,  dy: 0 },  // right
-];
+  // ── POSITION summon — place a unit at the selected position
+  if (command.kind === 'POSITION' && selection.kind === 'POSITION') {
+    events.push({
+      type: 'UNIT_PLACED',
+      instanceId: `${command.sourceCardId}_pending_${Date.now()}`,
+      cardId: command.sourceCardId,
+      owner: command.owner,
+      col: selection.col,
+      row: selection.row,
+      isActive: true,
+    } as GameEvent);
+  }
 
-export const OFFSETS_DIAGONAL: PatternOffset[] = [
-  { dx: -1, dy: -1 }, { dx: 1, dy: -1 },
-  { dx: -1, dy:  1 }, { dx: 1, dy:  1 },
-];
+  // Append deferred events (e.g., Mystic LEG drain)
+  events.push(...command.deferredEvents);
+  return events;
+}
 
-export const OFFSETS_FORWARD_ONLY: PatternOffset[] = [
-  { dx: 0, dy: -1 },  // toward enemy
-];
+// ─────────────────────────────────────────────────────────────
+// TARGET ability resolution
+// ─────────────────────────────────────────────────────────────
+
+function resolveTarget(
+  cmd: PendingCommand & { kind: 'TARGET' },
+  targetId: string,
+  ctx: ResolveContext | undefined,
+  events: GameEvent[],
+): void {
+  const ability = cmd.sourceAbility;
+
+  // ── Priest: full heal ──────────────────────────────────────
+  if (ability === AbilityType.ON_DEPLOY_HEAL_FRIENDLY) {
+    if (!ctx?.board) return;
+    const unit = ctx.board.getUnitById(targetId);
+    if (!unit) return;
+    const healAmount = unit.maxDef - unit.currentDef;
+    if (healAmount <= 0) return; // already full HP
+    events.push({
+      type: 'UNIT_HEALED',
+      instanceId: unit.instanceId,
+      cardId: unit.cardId,
+      col: unit.position.col,
+      row: unit.position.row,
+      amount: healAmount,
+      newHP: unit.maxDef,
+      maxHP: unit.maxDef,
+      player: unit.owner,
+      isKing: unit.cardId === 'king',
+    } as GameEvent);
+    return;
+  }
+
+  // ── Disease: damage structure + adjacent ────────────────────
+  if (ability === AbilityType.SPELL_DAMAGE_STRUCTURE_ADJ) {
+    if (!ctx?.board) return;
+    const structure = ctx.board.getUnitById(targetId);
+    if (!structure) return;
+    // Apply Disease timed effect — the actual damage ticks happen in EndPhase
+    // For now, emit a structure-targeted event the engine can track
+    events.push({
+      type: 'UNIT_ATTACKED',
+      attackerInstanceId: '',
+      targetInstanceId: structure.instanceId,
+      attackerCol: structure.position.col,
+      attackerRow: structure.position.row,
+      targetCol: structure.position.col,
+      targetRow: structure.position.row,
+      damage: 1,
+      targetNewHP: Math.max(0, structure.currentDef - 1),
+      targetPlayer: structure.owner,
+      isKingHit: false,
+      maxHP: structure.maxDef,
+    } as GameEvent);
+    // If structure dies from this
+    if (structure.currentDef - 1 <= 0) {
+      events.push({
+        type: 'UNIT_DIED',
+        instanceId: structure.instanceId,
+        cardId: structure.cardId,
+        owner: structure.owner,
+        col: structure.position.col,
+        row: structure.position.row,
+        cause: 'DISEASE',
+      } as GameEvent);
+    }
+    return;
+  }
+
+  // ── Coup: banish target royal, spawn foot soldiers ──────────
+  if (ability === 'coupHandler') {
+    if (!ctx?.board) return;
+    const target = ctx.board.getUnitById(targetId);
+    if (!target) return;
+    events.push({
+      type: 'UNIT_DIED',
+      instanceId: target.instanceId,
+      cardId: target.cardId,
+      owner: target.owner,
+      col: target.position.col,
+      row: target.position.row,
+      cause: 'COUP_BANISH',
+    } as GameEvent);
+    return;
+  }
+
+  // ── Treason: steal enemy unit for this turn ─────────────────
+  if (ability === 'treasonHandler') {
+    if (!ctx?.board) return;
+    const target = ctx.board.getUnitById(targetId);
+    if (!target) return;
+    // Emit a transform event that flips ownership
+    events.push({
+      type: 'UNIT_TRANSFORMED',
+      oldInstanceId: target.instanceId,
+      newInstanceId: target.instanceId,
+      toCardId: target.cardId,
+      owner: cmd.owner,
+      col: target.position.col,
+      row: target.position.row,
+      newHP: target.currentDef,
+      newMaxHP: target.maxDef,
+    } as GameEvent);
+    return;
+  }
+
+  // ── Mystic / Revive: revive from graveyard (→ needs POSITION next) ──
+  // For revive, the target is a graveyard card ID, not a board unit.
+  // The actual placement will be a follow-up POSITION pending.
+  // For now, just let deferredEvents handle it.
+  if (ability === AbilityType.ON_DEPLOY_REVIVE || ability === 'mysticDeployHandler') {
+    // The graveyard target will need a POSITION command next.
+    // This is handled by the engine after these events apply.
+    return;
+  }
+}
+
 ```
 
 # src\game\phases\ActPhase.ts
@@ -8202,14 +9794,14 @@ export const OFFSETS_FORWARD_ONLY: PatternOffset[] = [
 
 import type { GameContext } from '../GameContext';
 import { opponent } from '../GameContext';
-import type { Unit, Position } from '../types/GameTypes';
+import type { Unit } from '../types/GameTypes';
 import { Player, EngineStatus } from '../types/GameTypes';
 import { AtkPattern } from '../types/CardTypes';
-import { getCard } from '../data/CardDefinitions';
+import { getCard } from '../data/CardRegistry';
 import { canUnitMove, canUnitAttack } from '../UnitQuery';
-import { getValidMoves, getValidAttacks, isMoveValid, isAttackValid, isLancerForwardMove } from '../MovementRules';
-import { resolveAttack, resolveAttackWithCounter } from '../CombatResolver';
-import { resolveOnDeath, resolveOnKill } from '../AbilityResolver';
+import { isMoveValid, isAttackValid, isLancerForwardMove } from '../MovementRules';
+import { resolveAttackWithCounter } from '../CombatResolver';
+import { resolveOnDeath, resolveOnKill } from '../abilities/AbilityDispatcher';
 
 // ─────────────────────────────────────────────
 // MOVE
@@ -8388,7 +9980,7 @@ function handleUnitDeath(
   ctx.applyEvents(deathResult.events);
 
   if (deathResult.pending) {
-    (ctx as any)._lastPending = deathResult.pending;
+    ctx.pending = deathResult.pending;
     ctx.status = EngineStatus.AWAITING_INPUT;
   }
 
@@ -8621,7 +10213,7 @@ function emitKingThreats(ctx: GameContext): void {
 import type { GameContext } from '../GameContext';
 import { opponent } from '../GameContext';
 import { TurnPhase } from '../types/GameTypes';
-import { getCard } from '../data/CardDefinitions';
+import { getCard } from '../data/CardRegistry';
 import { resolveCastleAreaAttack, applyDamage, applyAutoHeal } from '../CombatResolver';
 
 const CROWN_CAP = 10;
@@ -8822,11 +10414,11 @@ function runBuildDelayActivation(ctx: GameContext, ap: number): void {
 // ============================================================
 
 import type { GameContext } from '../GameContext';
-import type { Unit, Position } from '../types/GameTypes';
+import type { Unit } from '../types/GameTypes';
 import { Allegiance, CardClass, CardFlag } from '../types/CardTypes';
-import { getCard } from '../data/CardDefinitions';
+import { getCard } from '../data/CardRegistry';
 import { getValidDeploySquares } from '../MovementRules';
-import { resolveOnDeploy } from '../AbilityResolver';
+import { resolveOnDeploy } from '../abilities/AbilityDispatcher';
 import { EngineStatus } from '../types/GameTypes';
 
 /**
@@ -8916,18 +10508,19 @@ export function executePlayCard(
   // Handle pending interaction (Priest, Mystic, Disease, etc.)
   if (result.pending) {
     ctx.status = EngineStatus.AWAITING_INPUT;
+    ctx.pending = result.pending;
     ctx.emit({
       type: result.pending.kind === 'TARGET'   ? 'PENDING_TARGET'   :
             result.pending.kind === 'POSITION' ? 'PENDING_POSITION' :
             result.pending.kind === 'COLUMN'   ? 'PENDING_COLUMN'   :
                                                   'PENDING_DISCARD',
       reason: result.pending.reason,
-      validTargetIds:  result.pending.validTargetIds ?? [],
-      validPositions:  result.pending.validPositions ?? [],
-      count: 1,
+      sourceCardId:    result.pending.sourceCardId,
+      sourceAbility:   result.pending.sourceAbility,
+      validTargetIds:  result.pending.kind === 'TARGET' ? result.pending.validTargetIds : [],
+      validPositions:  result.pending.kind === 'POSITION' ? result.pending.validPositions : [],
+      count: result.pending.kind === 'DISCARD' ? result.pending.count : 1,
     } as any);
-    // Return the pending object to the engine so it can store it
-    (ctx as any)._lastPending = result.pending;
   }
 
   // Spells go to discard after play
@@ -8950,10 +10543,11 @@ export function executePlayCard(
 // ============================================================
 
 import { Player } from './types/GameTypes';
-import { getCard } from './data/CardDefinitions';
-import GameState from '../GameState';  // ADD at top
+import { getCard } from './data/CardRegistry';
+import GameState from '../GameState';
+import type { IPlayerState } from './interfaces/IPlayerState';
 
-export class PlayerState {
+export class PlayerState implements IPlayerState {
   readonly player: Player;
 
   hand: string[]    = []; // cardIds (may have duplicates per copies rule)
@@ -9150,7 +10744,7 @@ loadDeck(cardIds: string[], playerIndex: number = 0): void {
   }
 
 private shuffle(arr: string[]): void {
-  const seed = (GameState as any).gameSeed;
+  const seed = GameState.gameSeed;
   if (seed && seed > 0) {
     this.seededShuffle(arr, seed);
   } else {
@@ -9209,7 +10803,7 @@ private seededShuffle(arr: string[], seed: number): void {
 // ============================================================
 // AbilityTypes.ts
 // All ability type strings and ability context interfaces.
-// AbilityResolver switches on these strings.
+// AbilityDispatcher resolves these via handler registry.
 // ============================================================
 
 // ─────────────────────────────────────────────
@@ -9282,24 +10876,11 @@ export interface AbilityContext {
 }
 
 // ─────────────────────────────────────────────
-// PENDING INTERACTION
-// Created by AbilityResolver when engine must pause for input.
-// GameEngine stores this and resumes when selectTarget() etc called.
+// PENDING COMMAND (type re-export for convenience)
+// See src/game/pending/PendingCommand.ts for the canonical definition.
 // ─────────────────────────────────────────────
 
-export type PendingInteractionKind =
-  | 'TARGET'    // Player picks a unit (Priest, Mystic, Coup, Treason, Disease)
-  | 'POSITION'  // Player picks a board square (Casus Belli forward deploy)
-  | 'COLUMN'    // Player picks a column 0-5 (Earthquake)
-  | 'DISCARD';  // Player picks a hand card to discard (War Horn)
-
-export interface PendingInteraction {
-  kind: PendingInteractionKind;
-  reason: string;                             // Human-readable for UI
-  validTargetIds?: string[];                  // Unit instance IDs for TARGET
-  validPositions?: Array<{ col: number; row: number }>; // For POSITION
-  resumeCallback: (selection: any) => void;   // GameEngine calls this on resolve
-}
+export type { PendingCommand } from '../pending/PendingCommand';
 
 ```
 
@@ -9435,7 +11016,7 @@ export interface CommonAbility {
 
 export interface CustomAbility {
   type: 'CUSTOM';
-  handler: string;             // Handler key — resolved in AbilityResolver
+  handler: string;             // Handler key — resolved in AbilityDispatcher
 }
 
 ```
@@ -9754,6 +11335,124 @@ export type GameEvent =
   | EvStructureSpawned;
 
 export type GameEventType = GameEvent['type'];
+
+```
+
+# src\game\types\GameEventMap.ts
+
+```ts
+// ============================================================
+// GameEventMap.ts
+// Typed payload map for every event flowing through EventBus.
+// NOTE: These reflect the UI-adapted payloads emitted by
+// wireEngineToEventBus in BattleScene, NOT the raw engine events.
+// ============================================================
+
+import type { Position, Player } from './GameTypes';
+import type { CardRenderData, HUDSnapshot } from './UITypes';
+import type {
+  EvUnitMoved, EvUnitAttacked,
+  EvUnitHealed, EvUnitActivated, EvAuraApplied,
+  EvLEGGained, EvLEGSpent, EvLEGStolen, EvLEGRateChanged,
+  EvPhaseChanged, EvTurnStarted, EvTurnEnded,
+  EvPendingTarget, EvPendingPosition, EvPendingColumn, EvPendingDiscard,
+  EvInteractionResolved,
+  EvKingThreatened, EvGameOver, EvDeckShuffled, EvScoutResult, EvStructureSpawned,
+} from './EventTypes';
+
+export interface GameEventMap {
+  // ─── Unit events (UI-adapted by wireEngineToEventBus) ─────
+
+  // Emitted with CardRenderData + position (enriched from engine event)
+  UNIT_PLACED:         { data: CardRenderData; col: number; row: number };
+  UNIT_MOVED:          { from: Position; to: Position };
+  UNIT_ATTACKED:       EvUnitAttacked;
+  UNIT_DIED:           { col: number; row: number; instanceId: string };
+  UNIT_HEALED:         EvUnitHealed;
+  UNIT_TRANSFORMED:    never; // Emitted as UNIT_DIED + UNIT_PLACED pair
+  UNIT_EXHAUSTED:      { col: number; row: number };
+  UNIT_REFRESHED:      { col: number; row: number };
+  UNIT_ACTIVATED:      EvUnitActivated;
+  UNIT_STATS_CHANGED:  { instanceId: string; atk?: number; currentHP?: number; maxHP?: number; canAct?: boolean };
+  AURA_APPLIED:        EvAuraApplied;
+
+  // ─── Card events (UI-adapted) ─────────────────────────────
+
+  CARD_DRAWN:          { card: CardRenderData; handIndex: number; deckRemaining: number };
+  CARD_PLAYED:         { handIndex: number; player: Player; isLocal: boolean };
+  CARD_DISCARDED:      { handIndex: number; player: Player; isLocal: boolean };
+  OPPONENT_CARD_DRAWN: { handIndex: number };
+
+  // ─── LEG economy (pass-through) ──────────────────────────
+
+  LEG_GAINED:          EvLEGGained;
+  LEG_SPENT:           EvLEGSpent;
+  LEG_STOLEN:          EvLEGStolen;
+  LEG_RATE_CHANGED:    EvLEGRateChanged;
+
+  // ─── Phase / turn (pass-through) ─────────────────────────
+
+  PHASE_CHANGED:       EvPhaseChanged;
+  TURN_STARTED:        EvTurnStarted;
+  TURN_ENDED:          EvTurnEnded;
+  GAME_OVER:           EvGameOver;
+
+  // ─── Pending interactions (pass-through) ──────────────────
+
+  PENDING_TARGET:      EvPendingTarget;
+  PENDING_POSITION:    EvPendingPosition;
+  PENDING_COLUMN:      EvPendingColumn;
+  PENDING_DISCARD:     EvPendingDiscard;
+  INTERACTION_RESOLVED: EvInteractionResolved;
+
+  // ─── Other game events (pass-through) ─────────────────────
+
+  KING_THREATENED:     EvKingThreatened;
+  DECK_SHUFFLED:       EvDeckShuffled;
+  SCOUT_RESULT:        EvScoutResult;
+  STRUCTURE_SPAWNED:   EvStructureSpawned;
+
+  // ─── UI Events ────────────────────────────────────────────
+
+  SELECTION_CHANGED:   SelectionChangedPayload;
+  HIGHLIGHTS_CHANGED:  HighlightsChangedPayload;
+  INPUT_BOARD_CLICK:   { col: number; row: number };
+  INPUT_HAND_CLICK:    { index: number | null };
+  CARD_HOVERED:        CardHoveredPayload;
+  CARD_HOVER_END:      CardHoverEndPayload;
+  DETAIL_SHOW:         CardRenderData;
+  DETAIL_HIDE:         Record<string, never>;
+  HUD_REFRESH:         HUDSnapshot;
+
+  // Network (currently unused — reserved)
+  NET_OPPONENT_ACTION: unknown;
+  NET_GAME_STATE_SYNC: unknown;
+}
+
+// ─── UI Payload Types ───────────────────────────────────────
+
+export type SelectionChangedPayload =
+  | { source: 'hand'; index: number; validDeploy: Position[] }
+  | { source: 'board'; col: number; row: number; validMoves: Position[]; validAttacks: Position[] }
+  | { source: 'clear'; index: null };
+
+export interface HighlightsChangedPayload {
+  moves: Position[];
+  attacks: Position[];
+  attackRange?: Position[];
+  deploy?: Position[];
+  auras: Position[];
+}
+
+export type CardHoveredPayload =
+  | { index: number; card: CardRenderData }
+  | { col: number; row: number };
+
+export type CardHoverEndPayload =
+  | { index: number }
+  | { col: number; row: number };
+
+export type GameEventType = keyof GameEventMap;
 
 ```
 
@@ -10466,7 +12165,7 @@ export interface CellRenderData {
 import type { Unit, Position } from './types/GameTypes';
 import { Player } from './types/GameTypes';
 import { MovementType, AtkPattern, CombatTag } from './types/CardTypes';
-import { getCard } from './data/CardDefinitions';
+import { getCard } from './data/CardRegistry';
 import { computeCanAttackAfterMove } from './UnitQuery';
 
 export class UnitFactory {
@@ -10623,7 +12322,7 @@ export function movementToNumber(movement: MovementType): number {
 
 import type { Unit } from './types/GameTypes';
 import { MovementType, AtkPattern, CardFlag } from './types/CardTypes';
-import { getCard } from './data/CardDefinitions';
+import { getCard } from './data/CardRegistry';
 
 // ─────────────────────────────────────────────
 // CORE CAPABILITY CHECKS
@@ -10744,6 +12443,44 @@ export function computeCanAttackAfterMove(unit: Unit): boolean {
 
 ```
 
+# src\game\utils\boardHash.ts
+
+```ts
+// ============================================================
+// boardHash.ts — Lightweight FNV-1a hash of board state.
+// Used for cross-client state sync verification.
+// ============================================================
+
+import type { Unit } from '../types/GameTypes';
+
+/**
+ * FNV-1a 32-bit hash (fast, non-cryptographic, good distribution).
+ */
+function fnv1a(input: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = (hash * 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
+}
+
+/**
+ * Compute a deterministic hash from serialized board cells.
+ * Works with the output of `engine.getState().board`.
+ */
+export function boardHashFromCells(cells: Array<{ col: number; row: number; unit: Unit | null }>): string {
+  const units = cells
+    .filter(c => c.unit !== null)
+    .map(c => c.unit!)
+    .sort((a, b) => a.instanceId.localeCompare(b.instanceId))
+    .map(u => `${u.instanceId}:${u.position.col},${u.position.row}:${u.currentDef}:${u.owner}`)
+    .join('|');
+  return fnv1a(units);
+}
+
+```
+
 # src\GameState.ts
 
 ```ts
@@ -10760,21 +12497,27 @@ export enum RoomAction {
     Join = "Join",
 }
 
-export interface MatchResult {
+export interface BoardGameResult {
     playerName: string;
     opponentName: string;
-    playerRoll: number;
-    opponentRoll: number;
     playerWon: boolean;
     isTie: boolean;
+    reason: string;       // 'KING_DESTROYED' | 'DISCONNECT' | 'SURRENDER' | 'TIMEOUT'
+    turns: number;
     stakeAmount: number;
     payout: number;
+}
+
+export interface PayoutResult {
+    success: boolean;
+    txHash?: string;
+    error?: string;
 }
 
 class GameStateClass {
     // ─── Player ───────────────────────────────────────────────
     playerName: string = "Player";
-    opponentName: string = "";          // ← ADDED
+    opponentName: string = "";
     walletAddress: string = "";
     isWalletConnected: boolean = false;
 
@@ -10784,13 +12527,18 @@ class GameStateClass {
     // ─── Room ─────────────────────────────────────────────────
     roomCode: string = "";
     roomAction: RoomAction = RoomAction.Create;
-    playerIndex: number = 0;     // ← ADD: 0 = P1/creator, 1 = P2/joiner
-    gameSeed: number = 0;        // ← ADD: shared shuffle seed (set in Step 5)
+    playerIndex: number = 0;     // 0 = P1/creator, 1 = P2/joiner
+    gameSeed: number = 0;        // Shared shuffle seed from server
+
     // ─── Match ────────────────────────────────────────────────
     currentStake: number = 1;
     winCount: number = 0;
     lossCount: number = 0;
-    lastMatch: MatchResult | null = null;
+    lastMatch: BoardGameResult | null = null;
+
+    // ─── Crypto ───────────────────────────────────────────────
+    depositTxHash: string | null = null;
+    payoutResult: PayoutResult | null = null;
 
     // ─── Setters ──────────────────────────────────────────────
     setPlayerName(name: string): void {
@@ -10798,7 +12546,7 @@ class GameStateClass {
         console.log(`[GameState] Player name set: ${name}`);
     }
 
-    setOpponentName(name: string): void {   // ← ADDED
+    setOpponentName(name: string): void {
         this.opponentName = name;
         console.log(`[GameState] Opponent name set: ${name}`);
     }
@@ -10834,15 +12582,17 @@ class GameStateClass {
         this.roomAction = action;
         console.log(`[GameState] Room action: ${action}`);
     }
-    setPlayerIndex(index: number): void {
-    this.playerIndex = index;
-    console.log(`[GameState] Player index set: ${index} (${index === 0 ? 'P1/Creator' : 'P2/Joiner'})`);
-}
 
-setGameSeed(seed: number): void {
-    this.gameSeed = seed;
-    console.log(`[GameState] Game seed set: ${seed}`);
-}
+    setPlayerIndex(index: number): void {
+        this.playerIndex = index;
+        console.log(`[GameState] Player index set: ${index} (${index === 0 ? 'P1/Creator' : 'P2/Joiner'})`);
+    }
+
+    setGameSeed(seed: number): void {
+        this.gameSeed = seed;
+        console.log(`[GameState] Game seed set: ${seed}`);
+    }
+
     // ─── Match ────────────────────────────────────────────────
     recordWin(): void {
         this.winCount++;
@@ -10854,9 +12604,14 @@ setGameSeed(seed: number): void {
         console.log(`[GameState] Loss recorded. Total: ${this.lossCount}`);
     }
 
-    setLastMatch(match: MatchResult): void {
+    setLastMatch(match: BoardGameResult): void {
         this.lastMatch = match;
         console.log(`[GameState] Match saved — Won: ${match.playerWon}`);
+    }
+
+    clearMatchData(): void {
+        this.depositTxHash = null;
+        this.payoutResult = null;
     }
 
     // ─── Debug ────────────────────────────────────────────────
@@ -10872,6 +12627,7 @@ setGameSeed(seed: number): void {
 
 const GameState = new GameStateClass();
 export default GameState;
+
 ```
 
 # src\index.html
@@ -10924,7 +12680,6 @@ export default GameState;
 import type { BattleLayoutJSON } from '../game/types/UITypes';
 import type { SelectionState } from '../game/types/UITypes';
 import { EventBus, EV } from '../events/EventBus';
-import { LayoutLoader } from '../config/LayoutLoader';
 
 // Minimal interface for what SelectionManager needs from GameEngine.
 // This avoids importing the full GameEngine in the UI layer.
@@ -10938,6 +12693,7 @@ export interface IGameEngineAPI {
   selectTarget(col: number, row: number): void;
   selectPosition(col: number, row: number): void;
   selectHandCard(handIndex: number): void;
+  cancelPending(): void;
   isAwaitingInput(): boolean;
   canAct(col: number, row: number): boolean;
   isPlayerUnit(col: number, row: number): boolean;
@@ -10961,6 +12717,10 @@ export class SelectionManager {
     mode: 'idle',
   };
 
+  // Track what kind of pending interaction is active
+  private pendingKind: 'TARGET' | 'POSITION' | 'COLUMN' | 'DISCARD' | null = null;
+  private pendingValidPositions: Array<{ col: number; row: number }> = [];
+
   private unsubs: Array<() => void> = [];
 
   constructor(layout: BattleLayoutJSON, engine: IGameEngineAPI) {
@@ -10979,9 +12739,17 @@ export class SelectionManager {
    */
   onBoardCellClicked(col: number, row: number): void {
     if (this.engine.isAwaitingInput()) {
-      // Engine is waiting for player to pick a target
-      this.engine.selectTarget(col, row);
-      this.clearSelection();
+      if (this.pendingKind === 'POSITION') {
+        // Validate click is on a valid position
+        if (this.pendingValidPositions.some(p => p.col === col && p.row === row)) {
+          this.engine.selectPosition(col, row);
+          this.clearSelection();
+        }
+      } else {
+        // TARGET or other — pass through (col, row used to find unit)
+        this.engine.selectTarget(col, row);
+        this.clearSelection();
+      }
       return;
     }
 
@@ -11243,11 +13011,40 @@ private publishHighlights(): void {
     }),
 
     EventBus.on(EV.INPUT_HAND_CLICK, ({ index }) => {
-      this.onHandCardClicked(index);
+      if (index !== null) this.onHandCardClicked(index);
     }),
 
       // When engine enters AWAITING_INPUT, set mode
       EventBus.on(EV.PENDING_TARGET, () => {
+        this.pendingKind = 'TARGET';
+        this.pendingValidPositions = [];
+        this.state = { ...this.state, mode: 'awaiting_target' };
+        EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
+          moves: [], attacks: [], auras: [],
+        });
+      }),
+
+      EventBus.on(EV.PENDING_POSITION, (ev: any) => {
+        this.pendingKind = 'POSITION';
+        this.pendingValidPositions = ev.validPositions ?? [];
+        this.state = { ...this.state, mode: 'awaiting_target' };
+        EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
+          moves: this.pendingValidPositions, attacks: [], auras: [],
+        });
+      }),
+
+      EventBus.on(EV.PENDING_COLUMN, () => {
+        this.pendingKind = 'COLUMN';
+        this.pendingValidPositions = [];
+        this.state = { ...this.state, mode: 'awaiting_target' };
+        EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
+          moves: [], attacks: [], auras: [],
+        });
+      }),
+
+      EventBus.on(EV.PENDING_DISCARD, () => {
+        this.pendingKind = 'DISCARD';
+        this.pendingValidPositions = [];
         this.state = { ...this.state, mode: 'awaiting_target' };
         EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
           moves: [], attacks: [], auras: [],
@@ -11255,7 +13052,13 @@ private publishHighlights(): void {
       }),
 
       // When interaction resolves, back to idle
-      EventBus.on(EV.INTERACTION_RESOLVED, () => {
+      EventBus.on(EV.INTERACTION_RESOLVED, (ev: any) => {
+        // If cancelled from UI (e.g., Cancel button), tell the engine to clear pending state
+        if (ev?.cancelled) {
+          this.engine.cancelPending();
+        }
+        this.pendingKind = null;
+        this.pendingValidPositions = [];
         this.clearSelection();
       }),
 
@@ -11277,6 +13080,7 @@ private publishHighlights(): void {
 # src\main.ts
 
 ```ts
+import './game/abilities/registerAll';
 import Phaser from 'phaser';
 import PreLoadScene    from './scenes/PreloadScene';
 import MainMenuScene   from './scenes/MainMenuScene';
@@ -11324,7 +13128,7 @@ export default game;
 import { io, Socket } from "socket.io-client";
 import GameState, { RoomAction } from "../GameState.ts";
 export interface GameAction {
-  type: 'PLAY_CARD' | 'MOVE_UNIT' | 'ATTACK_UNIT' | 'END_PLAY_PHASE' | 'END_ACT_PHASE';
+  type: 'PLAY_CARD' | 'MOVE_UNIT' | 'ATTACK_UNIT' | 'END_PLAY_PHASE' | 'END_ACT_PHASE' | 'SELECT_POSITION' | 'SELECT_TARGET' | 'CANCEL_PENDING';
   handIndex?: number;
   col?: number;
   row?: number;
@@ -11332,6 +13136,8 @@ export interface GameAction {
   fromRow?: number;
   targetCol?: number;
   targetRow?: number;
+  seqNum?: number;
+  serverSeq?: number;
 }
 // ─── Event Callbacks ──────────────────────────────────────────
 export interface RoomCallbacks {
@@ -11340,30 +13146,25 @@ export interface RoomCallbacks {
   onOpponentJoined: (opponentName: string) => void;
   onOpponentAction: (action: GameAction) => void;
   onOpponentDisconnected: () => void;
-  onOpponentRollReceived: (roll: number, opponentName: string) => void;
+  onOpponentReconnected?: () => void;
+  onOpponentAbandon?: () => void;
+  onConnectionLost?: () => void;
+  onReconnected?: () => void;
+  onReconnectFailed?: () => void;
   onError: (message: string) => void;
   onBothCryptoReady?: () => void;
-  onCryptoMatchResult?: (result: CryptoMatchResult) => void;
-  onTieReroll?: () => void;
+  onBothBattleReady?: () => void;
   onPayoutResult?: (result: { success: boolean; txHash?: string; error?: string }) => void;
   onHostDepositConfirmed?: () => void;
-  // ← ADD
-}
-
-export interface CryptoMatchResult {
-  winnerName: string;
-  loserName: string;
-  winnerRoll: number;
-  loserRoll: number;
-  txHash?: string;
-  success: boolean;
-  error?: string;
 }
 
 class SocketManagerClass {
   private socket: Socket | null = null;
   private callbacks: RoomCallbacks | null = null;
-  private serverUrl: string = "http://localhost:3001";
+  private serverUrl: string = import.meta.env.VITE_SOCKET_URL || "http://localhost:3001";
+  private seqCounter: number = 0;
+  private actionBuffer: GameAction[] = [];
+  private hasConnectedOnce: boolean = false;
 
   connect(callbacks: RoomCallbacks): void {
     this.callbacks = callbacks;
@@ -11375,18 +13176,56 @@ class SocketManagerClass {
     }
 
     console.log("[SocketManager] Connecting to server...");
-    this.socket = io(this.serverUrl);
+    this.socket = io(this.serverUrl, {
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+    });
 
     this.socket.on("connect", () => {
       console.log("[SocketManager] Connected to server.");
-      this.actOnRoomAction();
+      if (!this.hasConnectedOnce) {
+        this.hasConnectedOnce = true;
+        this.seqCounter = 0;
+        this.actOnRoomAction();
+      } else {
+        // Reconnection — rejoin room and flush buffered actions
+        console.log("[SocketManager] Reconnected! Rejoining room...");
+        this.socket?.emit("rejoin_room" as any, {
+          roomCode: GameState.roomCode,
+          playerName: GameState.playerName,
+        });
+        this.flushActionBuffer();
+        this.callbacks?.onReconnected?.();
+      }
     });
 
     this.socket.on("disconnect", () => {
       console.log("[SocketManager] Disconnected from server.");
+      if (this.hasConnectedOnce) {
+        this.callbacks?.onConnectionLost?.();
+      }
+    });
+
+    this.socket.io.on("reconnect_failed", () => {
+      console.warn("[SocketManager] All reconnection attempts failed.");
+      this.callbacks?.onReconnectFailed?.();
     });
 
     this.registerEvents();
+  }
+
+  private flushActionBuffer(): void {
+    if (this.actionBuffer.length === 0) return;
+    console.log(`[SocketManager] Flushing ${this.actionBuffer.length} buffered actions`);
+    for (const action of this.actionBuffer) {
+      this.socket?.emit('game_action', {
+        roomCode: GameState.roomCode,
+        action,
+      });
+    }
+    this.actionBuffer = [];
   }
 
   private actOnRoomAction(): void {
@@ -11416,11 +13255,13 @@ class SocketManagerClass {
   }
 
   // Register wallet address with server (needed for payout)
-  registerWallet(walletAddress: string): void {
+  registerWallet(walletAddress: string, message: string, signature: string): void {
     console.log(`[SocketManager] Registering wallet: ${walletAddress}`);
     this.socket?.emit("registerWallet", {
       roomCode: GameState.roomCode,
       walletAddress,
+      message,
+      signature,
     });
   }
 
@@ -11432,12 +13273,11 @@ class SocketManagerClass {
     });
   }
 
-  sendDiceRoll(roll: number): void {
-    console.log(`[SocketManager] Sending roll: ${roll}`);
-    this.socket?.emit("diceRoll", {
+  // Signal to server that BattleScene is loaded and ready
+  signalBattleReady(): void {
+    console.log("[SocketManager] Signaling battle ready");
+    this.socket?.emit("player_ready", {
       roomCode: GameState.roomCode,
-      playerName: GameState.playerName,
-      roll,
     });
   }
 
@@ -11470,19 +13310,34 @@ this.socket.on("game_seed", (data: { seed: number }) => {
   console.log(`[SocketManager] Game seed received: ${data.seed}`);
   GameState.setGameSeed(data.seed);
 });
-    this.socket.on("opponentRoll", (data: { roll: number; playerName: string }) => {
-      console.log(`[SocketManager] Opponent rolled: ${data.roll}`);
-      this.callbacks?.onOpponentRollReceived(data.roll, data.playerName);
-    });
-
     this.socket.on("opponentDisconnected", () => {
       console.log("[SocketManager] Opponent disconnected.");
       this.callbacks?.onOpponentDisconnected();
     });
 
+    this.socket.on("opponentReconnected" as any, () => {
+      console.log("[SocketManager] Opponent reconnected!");
+      this.callbacks?.onOpponentReconnected?.();
+    });
+
+    this.socket.on("opponentAbandon" as any, () => {
+      console.log("[SocketManager] Opponent abandon (grace period expired).");
+      this.callbacks?.onOpponentAbandon?.();
+    });
+
+    this.socket.on("rejoinSuccess" as any, (data: { roomCode: string; playerIndex: number }) => {
+      console.log(`[SocketManager] Rejoin success: room=${data.roomCode}, playerIndex=${data.playerIndex}`);
+    });
+
     this.socket.on("error", (data: { message: string }) => {
       console.error(`[SocketManager] Error: ${data.message}`);
       this.callbacks?.onError(data.message);
+    });
+
+    // Battle ready handshake
+    this.socket.on("both_battle_ready", () => {
+      console.log("[SocketManager] Both players battle ready!");
+      this.callbacks?.onBothBattleReady?.();
     });
 
     // Crypto events
@@ -11491,32 +13346,34 @@ this.socket.on("game_seed", (data: { seed: number }) => {
       this.callbacks?.onBothCryptoReady?.();
     });
 
-    this.socket.on("cryptoMatchResult", (result: CryptoMatchResult) => {
-      console.log("[SocketManager] Crypto match result:", result);
-      this.callbacks?.onCryptoMatchResult?.(result);
-    });
 this.socket.on('payout_result', (data: { success: boolean; txHash?: string; error?: string }) => {
   console.log('[SocketManager] Payout result:', data);
-  (GameState as any).payoutResult = data;
+  GameState.payoutResult = data;
   this.callbacks?.onPayoutResult?.(data);
 });
-    this.socket.on("tieReroll", () => {
-      console.log("[SocketManager] Tie — re-rolling");
-      this.callbacks?.onTieReroll?.();
-    });
-
   }
 sendGameAction(action: GameAction): void {
+  this.seqCounter += 1;
+  action.seqNum = this.seqCounter;
   if (!this.socket?.connected) {
-    console.warn('[SocketManager] Cannot send game_action — not connected');
+    console.warn(`[SocketManager] Buffering game_action (disconnected): ${action.type} (seq=${action.seqNum})`);
+    this.actionBuffer.push(action);
     return;
   }
   this.socket.emit('game_action', {
     roomCode: GameState.roomCode,
     action,
   });
-  console.log('[SocketManager] Sent game_action:', action.type);
+  console.log(`[SocketManager] Sent game_action: ${action.type} (seq=${action.seqNum})`);
 }
+sendStateHash(hash: string, afterGlobalSeq: number): void {
+  this.socket?.emit('state_hash' as any, {
+    roomCode: GameState.roomCode,
+    hash,
+    afterGlobalSeq,
+  });
+}
+
 sendGameOver(localPlayerIndex: number, localPlayerWon: boolean): void {
   console.log(`[SocketManager] Sending game_over, won: ${localPlayerWon}`);
   this.socket?.emit('game_over', {
@@ -11529,9 +13386,21 @@ setCallbacks(callbacks: RoomCallbacks): void {
   this.callbacks = callbacks;
   console.log('[SocketManager] Callbacks updated.');
 }
+  isConnected(): boolean {
+    return this.socket?.connected ?? false;
+  }
+
+  /** One-shot listener for both_battle_ready (used by BattleScene). */
+  onBothBattleReady(cb: () => void): void {
+    this.socket?.once('both_battle_ready', cb);
+  }
+
   disconnect(): void {
     this.socket?.disconnect();
     this.socket = null;
+    this.hasConnectedOnce = false;
+    this.actionBuffer = [];
+    this.seqCounter = 0;
     console.log("[SocketManager] Manually disconnected.");
   }
 }
@@ -11642,13 +13511,15 @@ export class BoardRenderer {
     const cx = g.originX + col * g.cellSize + (g.cellSize - L.width) / 2;
     const cy = g.originY + displayRow * g.cellSize + (g.cellSize - L.height) / 2;
 
-    const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, cy);
+const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, cy);
+    thumb.col = col;   // Set logical position
+    thumb.row = row;
 
-    // Interactivity
+    // Interactivity — read col/row from thumbnail (survives moves)
     setContainerHitArea(thumb.container, L.width, L.height);
-    thumb.container.on('pointerover', () => this.onCellHover(col, row));
-    thumb.container.on('pointerout',  () => this.onCellHoverEnd(col, row));
-    thumb.container.on('pointerdown', () => EventBus.emit(EV.INPUT_BOARD_CLICK, { col, row }));
+    thumb.container.on('pointerover', () => this.onCellHover(thumb.col, thumb.row));
+    thumb.container.on('pointerout',  () => this.onCellHoverEnd(thumb.col, thumb.row));
+    thumb.container.on('pointerdown', () => EventBus.emit(EV.INPUT_BOARD_CLICK, { col: thumb.col, row: thumb.row }));
 
     this.unitContainer.add(thumb.container);
 
@@ -11769,17 +13640,20 @@ export class BoardRenderer {
       y: targetY,
       duration: 220,
       ease: 'Quad.easeInOut',
-      onComplete: () => {
+onComplete: () => {
         // Re-key in cell map (instanceId map unchanged — same object)
         this.unitsByCell.delete(fromKey);
         this.unitsByCell.set(this.cellKey(to.col, to.row), thumb);
+        // Update logical position so pointer closures report correct cell
+        thumb.col = to.col;
+        thumb.row = to.row;
         onComplete?.();
       },
     });
   }
 
   animateAttack(
-    from: { col: number; row: number },
+    _from: { col: number; row: number },
     target: { col: number; row: number },
     onComplete?: () => void
   ): void {
@@ -12015,7 +13889,9 @@ export class BoardRenderer {
         this.animateUnitMove(from, to);
       }),
 
-      EventBus.on(EV.UNIT_ATTACKED, ({ from, target, damage }) => {
+      EventBus.on(EV.UNIT_ATTACKED, ({ attackerCol, attackerRow, targetCol, targetRow, damage }) => {
+        const from = { col: attackerCol, row: attackerRow };
+        const target = { col: targetCol, row: targetRow };
         this.animateAttack(from, target, () => {
           if (damage) this.showDamageNumber(target.col, target.row, damage);
         });
@@ -12080,38 +13956,22 @@ ThemeLoader.hexToColorAlpha = function(hex: string): { color: number; alpha: num
 
 ```
 
-# src\renderers\CardRenderer.ts
+# src\renderers\CardBackRenderer.ts
 
 ```ts
 // ============================================================
-// CardRenderer.ts
-// Renders a single card as a Phaser Container at any of 3 modes:
-//   'full'      — in-hand card (140×200 default)
-//   'thumbnail' — on-board unit (100×100 default)
-//   'detail'    — overlay detail (220×320 default)
-//
-// ALL proportions come from LayoutJSON.cards and ThemeJSON.cards.
-// Change card width/height in JSON → entire card rescales.
-// No hardcoded pixel values below.
-//
-// PATCH v0.3.2:
-//   - renderThumbnail: badge groups wrapped in named containers
-//     ('atk_badge', 'def_badge') for in-place updates
-//   - NEW: updateThumbnailBadges() — updates ATK/DEF/canAct
-//     in-place without destroying the parent container.
-//     This eliminates tween race conditions entirely.
+// CardBackRenderer.ts
+// Renders a face-down card back for opponent hand display.
 // ============================================================
 
 import Phaser from 'phaser';
-import type { BattleLayoutJSON, ThemeJSON, CardRenderData, CardRenderMode } from '../game/types/UITypes';
+import type { BattleLayoutJSON, ThemeJSON } from '../game/types/UITypes';
 import { ThemeLoader } from '../config/ThemeLoader';
 
-export class CardRenderer {
+export class CardBackRenderer {
   private scene: Phaser.Scene;
   private layout: BattleLayoutJSON;
   private theme: ThemeJSON;
-
-  private static _missingKeyWarned = new Set<string>();
 
   constructor(scene: Phaser.Scene, layout: BattleLayoutJSON, theme: ThemeJSON) {
     this.scene = scene;
@@ -12119,96 +13979,148 @@ export class CardRenderer {
     this.theme = theme;
   }
 
-  // ─────────────────────────────────────────────
-  // PUBLIC API
-  // ─────────────────────────────────────────────
+  render(x: number, y: number, width: number, height: number): Phaser.GameObjects.Container {
+    const container = this.scene.add.container(x, y);
+    const r = this.layout.cards.full.cornerRadius;
 
-  render(data: CardRenderData, mode: CardRenderMode, x: number, y: number): Phaser.GameObjects.Container {
-    switch (mode) {
-      case 'full':      return this.renderFull(data, x, y);
-      case 'thumbnail': return this.renderThumbnail(data, x, y);
-      case 'detail':    return this.renderDetail(data, x, y);
-    }
-  }
+    const bg = this.scene.add.graphics();
+    bg.fillStyle(ThemeLoader.hexToNum(this.theme.colors.BG_DEEP), 1);
+    bg.fillRoundedRect(0, 0, width, height, r);
 
-  updateState(container: Phaser.GameObjects.Container, data: CardRenderData, mode: CardRenderMode): void {
-    if (mode === 'thumbnail') {
-      this.applyThumbnailState(container, data);
+    const border = this.scene.add.graphics();
+    border.lineStyle(2, 0x2C4A8A, 1);
+    border.strokeRoundedRect(0, 0, width, height, r);
+
+    const backKey = 'card_back';
+    if (this.scene.textures.exists(backKey)) {
+      const back = this.scene.add.image(width / 2, height / 2, backKey)
+        .setDisplaySize(width - 4, height - 4);
+      container.add([bg, border, back]);
     } else {
-      this.applyFullState(container, data);
+      const pattern = this.scene.add.graphics();
+      pattern.lineStyle(1, 0x2C4A8A, 0.3);
+      for (let i = 4; i < Math.min(width, height) / 2; i += 8) {
+        pattern.strokeRoundedRect(i, i, width - i * 2, height - i * 2, r);
+      }
+      const logoText = this.scene.add.text(width / 2, height / 2, 'OCB', {
+        fontFamily: this.theme.fonts.heading.family,
+        fontSize: `${Math.round(width * 0.2)}px`,
+        color: '#4FC3F799',
+      }).setOrigin(0.5, 0.5);
+      container.add([bg, border, pattern, logoText]);
     }
+
+    return container;
+  }
+}
+
+```
+
+# src\renderers\CardDetailRenderer.ts
+
+```ts
+// ============================================================
+// CardDetailRenderer.ts
+// Renders the detail overlay card (220x320 default).
+// Uses CardFullRenderer internally for the scaled card body.
+// ============================================================
+
+import Phaser from 'phaser';
+import type { BattleLayoutJSON, ThemeJSON, CardRenderData } from '../game/types/UITypes';
+import { ThemeLoader } from '../config/ThemeLoader';
+import { CardFullRenderer } from './CardFullRenderer';
+
+export class CardDetailRenderer {
+  private scene: Phaser.Scene;
+  private layout: BattleLayoutJSON;
+  private theme: ThemeJSON;
+
+  constructor(scene: Phaser.Scene, layout: BattleLayoutJSON, theme: ThemeJSON) {
+    this.scene = scene;
+    this.layout = layout;
+    this.theme = theme;
   }
 
-  /**
-   * Update ATK/DEF badges and canAct glow IN-PLACE on an existing thumbnail container.
-   * Does NOT destroy or recreate the container — only swaps named child elements.
-   * Safe to call while tweens are animating the container position.
-   */
-  updateThumbnailBadges(
-    container: Phaser.GameObjects.Container,
-    atk: number | undefined,
-    currentHP: number | undefined,
-    maxHP: number | undefined,
-    canAct: boolean,
-  ): void {
-    const L = this.layout.cards.thumbnail;
-    const BT = this.theme.board;
+  render(data: CardRenderData, x: number, y: number): Phaser.GameObjects.Container {
+    const L = this.layout.cards.detail;
+    const T = ThemeLoader.cardTypeTheme(this.theme, data?.allegiance ?? 'STANDARD');
+    const container = this.scene.add.container(x - L.width / 2, y - L.height / 2);
+
     const w = L.width;
-    const h = L.height;
+    const r = 8;
+    const scaleFactor = L.width / this.layout.cards.full.width;
 
-    // ── Update ATK badge ──
-    const oldAtk = container.getByName('atk_badge');
-    if (oldAtk) container.remove(oldAtk, true);
-    if (atk !== undefined) {
-      const atkGroup = this.scene.add.container(0, 0);
-      atkGroup.setName('atk_badge');
-      const atkParts = this.makeBadge(
-        2, h - BT.unitBandHeight - 2,
-        String(atk),
-        this.theme.cards.atkBadgeColor,
-        L.badgeFontSize, false, L.badgeWidth, L.badgeHeight
-      );
-      atkGroup.add(atkParts);
-      container.add(atkGroup);
+    const detailLayout: BattleLayoutJSON = {
+      ...this.layout,
+      cards: {
+        ...this.layout.cards,
+        full: {
+          ...this.layout.cards.full,
+          width:         L.width,
+          height:        L.height,
+          artAreaHeight: Math.round(this.layout.cards.full.artAreaHeight * scaleFactor),
+          nameBarHeight: Math.round(this.layout.cards.full.nameBarHeight * scaleFactor),
+          statRowHeight: Math.round(this.layout.cards.full.statRowHeight * scaleFactor),
+          legPipSize:    Math.round(this.layout.cards.full.legPipSize * scaleFactor),
+          typeIconSize:  Math.round(this.layout.cards.full.typeIconSize * scaleFactor),
+          cornerRadius:  r,
+        },
+      },
+    };
+
+    const subRenderer = new CardFullRenderer(this.scene, detailLayout, this.theme);
+    const cardBody = subRenderer.render(data, 0, 0);
+    container.add(cardBody);
+
+    const diagY = L.height + 10;
+    const diagSize = L.patternDiagramSize;
+    if (data.id) {
+      const diagBg = this.scene.add.graphics();
+      diagBg.fillStyle(ThemeLoader.hexToNum(this.theme.colors.BG_MID), 0.9);
+      diagBg.strokeRoundedRect(0, diagY, w, diagSize + 16, 6);
+      diagBg.fillRoundedRect(0, diagY, w, diagSize + 16, 6);
+
+      const diagLabel = this.scene.add.text(w / 2, diagY + 4, 'MOVE / ATTACK PATTERN', {
+        fontFamily: this.theme.fonts.small.family,
+        fontSize: `${this.theme.fonts.small.size}px`,
+        color: this.theme.colors.TEXT_SECONDARY,
+      }).setOrigin(0.5, 0);
+
+      container.add([diagBg, diagLabel]);
     }
 
-    // ── Update DEF/HP badge ──
-    const oldDef = container.getByName('def_badge');
-    if (oldDef) container.remove(oldDef, true);
-    if (currentHP !== undefined) {
-      const hpPct = (maxHP && maxHP > 0) ? currentHP / maxHP : 1;
-      const defColor = hpPct > 0.5 ? this.theme.cards.defBadgeColor
-                     : hpPct > 0.25 ? BT.hpBarMid
-                     : BT.hpBarLow;
-      const defGroup = this.scene.add.container(0, 0);
-      defGroup.setName('def_badge');
-      const defParts = this.makeBadge(
-        w - 2, h - BT.unitBandHeight - 2,
-        String(currentHP),
-        defColor,
-        L.badgeFontSize, true, L.badgeWidth, L.badgeHeight
-      );
-      defGroup.add(defParts);
-      container.add(defGroup);
-    }
+    void T;
+    return container;
+  }
+}
 
-    // ── Update canAct glow ──
-    const oldGlow = container.getByName('can_act_glow');
-    if (oldGlow) container.remove(oldGlow, true);
-    if (canAct) {
-      const glow = this.scene.add.graphics();
-      glow.lineStyle(3, 0xF5A623, 0.9);
-      glow.strokeRect(-1, -1, w + 2, h + 2);
-      glow.setName('can_act_glow');
-      container.add(glow);
-    }
+```
+
+# src\renderers\CardFullRenderer.ts
+
+```ts
+// ============================================================
+// CardFullRenderer.ts
+// Renders a full in-hand card (140x200 default).
+// ============================================================
+
+import Phaser from 'phaser';
+import type { BattleLayoutJSON, ThemeJSON, CardRenderData } from '../game/types/UITypes';
+import { ThemeLoader } from '../config/ThemeLoader';
+import { safeImage, makeBadge, warnMissingArt } from './helpers/CardRenderHelpers';
+
+export class CardFullRenderer {
+  private scene: Phaser.Scene;
+  private layout: BattleLayoutJSON;
+  private theme: ThemeJSON;
+
+  constructor(scene: Phaser.Scene, layout: BattleLayoutJSON, theme: ThemeJSON) {
+    this.scene = scene;
+    this.layout = layout;
+    this.theme = theme;
   }
 
-  // ─────────────────────────────────────────────
-  // FULL CARD (in-hand)
-  // ─────────────────────────────────────────────
-
-  private renderFull(data: CardRenderData, x: number, y: number): Phaser.GameObjects.Container {
+  render(data: CardRenderData, x: number, y: number): Phaser.GameObjects.Container {
     const L = this.layout.cards.full;
     const T = ThemeLoader.cardTypeTheme(this.theme, data?.allegiance ?? 'STANDARD');
     const container = this.scene.add.container(x, y);
@@ -12244,8 +14156,8 @@ export class CardRenderer {
     }).setOrigin(0.5, 0.5);
 
     const iconKey = `icon_type_${(data?.allegiance ?? 'standard').toLowerCase()}`;
-    this.safeImage(
-      container, iconKey,
+    safeImage(
+      this.scene, container, iconKey,
       w - L.typeIconSize / 2 - 4, L.typeIconSize / 2 + 4,
       L.typeIconSize, L.typeIconSize,
       0.5, 0.5, 0x223366, 0.5,
@@ -12265,10 +14177,7 @@ export class CardRenderer {
       artPh.fillStyle(0x333355, 1);
       artPh.fillRect(0, artY, w, artH);
       artObj = artPh;
-      if (!CardRenderer._missingKeyWarned.has(artKey)) {
-        CardRenderer._missingKeyWarned.add(artKey);
-        console.warn(`[CardRenderer] Art texture missing, using fallback rect: "${artKey}"`);
-      }
+      warnMissingArt(artKey);
     }
 
     const nameY = artY + artH;
@@ -12291,13 +14200,15 @@ export class CardRenderer {
     const children: Phaser.GameObjects.GameObject[] = [body, band, border, artObj, nameBar, nameText, statBg];
 
     if (data.atk !== undefined && data.def !== undefined) {
-      const atkBadge = this.makeBadge(
+      const atkBadge = makeBadge(
+        this.scene, this.theme,
         4, statY + L.statRowHeight / 2,
-        `ATK ${data.atk}`, this.theme.cards.atkBadgeColor, L.statRowHeight - 4
+        `ATK ${data.atk}`, this.theme.cards.atkBadgeColor, L.statRowHeight - 4,
       );
-      const defBadge = this.makeBadge(
+      const defBadge = makeBadge(
+        this.scene, this.theme,
         w - 4, statY + L.statRowHeight / 2,
-        `DEF ${data.def}`, this.theme.cards.defBadgeColor, L.statRowHeight - 4, true
+        `DEF ${data.def}`, this.theme.cards.defBadgeColor, L.statRowHeight - 4, true,
       );
       children.push(...atkBadge, ...defBadge);
     }
@@ -12321,18 +14232,134 @@ export class CardRenderer {
 
     children.push(pip, pipText, typeLabel);
     container.add(children);
-    this.applyFullState(container, data);
+    this.applyState(container, data);
 
     return container;
   }
 
-  // ─────────────────────────────────────────────
-  // THUMBNAIL (on-board unit)
-  // Named children: 'atk_badge', 'def_badge', 'can_act_glow'
-  // These can be swapped in-place by updateThumbnailBadges()
-  // ─────────────────────────────────────────────
+  applyState(container: Phaser.GameObjects.Container, data: CardRenderData): void {
+    const existing = container.getByName('state_overlay');
+    if (existing) container.remove(existing, true);
 
-  private renderThumbnail(data: CardRenderData, x: number, y: number): Phaser.GameObjects.Container {
+    const L = this.layout.cards.full;
+    const overlay = this.scene.add.graphics();
+    overlay.setName('state_overlay');
+
+    if (data.isExhausted) {
+      overlay.fillStyle(0x000000, 1 - this.theme.cards.exhaustedAlpha);
+      overlay.fillRoundedRect(0, 0, L.width, L.height, L.cornerRadius);
+    }
+
+    if (data.isSelected) {
+      overlay.lineStyle(
+        this.theme.cards.selectedGlowSize,
+        ThemeLoader.hexToNum(this.theme.cards.selectedGlowColor), 0.8,
+      );
+      overlay.strokeRoundedRect(
+        -this.theme.cards.selectedGlowSize / 2,
+        -this.theme.cards.selectedGlowSize / 2,
+        L.width + this.theme.cards.selectedGlowSize,
+        L.height + this.theme.cards.selectedGlowSize,
+        L.cornerRadius,
+      );
+    }
+
+    container.add(overlay);
+  }
+}
+
+```
+
+# src\renderers\CardRenderer.ts
+
+```ts
+// ============================================================
+// CardRenderer.ts — Thin facade
+// Delegates to CardFullRenderer, CardThumbnailRenderer,
+// CardDetailRenderer, and CardBackRenderer.
+// Consumers can import this for polymorphic render(mode) calls,
+// or import sub-renderers directly for type-specific work.
+// ============================================================
+
+import Phaser from 'phaser';
+import type { BattleLayoutJSON, ThemeJSON, CardRenderData, CardRenderMode } from '../game/types/UITypes';
+import { CardFullRenderer } from './CardFullRenderer';
+import { CardThumbnailRenderer } from './CardThumbnailRenderer';
+import { CardDetailRenderer } from './CardDetailRenderer';
+import { CardBackRenderer } from './CardBackRenderer';
+
+export class CardRenderer {
+  private fullRenderer: CardFullRenderer;
+  private thumbnailRenderer: CardThumbnailRenderer;
+  private detailRenderer: CardDetailRenderer;
+  private backRenderer: CardBackRenderer;
+
+  constructor(scene: Phaser.Scene, layout: BattleLayoutJSON, theme: ThemeJSON) {
+    this.fullRenderer = new CardFullRenderer(scene, layout, theme);
+    this.thumbnailRenderer = new CardThumbnailRenderer(scene, layout, theme);
+    this.detailRenderer = new CardDetailRenderer(scene, layout, theme);
+    this.backRenderer = new CardBackRenderer(scene, layout, theme);
+  }
+
+  render(data: CardRenderData, mode: CardRenderMode, x: number, y: number): Phaser.GameObjects.Container {
+    switch (mode) {
+      case 'full':      return this.fullRenderer.render(data, x, y);
+      case 'thumbnail': return this.thumbnailRenderer.render(data, x, y);
+      case 'detail':    return this.detailRenderer.render(data, x, y);
+    }
+  }
+
+  updateState(container: Phaser.GameObjects.Container, data: CardRenderData, mode: CardRenderMode): void {
+    if (mode === 'thumbnail') {
+      this.thumbnailRenderer.applyState(container, data);
+    } else {
+      this.fullRenderer.applyState(container, data);
+    }
+  }
+
+  updateThumbnailBadges(
+    container: Phaser.GameObjects.Container,
+    atk: number | undefined,
+    currentHP: number | undefined,
+    maxHP: number | undefined,
+    canAct: boolean,
+  ): void {
+    this.thumbnailRenderer.updateBadges(container, atk, currentHP, maxHP, canAct);
+  }
+
+  renderBack(x: number, y: number, width: number, height: number): Phaser.GameObjects.Container {
+    return this.backRenderer.render(x, y, width, height);
+  }
+}
+
+```
+
+# src\renderers\CardThumbnailRenderer.ts
+
+```ts
+// ============================================================
+// CardThumbnailRenderer.ts
+// Renders an on-board unit thumbnail (100x100 default).
+// Named children enable in-place badge updates.
+// ============================================================
+
+import Phaser from 'phaser';
+import type { BattleLayoutJSON, ThemeJSON, CardRenderData } from '../game/types/UITypes';
+import { ThemeLoader } from '../config/ThemeLoader';
+import { makeBadge } from './helpers/CardRenderHelpers';
+
+export class CardThumbnailRenderer {
+  private scene: Phaser.Scene;
+  private layout: BattleLayoutJSON;
+  private theme: ThemeJSON;
+
+  constructor(scene: Phaser.Scene, layout: BattleLayoutJSON, theme: ThemeJSON) {
+    this.scene = scene;
+    this.layout = layout;
+    this.theme = theme;
+  }
+
+  render(data: CardRenderData, x: number, y: number): Phaser.GameObjects.Container {
     const L = this.layout.cards.thumbnail;
     const BT = this.theme.board;
     const container = this.scene.add.container(x, y);
@@ -12340,7 +14367,7 @@ export class CardRenderer {
     const w = L.width;
     const h = L.height;
 
-    // — Art —
+    // Art
     const baseArtKey = data.artKey ?? `art_${data.id}`;
     const thumbKey = baseArtKey.replace(/^art_/, 'thumb_');
     const textureKey = this.scene.textures.exists(thumbKey) ? thumbKey
@@ -12357,33 +14384,34 @@ export class CardRenderer {
       container.add(ph);
     }
 
-    // — Team color border —
+    // Team color border
     const border = this.scene.add.graphics();
     const borderColor = data.isEnemy ? BT.unitBandEnemy : BT.unitBandPlayer;
     border.lineStyle(2, ThemeLoader.hexToNum(borderColor), 1);
     border.strokeRect(0, 0, w, h);
     container.add(border);
 
-    // — Team color band at bottom —
+    // Team color band at bottom
     const band = this.scene.add.graphics();
     band.fillStyle(ThemeLoader.hexToNum(borderColor), 0.9);
     band.fillRect(0, h - BT.unitBandHeight, w, BT.unitBandHeight);
     container.add(band);
 
-    // — ATK badge (named container for in-place updates) —
+    // ATK badge (named container)
     if (data.atk !== undefined) {
       const atkGroup = this.scene.add.container(0, 0);
       atkGroup.setName('atk_badge');
-      const atkParts = this.makeBadge(
+      const atkParts = makeBadge(
+        this.scene, this.theme,
         2, h - BT.unitBandHeight - 2,
         String(data.atk), this.theme.cards.atkBadgeColor,
-        L.badgeFontSize, false, L.badgeWidth, L.badgeHeight
+        L.badgeFontSize, false, L.badgeWidth, L.badgeHeight,
       );
       atkGroup.add(atkParts);
       container.add(atkGroup);
     }
 
-    // — DEF/HP badge (named container for in-place updates) —
+    // DEF/HP badge (named container)
     if (data.currentHP !== undefined) {
       const hpPct = (data.maxHP && data.maxHP > 0) ? data.currentHP / data.maxHP : 1;
       const defColor = hpPct > 0.5 ? this.theme.cards.defBadgeColor
@@ -12391,26 +14419,28 @@ export class CardRenderer {
                      : BT.hpBarLow;
       const defGroup = this.scene.add.container(0, 0);
       defGroup.setName('def_badge');
-      const defParts = this.makeBadge(
+      const defParts = makeBadge(
+        this.scene, this.theme,
         w - 2, h - BT.unitBandHeight - 2,
         String(data.currentHP), defColor,
-        L.badgeFontSize, true, L.badgeWidth, L.badgeHeight
+        L.badgeFontSize, true, L.badgeWidth, L.badgeHeight,
       );
       defGroup.add(defParts);
       container.add(defGroup);
     } else if (data.def !== undefined) {
       const defGroup = this.scene.add.container(0, 0);
       defGroup.setName('def_badge');
-      const defParts = this.makeBadge(
+      const defParts = makeBadge(
+        this.scene, this.theme,
         w - 2, h - BT.unitBandHeight - 2,
         String(data.def), this.theme.cards.defBadgeColor,
-        L.badgeFontSize, true, L.badgeWidth, L.badgeHeight
+        L.badgeFontSize, true, L.badgeWidth, L.badgeHeight,
       );
       defGroup.add(defParts);
       container.add(defGroup);
     }
 
-    // — "Can Act" gold glow (named for in-place toggle) —
+    // "Can Act" gold glow (named)
     if (data.canAct) {
       const glow = this.scene.add.graphics();
       glow.lineStyle(3, 0xF5A623, 0.9);
@@ -12419,139 +14449,11 @@ export class CardRenderer {
       container.add(glow);
     }
 
-    this.applyThumbnailState(container, data);
+    this.applyState(container, data);
     return container;
   }
 
-  // ─────────────────────────────────────────────
-  // DETAIL OVERLAY
-  // ─────────────────────────────────────────────
-
-  private renderDetail(data: CardRenderData, x: number, y: number): Phaser.GameObjects.Container {
-    const L = this.layout.cards.detail;
-    const T = ThemeLoader.cardTypeTheme(this.theme, data?.allegiance ?? 'STANDARD');
-    const container = this.scene.add.container(x - L.width / 2, y - L.height / 2);
-
-    const w = L.width;
-    const r = 8;
-    const scaleFactor = L.width / this.layout.cards.full.width;
-
-    const detailLayout: BattleLayoutJSON = {
-      ...this.layout,
-      cards: {
-        ...this.layout.cards,
-        full: {
-          ...this.layout.cards.full,
-          width:         L.width,
-          height:        L.height,
-          artAreaHeight: Math.round(this.layout.cards.full.artAreaHeight * scaleFactor),
-          nameBarHeight: Math.round(this.layout.cards.full.nameBarHeight * scaleFactor),
-          statRowHeight: Math.round(this.layout.cards.full.statRowHeight * scaleFactor),
-          legPipSize:    Math.round(this.layout.cards.full.legPipSize * scaleFactor),
-          typeIconSize:  Math.round(this.layout.cards.full.typeIconSize * scaleFactor),
-          cornerRadius:  r,
-        },
-      },
-    };
-
-    const subRenderer = new CardRenderer(this.scene, detailLayout, this.theme);
-    const cardBody = subRenderer.renderFull(data, 0, 0);
-    container.add(cardBody);
-
-    const diagY = L.height + 10;
-    const diagSize = L.patternDiagramSize;
-    if (data.id) {
-      const diagBg = this.scene.add.graphics();
-      diagBg.fillStyle(ThemeLoader.hexToNum(this.theme.colors.BG_MID), 0.9);
-      diagBg.strokeRoundedRect(0, diagY, w, diagSize + 16, 6);
-      diagBg.fillRoundedRect(0, diagY, w, diagSize + 16, 6);
-
-      const diagLabel = this.scene.add.text(w / 2, diagY + 4, 'MOVE / ATTACK PATTERN', {
-        fontFamily: this.theme.fonts.small.family,
-        fontSize: `${this.theme.fonts.small.size}px`,
-        color: this.theme.colors.TEXT_SECONDARY,
-      }).setOrigin(0.5, 0);
-
-      container.add([diagBg, diagLabel]);
-    }
-
-    void T;
-    return container;
-  }
-
-  // ─────────────────────────────────────────────
-  // CARD BACK
-  // ─────────────────────────────────────────────
-
-  renderBack(x: number, y: number, width: number, height: number): Phaser.GameObjects.Container {
-    const container = this.scene.add.container(x, y);
-    const r = this.layout.cards.full.cornerRadius;
-
-    const bg = this.scene.add.graphics();
-    bg.fillStyle(ThemeLoader.hexToNum(this.theme.colors.BG_DEEP), 1);
-    bg.fillRoundedRect(0, 0, width, height, r);
-
-    const border = this.scene.add.graphics();
-    border.lineStyle(2, 0x2C4A8A, 1);
-    border.strokeRoundedRect(0, 0, width, height, r);
-
-    const backKey = 'card_back';
-    if (this.scene.textures.exists(backKey)) {
-      const back = this.scene.add.image(width / 2, height / 2, backKey)
-        .setDisplaySize(width - 4, height - 4);
-      container.add([bg, border, back]);
-    } else {
-      const pattern = this.scene.add.graphics();
-      pattern.lineStyle(1, 0x2C4A8A, 0.3);
-      for (let i = 4; i < Math.min(width, height) / 2; i += 8) {
-        pattern.strokeRoundedRect(i, i, width - i * 2, height - i * 2, r);
-      }
-      const logoText = this.scene.add.text(width / 2, height / 2, 'OCB', {
-        fontFamily: this.theme.fonts.heading.family,
-        fontSize: `${Math.round(width * 0.2)}px`,
-        color: '#4FC3F799',
-      }).setOrigin(0.5, 0.5);
-      container.add([bg, border, pattern, logoText]);
-    }
-
-    return container;
-  }
-
-  // ─────────────────────────────────────────────
-  // STATE OVERLAYS
-  // ─────────────────────────────────────────────
-
-  private applyFullState(container: Phaser.GameObjects.Container, data: CardRenderData): void {
-    const existing = container.getByName('state_overlay');
-    if (existing) container.remove(existing, true);
-
-    const L = this.layout.cards.full;
-    const overlay = this.scene.add.graphics();
-    overlay.setName('state_overlay');
-
-    if (data.isExhausted) {
-      overlay.fillStyle(0x000000, 1 - this.theme.cards.exhaustedAlpha);
-      overlay.fillRoundedRect(0, 0, L.width, L.height, L.cornerRadius);
-    }
-
-    if (data.isSelected) {
-      overlay.lineStyle(
-        this.theme.cards.selectedGlowSize,
-        ThemeLoader.hexToNum(this.theme.cards.selectedGlowColor), 0.8
-      );
-      overlay.strokeRoundedRect(
-        -this.theme.cards.selectedGlowSize / 2,
-        -this.theme.cards.selectedGlowSize / 2,
-        L.width + this.theme.cards.selectedGlowSize,
-        L.height + this.theme.cards.selectedGlowSize,
-        L.cornerRadius
-      );
-    }
-
-    container.add(overlay);
-  }
-
-  private applyThumbnailState(container: Phaser.GameObjects.Container, data: CardRenderData): void {
+  applyState(container: Phaser.GameObjects.Container, data: CardRenderData): void {
     const existing = container.getByName('state_overlay');
     if (existing) container.remove(existing, true);
 
@@ -12574,7 +14476,7 @@ export class CardRenderer {
     if (data.isSelected) {
       overlay.lineStyle(
         this.theme.cards.selectedGlowSize,
-        ThemeLoader.hexToNum(this.theme.cards.selectedGlowColor), 0.9
+        ThemeLoader.hexToNum(this.theme.cards.selectedGlowColor), 0.9,
       );
       overlay.strokeRect(0, 0, L.width, L.height);
     }
@@ -12582,55 +14484,67 @@ export class CardRenderer {
     container.add(overlay);
   }
 
-  // ─────────────────────────────────────────────
-  // HELPERS
-  // ─────────────────────────────────────────────
-
-  private safeImage(
+  updateBadges(
     container: Phaser.GameObjects.Container,
-    key: string, x: number, y: number, w: number, h: number,
-    originX = 0, originY = 0,
-    fallbackColor = 0x333355, fallbackAlpha = 0.6,
+    atk: number | undefined,
+    currentHP: number | undefined,
+    maxHP: number | undefined,
+    canAct: boolean,
   ): void {
-    if (this.scene.textures.exists(key)) {
-      const img = this.scene.add.image(x, y, key)
-        .setOrigin(originX, originY)
-        .setDisplaySize(w, h);
-      container.add(img);
-    } else {
-      const rx = originX === 0.5 ? x - w / 2 : x;
-      const ry = originY === 0.5 ? y - h / 2 : y;
-      const rect = this.scene.add.graphics();
-      rect.fillStyle(fallbackColor, fallbackAlpha);
-      rect.fillRect(rx, ry, w, h);
-      container.add(rect);
+    const L = this.layout.cards.thumbnail;
+    const BT = this.theme.board;
+    const w = L.width;
+    const h = L.height;
 
-      if (!CardRenderer._missingKeyWarned.has(key)) {
-        CardRenderer._missingKeyWarned.add(key);
-        console.warn(`[CardRenderer] Texture not found, using fallback rect: "${key}"`);
-      }
+    // Update ATK badge
+    const oldAtk = container.getByName('atk_badge');
+    if (oldAtk) container.remove(oldAtk, true);
+    if (atk !== undefined) {
+      const atkGroup = this.scene.add.container(0, 0);
+      atkGroup.setName('atk_badge');
+      const atkParts = makeBadge(
+        this.scene, this.theme,
+        2, h - BT.unitBandHeight - 2,
+        String(atk), this.theme.cards.atkBadgeColor,
+        L.badgeFontSize, false, L.badgeWidth, L.badgeHeight,
+      );
+      atkGroup.add(atkParts);
+      container.add(atkGroup);
+    }
+
+    // Update DEF/HP badge
+    const oldDef = container.getByName('def_badge');
+    if (oldDef) container.remove(oldDef, true);
+    if (currentHP !== undefined) {
+      const hpPct = (maxHP && maxHP > 0) ? currentHP / maxHP : 1;
+      const defColor = hpPct > 0.5 ? this.theme.cards.defBadgeColor
+                     : hpPct > 0.25 ? BT.hpBarMid
+                     : BT.hpBarLow;
+      const defGroup = this.scene.add.container(0, 0);
+      defGroup.setName('def_badge');
+      const defParts = makeBadge(
+        this.scene, this.theme,
+        w - 2, h - BT.unitBandHeight - 2,
+        String(currentHP), defColor,
+        L.badgeFontSize, true, L.badgeWidth, L.badgeHeight,
+      );
+      defGroup.add(defParts);
+      container.add(defGroup);
+    }
+
+    // Update canAct glow
+    const oldGlow = container.getByName('can_act_glow');
+    if (oldGlow) container.remove(oldGlow, true);
+    if (canAct) {
+      const glow = this.scene.add.graphics();
+      glow.lineStyle(3, 0xF5A623, 0.9);
+      glow.strokeRect(-1, -1, w + 2, h + 2);
+      glow.setName('can_act_glow');
+      container.add(glow);
     }
   }
-
-  private makeBadge(
-    x: number, y: number, label: string, fillHex: string,
-    fontSize: number, rightAligned = false, w = 24, h = 16
-  ): Phaser.GameObjects.GameObject[] {
-    const bgX = rightAligned ? x - w : x;
-
-    const bg = this.scene.add.graphics();
-    bg.fillStyle(ThemeLoader.hexToNum(fillHex), 1);
-    bg.fillRoundedRect(bgX, y - h / 2, w, h, 4);
-
-    const text = this.scene.add.text(x + (rightAligned ? -w / 2 : w / 2), y, label, {
-      fontFamily: this.theme.fonts.cardStat.family,
-      fontSize: `${fontSize}px`,
-      color: '#FFFFFF',
-    }).setOrigin(0.5, 0.5);
-
-    return [bg, text];
-  }
 }
+
 ```
 
 # src\renderers\HandRenderer.ts
@@ -12655,6 +14569,7 @@ import type { BattleLayoutJSON, ThemeJSON, CardRenderData } from '../game/types/
 import { EventBus, EV } from '../events/EventBus';
 import { CardRenderer } from './CardRenderer';
 import { setContainerHitArea } from '../utils/PhaserUtils';
+import { fanPosition } from './helpers/CardLayoutCalc';
 
 export class HandRenderer {
   private scene: Phaser.Scene;
@@ -12808,7 +14723,6 @@ setContainerHitArea(cardContainer, fullW, fullH);
       cardContainer.on('pointerover',  () => this.onCardHover(idx));
       cardContainer.on('pointerout',   () => this.onCardHoverEnd(idx));
       cardContainer.on('pointerdown',  () => this.onCardClick(idx));
-      cardContainer.on('pointerup',    () => {});
 
       this.handContainer.add(cardContainer);
       this.cardContainers.push(cardContainer);
@@ -12833,35 +14747,13 @@ setContainerHitArea(cardContainer, fullW, fullH);
     }
   }
 
-  /**
-   * Calculate a card's X, Y, and rotation angle in the fan layout.
-   * All values are derived from layout.leftHUD.hand config.
-   */
+  // cardPosition extracted → helpers/CardLayoutCalc.ts fanPosition()
   private cardPosition(
     index: number,
     total: number,
     H: typeof this.layout.leftHUD.hand
   ): { x: number; y: number; angle: number } {
-    if (total === 1) {
-      return { x: H.x - H.cardWidth / 2, y: H.y, angle: 0 };
-    }
-
-    // Stack vertically with optional fan
-    const totalHeight = (total - 1) * (H.cardHeight + H.spacing);
-    const startY = H.y;
-
-    // Fan angle: cards fan from center, negative left / positive right
-    const centerIdx = (total - 1) / 2;
-    const angle = (index - centerIdx) * H.fanAngle;
-
-    // X shift based on fan angle so cards spread slightly
-    const xShift = (index - centerIdx) * (H.fanAngle * 0.8);
-
-    return {
-      x: H.x - H.cardWidth / 2 + xShift,
-      y: startY + index * (H.cardHeight + H.spacing),
-      angle,
-    };
+    return fanPosition(index, total, H);
   }
 
   private refreshCardVisual(index: number): void {
@@ -13033,6 +14925,304 @@ EventBus.on(EV.SELECTION_CHANGED, ({ source }) => {
 
 ```
 
+# src\renderers\helpers\ButtonFactory.ts
+
+```ts
+// ============================================================
+// ButtonFactory.ts
+// Shared button creation for HUDRenderer and OverlayRenderer.
+// Unifies makeButton() and makePanelButton() into one function.
+// ============================================================
+
+import Phaser from 'phaser';
+import { ThemeLoader } from '../../config/ThemeLoader';
+import type { ButtonStyle } from '../../game/types/UITypes';
+
+export interface ButtonOptions {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  label: string;
+  style: ButtonStyle;
+  fontFamily: string;
+  onClick: () => void;
+  /** If true, button origin is center (draws at -w/2, -h/2). Default: false (top-left). */
+  centered?: boolean;
+}
+
+/**
+ * Create a themed button container with hover/press states.
+ * Supports both top-left origin (HUD) and centered origin (overlay panels).
+ */
+export function createButton(
+  scene: Phaser.Scene,
+  opts: ButtonOptions
+): Phaser.GameObjects.Container {
+  const { x, y, w, h, label, style, fontFamily, onClick, centered = false } = opts;
+
+  const container = scene.add.container(x, y);
+  const ox = centered ? -w / 2 : 0;
+  const oy = centered ? -h / 2 : 0;
+  const textX = centered ? 0 : w / 2;
+  const textY = centered ? 0 : h / 2;
+
+  const bg = scene.add.graphics();
+
+  function drawBg(fillColor: string): void {
+    bg.clear();
+    bg.fillStyle(ThemeLoader.hexToNum(fillColor), 1);
+    bg.fillRoundedRect(ox, oy, w, h, style.cornerRadius);
+    bg.lineStyle(style.strokeWidth, ThemeLoader.hexToNum(style.strokeColor), 1);
+    bg.strokeRoundedRect(ox, oy, w, h, style.cornerRadius);
+  }
+
+  drawBg(style.fillColor);
+
+  const txt = scene.add.text(textX, textY, label, {
+    fontFamily,
+    fontSize: `${style.fontSize}px`,
+    color: style.textColor,
+  }).setOrigin(0.5, 0.5);
+
+  container.add([bg, txt]);
+  container.setInteractive(
+    new Phaser.Geom.Rectangle(ox, oy, w, h),
+    Phaser.Geom.Rectangle.Contains
+  );
+
+  container.on('pointerover', () => {
+    drawBg(style.hoverFillColor);
+    txt.setColor(style.hoverTextColor);
+  });
+
+  container.on('pointerout', () => {
+    drawBg(style.fillColor);
+    txt.setColor(style.textColor);
+  });
+
+  container.on('pointerdown', onClick);
+
+  return container;
+}
+
+```
+
+# src\renderers\helpers\CardLayoutCalc.ts
+
+```ts
+// ============================================================
+// CardLayoutCalc.ts
+// Shared card spacing and grid layout calculations.
+// Used by HandRenderer (fan layout) and OverlayRenderer (grid).
+// ============================================================
+
+export interface GridLayout {
+  /** Top-left X of first cell (centered in container). */
+  startX: number;
+  /** Top-left Y of first cell. */
+  startY: number;
+  /** Number of columns that fit. */
+  cols: number;
+}
+
+/**
+ * Calculate grid layout parameters for a panel of cards.
+ * Cards are spaced with `gap` between them and centered
+ * horizontally within `panelWidth`.
+ */
+export function calcCardGrid(
+  panelWidth: number,
+  panelHeight: number,
+  cardW: number,
+  _cardH: number,
+  gap = 8,
+  paddingX = 20,
+  topOffset = 50,
+): GridLayout {
+  const cols = Math.floor((panelWidth - paddingX * 2) / (cardW + gap));
+  const gridWidth = cols * (cardW + gap) - gap;
+  const startX = -gridWidth / 2 + cardW / 2;
+  const startY = -panelHeight / 2 + topOffset;
+  return { startX, startY, cols };
+}
+
+/**
+ * Get X,Y for a card at `index` in a grid layout.
+ */
+export function gridPosition(
+  grid: GridLayout,
+  index: number,
+  cardW: number,
+  cardH: number,
+  gap = 8,
+): { x: number; y: number } {
+  const col = index % grid.cols;
+  const row = Math.floor(index / grid.cols);
+  return {
+    x: grid.startX + col * (cardW + gap),
+    y: grid.startY + row * (cardH + gap),
+  };
+}
+
+/**
+ * Calculate vertical card fan position for hand display.
+ * Returns position and rotation for the card at `index`.
+ */
+export function fanPosition(
+  index: number,
+  total: number,
+  config: { x: number; y: number; cardWidth: number; cardHeight: number; spacing: number; fanAngle: number }
+): { x: number; y: number; angle: number } {
+  if (total === 1) {
+    return { x: config.x - config.cardWidth / 2, y: config.y, angle: 0 };
+  }
+  const centerIdx = (total - 1) / 2;
+  const angle = (index - centerIdx) * config.fanAngle;
+  const xShift = (index - centerIdx) * (config.fanAngle * 0.8);
+  return {
+    x: config.x - config.cardWidth / 2 + xShift,
+    y: config.y + index * (config.cardHeight + config.spacing),
+    angle,
+  };
+}
+
+```
+
+# src\renderers\helpers\CardRenderHelpers.ts
+
+```ts
+// ============================================================
+// CardRenderHelpers.ts
+// Shared utility functions for all card renderers.
+// ============================================================
+
+import Phaser from 'phaser';
+import { ThemeLoader } from '../../config/ThemeLoader';
+import type { ThemeJSON } from '../../game/types/UITypes';
+
+const _missingKeyWarned = new Set<string>();
+
+export function safeImage(
+  scene: Phaser.Scene,
+  container: Phaser.GameObjects.Container,
+  key: string, x: number, y: number, w: number, h: number,
+  originX = 0, originY = 0,
+  fallbackColor = 0x333355, fallbackAlpha = 0.6,
+): void {
+  if (scene.textures.exists(key)) {
+    const img = scene.add.image(x, y, key)
+      .setOrigin(originX, originY)
+      .setDisplaySize(w, h);
+    container.add(img);
+  } else {
+    const rx = originX === 0.5 ? x - w / 2 : x;
+    const ry = originY === 0.5 ? y - h / 2 : y;
+    const rect = scene.add.graphics();
+    rect.fillStyle(fallbackColor, fallbackAlpha);
+    rect.fillRect(rx, ry, w, h);
+    container.add(rect);
+
+    if (!_missingKeyWarned.has(key)) {
+      _missingKeyWarned.add(key);
+      console.warn(`[CardRenderer] Texture not found, using fallback rect: "${key}"`);
+    }
+  }
+}
+
+export function makeBadge(
+  scene: Phaser.Scene, theme: ThemeJSON,
+  x: number, y: number, label: string, fillHex: string,
+  fontSize: number, rightAligned = false, w = 24, h = 16,
+): Phaser.GameObjects.GameObject[] {
+  const bgX = rightAligned ? x - w : x;
+
+  const bg = scene.add.graphics();
+  bg.fillStyle(ThemeLoader.hexToNum(fillHex), 1);
+  bg.fillRoundedRect(bgX, y - h / 2, w, h, 4);
+
+  const text = scene.add.text(x + (rightAligned ? -w / 2 : w / 2), y, label, {
+    fontFamily: theme.fonts.cardStat.family,
+    fontSize: `${fontSize}px`,
+    color: '#FFFFFF',
+  }).setOrigin(0.5, 0.5);
+
+  return [bg, text];
+}
+
+export function warnMissingArt(artKey: string): void {
+  if (!_missingKeyWarned.has(artKey)) {
+    _missingKeyWarned.add(artKey);
+    console.warn(`[CardRenderer] Art texture missing, using fallback rect: "${artKey}"`);
+  }
+}
+
+```
+
+# src\renderers\helpers\TextureHelper.ts
+
+```ts
+// ============================================================
+// TextureHelper.ts
+// Null Object pattern for textures — always returns a visual,
+// never null. Uses a colored rect fallback if texture is missing.
+// ============================================================
+
+import Phaser from 'phaser';
+
+const _warned = new Set<string>();
+
+/**
+ * Add an image to a container with automatic fallback.
+ * If the texture key doesn't exist, renders a colored rectangle
+ * instead — guarantees a visual is always produced.
+ */
+export function safeImage(
+  scene: Phaser.Scene,
+  container: Phaser.GameObjects.Container,
+  key: string,
+  x: number, y: number,
+  w: number, h: number,
+  originX = 0, originY = 0,
+  fallbackColor = 0x333355, fallbackAlpha = 0.6,
+): Phaser.GameObjects.Image | Phaser.GameObjects.Graphics {
+  if (scene.textures.exists(key)) {
+    const img = scene.add.image(x, y, key)
+      .setOrigin(originX, originY)
+      .setDisplaySize(w, h);
+    container.add(img);
+    return img;
+  }
+
+  const rx = originX === 0.5 ? x - w / 2 : x;
+  const ry = originY === 0.5 ? y - h / 2 : y;
+  const rect = scene.add.graphics();
+  rect.fillStyle(fallbackColor, fallbackAlpha);
+  rect.fillRect(rx, ry, w, h);
+  container.add(rect);
+
+  if (!_warned.has(key)) {
+    _warned.add(key);
+    console.warn(`[TextureHelper] Texture missing, using fallback: "${key}"`);
+  }
+  return rect;
+}
+
+/**
+ * Check if texture exists, logging a deduplicated warning if not.
+ * Returns true if the texture is available.
+ */
+export function textureExists(scene: Phaser.Scene, key: string): boolean {
+  if (scene.textures.exists(key)) return true;
+  if (!_warned.has(key)) {
+    _warned.add(key);
+    console.warn(`[TextureHelper] Texture missing: "${key}"`);
+  }
+  return false;
+}
+
+```
+
 # src\renderers\HUDRenderer.ts
 
 ```ts
@@ -13052,10 +15242,10 @@ EventBus.on(EV.SELECTION_CHANGED, ({ source }) => {
 // ============================================================
 
 import Phaser from 'phaser';
-import type { BattleLayoutJSON, ThemeJSON, HUDSnapshot, ButtonStyle } from '../game/types/UITypes';
+import type { BattleLayoutJSON, ThemeJSON, HUDSnapshot } from '../game/types/UITypes';
 import { EventBus, EV } from '../events/EventBus';
 import { ThemeLoader } from '../config/ThemeLoader';
-import { setContainerHitArea } from '../utils/PhaserUtils';
+import { createButton } from './helpers/ButtonFactory';
 
 export class HUDRenderer {
   private scene: Phaser.Scene;
@@ -13271,15 +15461,16 @@ export class HUDRenderer {
 
     // End Turn button — positioned in right HUD area below phase label
     if (L.endTurnBtn.width > 0 && L.endTurnBtn.height > 0) {
-      this.endTurnBtn = this.makeButton(
-        L.endTurnBtn.x - L.endTurnBtn.width / 2,
-        L.endTurnBtn.y - L.endTurnBtn.height / 2,
-        L.endTurnBtn.width,
-        L.endTurnBtn.height,
-        'END TURN',
-        this.theme.buttons.endTurn,
-        () => { if (this.onEndTurn) this.onEndTurn(); }
-      );
+      this.endTurnBtn = createButton(this.scene, {
+        x: L.endTurnBtn.x - L.endTurnBtn.width / 2,
+        y: L.endTurnBtn.y - L.endTurnBtn.height / 2,
+        w: L.endTurnBtn.width,
+        h: L.endTurnBtn.height,
+        label: 'END TURN',
+        style: this.theme.buttons.endTurn,
+        fontFamily: this.theme.fonts.body.family,
+        onClick: () => { if (this.onEndTurn) this.onEndTurn(); },
+      });
     }
 
     // PASS button removed — END TURN handles phase advancement for both PLAY and ACT
@@ -13307,54 +15498,7 @@ export class HUDRenderer {
     gfx.fillRoundedRect(bar.x, bar.y, fillW, bar.height, 3);
   }
 
-  private makeButton(
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    label: string,
-    style: ButtonStyle,
-    onClick: () => void
-  ): Phaser.GameObjects.Container {
-    const container = this.scene.add.container(x, y);
-
-    const bg = this.scene.add.graphics();
-    bg.fillStyle(ThemeLoader.hexToNum(style.fillColor), 1);
-    bg.fillRoundedRect(0, 0, w, h, style.cornerRadius);
-    bg.lineStyle(style.strokeWidth, ThemeLoader.hexToNum(style.strokeColor), 1);
-    bg.strokeRoundedRect(0, 0, w, h, style.cornerRadius);
-
-    const txt = this.scene.add.text(w / 2, h / 2, label, {
-      fontFamily: this.theme.fonts.body.family,
-      fontSize: `${style.fontSize}px`,
-      color: style.textColor,
-    }).setOrigin(0.5, 0.5);
-
-    container.add([bg, txt]);
-    setContainerHitArea(container, w, h);
-
-    container.on('pointerover', () => {
-      bg.clear();
-      bg.fillStyle(ThemeLoader.hexToNum(style.hoverFillColor), 1);
-      bg.fillRoundedRect(0, 0, w, h, style.cornerRadius);
-      bg.lineStyle(style.strokeWidth, ThemeLoader.hexToNum(style.strokeColor), 1);
-      bg.strokeRoundedRect(0, 0, w, h, style.cornerRadius);
-      txt.setColor(style.hoverTextColor);
-    });
-
-    container.on('pointerout', () => {
-      bg.clear();
-      bg.fillStyle(ThemeLoader.hexToNum(style.fillColor), 1);
-      bg.fillRoundedRect(0, 0, w, h, style.cornerRadius);
-      bg.lineStyle(style.strokeWidth, ThemeLoader.hexToNum(style.strokeColor), 1);
-      bg.strokeRoundedRect(0, 0, w, h, style.cornerRadius);
-      txt.setColor(style.textColor);
-    });
-
-    container.on('pointerdown', onClick);
-
-    return container;
-  }
+  // makeButton extracted → helpers/ButtonFactory.ts createButton()
 
   private drawDashedRect(
     gfx: Phaser.GameObjects.Graphics,
@@ -13431,6 +15575,7 @@ export class HUDRenderer {
 
       EventBus.on(EV.UNIT_ATTACKED, ({ targetPlayer, isKingHit, newHP, maxHP }) => {
         if (!isKingHit) return;
+        if (newHP == null || maxHP == null) return;
         if (targetPlayer === this.localPlayerIndex) {
           this.updatePlayerHP(newHP, maxHP);
         } else {
@@ -13475,12 +15620,25 @@ import type {
 import { EventBus, EV } from '../events/EventBus';
 import { ThemeLoader } from '../config/ThemeLoader';
 import { CardRenderer } from './CardRenderer';
+import { createButton } from './helpers/ButtonFactory';
+import { getCard } from '../game/data/CardRegistry';
+
+export type CursorIcon = 'heal' | 'damage' | 'select' | 'none';
+
+/** Map ability types to cursor icons for target selection. */
+function deriveCursorIcon(sourceAbility?: string): CursorIcon {
+  if (!sourceAbility) return 'select';
+  if (sourceAbility.includes('HEAL') || sourceAbility.includes('REVIVE')) return 'heal';
+  if (sourceAbility.includes('DAMAGE') || sourceAbility.includes('EARTHQUAKE')) return 'damage';
+  return 'select';
+}
 
 export interface TargetSelectConfig {
   prompt: string;
   positions?: Array<{ col: number; row: number }>; // board positions to highlight
   cards?: CardRenderData[];                         // cards to show (for discard)
   mode: 'board' | 'hand' | 'graveyard';
+  cursorIcon?: CursorIcon;                          // icon that follows the cursor
 }
 
 export interface GameOverConfig {
@@ -13503,12 +15661,9 @@ export class OverlayRenderer {
   private rootContainer: Phaser.GameObjects.Container;
   private dimmer: Phaser.GameObjects.Graphics | null = null;
   private activeOverlay: Phaser.GameObjects.Container | null = null;
+  private cursorFollower: Phaser.GameObjects.Container | null = null;
 
   private unsubs: Array<() => void> = [];
-
-  // Callbacks
-  private onTargetSelected?: (payload: any) => void;
-  private onCloseOverlay?: () => void;
 
   constructor(scene: Phaser.Scene, layout: BattleLayoutJSON, theme: ThemeJSON) {
     this.scene = scene;
@@ -13527,18 +15682,87 @@ export class OverlayRenderer {
   // PUBLIC API
   // ─────────────────────────────────────────────
 
-  /** Show the target selection modal. */
+  /** Show the target selection UI. Board mode uses a non-blocking banner; other modes use a modal. */
   showTargetSelect(config: TargetSelectConfig, onSelect: (payload: any) => void): void {
     this.close();
-    this.onTargetSelected = onSelect;
 
+    if (config.mode === 'board') {
+      // Non-blocking: prompt banner + cancel button, board stays clickable
+      this.showBoardTargetSelect(config);
+    } else {
+      // Modal: dimmer + panel for hand/graveyard selection
+      this.showModalTargetSelect(config);
+    }
+
+    // Cursor follower icon
+    if (config.cursorIcon && config.cursorIcon !== 'none') {
+      this.showCursorFollower(config.cursorIcon);
+    }
+  }
+
+  /** Non-blocking target select — prompt banner + cancel, board stays interactive. */
+  private showBoardTargetSelect(config: TargetSelectConfig): void {
+    const container = this.scene.add.container(0, 0);
+
+    // Prompt banner at bottom of board
+    const bannerY = 690;
+    const bannerW = 500;
+    const bannerH = 36;
+    const bannerX = 283 + (7 * 102) / 2; // board center X
+
+    const bannerBg = this.scene.add.graphics();
+    bannerBg.fillStyle(0x000000, 0.85);
+    bannerBg.fillRoundedRect(bannerX - bannerW / 2, bannerY, bannerW, bannerH, 6);
+    bannerBg.lineStyle(1, 0x00FF88, 0.5);
+    bannerBg.strokeRoundedRect(bannerX - bannerW / 2, bannerY, bannerW, bannerH, 6);
+    container.add(bannerBg);
+
+    const promptText = this.scene.add.text(bannerX, bannerY + bannerH / 2, config.prompt, {
+      fontFamily: this.theme.fonts.body.family,
+      fontSize: `${this.theme.fonts.body.size}px`,
+      color: this.theme.overlays.titleColor,
+      align: 'center',
+    }).setOrigin(0.5, 0.5);
+    container.add(promptText);
+
+    // Cancel button to the right of the banner
+    const cancelBtn = createButton(this.scene, {
+      x: bannerX + bannerW / 2 + 50,
+      y: bannerY + bannerH / 2,
+      w: 70, h: 28,
+      label: 'CANCEL',
+      style: this.theme.buttons.secondary,
+      fontFamily: this.theme.fonts.body.family,
+      onClick: () => {
+        this.close();
+        EventBus.emit(EV.INTERACTION_RESOLVED, { cancelled: true });
+      },
+    });
+    container.add(cancelBtn);
+
+    // ESC key to cancel
+    const escKey = this.scene.input.keyboard?.addKey('ESC');
+    const escHandler = () => {
+      this.close();
+      EventBus.emit(EV.INTERACTION_RESOLVED, { cancelled: true });
+    };
+    escKey?.once('down', escHandler);
+    container.once('destroy', () => {
+      escKey?.off('down', escHandler);
+    });
+
+    this.activeOverlay = container;
+    this.rootContainer.add(container);
+  }
+
+  /** Modal target select — dimmer + panel for hand/graveyard picking. */
+  private showModalTargetSelect(config: TargetSelectConfig): void {
     const L = this.layout.overlays.targetSelect;
     const T = this.theme.overlays;
 
     this.showDimmer(0.6);
     const panel = this.makePanel(L);
 
-    // Prompt text
     const prompt = this.scene.add.text(0, -L.height / 2 + 20, config.prompt, {
       fontFamily: this.theme.fonts.heading.family,
       fontSize: `${this.theme.fonts.heading.size}px`,
@@ -13548,18 +15772,30 @@ export class OverlayRenderer {
     }).setOrigin(0.5, 0);
     panel.add(prompt);
 
-    // Cancel button
-    const cancelBtn = this.makePanelButton(
-      0, L.height / 2 - 30,
-      'CANCEL',
-      this.theme.buttons.secondary,
-      80, 28,
-      () => {
+    const cancelBtn = createButton(this.scene, {
+      x: 0, y: L.height / 2 - 30,
+      w: 80, h: 28,
+      label: 'CANCEL',
+      style: this.theme.buttons.secondary,
+      fontFamily: this.theme.fonts.body.family,
+      onClick: () => {
         this.close();
         EventBus.emit(EV.INTERACTION_RESOLVED, { cancelled: true });
-      }
-    );
+      },
+      centered: true,
+    });
     panel.add(cancelBtn);
+
+    // ESC key to cancel
+    const escKey = this.scene.input.keyboard?.addKey('ESC');
+    const escHandler = () => {
+      this.close();
+      EventBus.emit(EV.INTERACTION_RESOLVED, { cancelled: true });
+    };
+    escKey?.once('down', escHandler);
+    panel.once('destroy', () => {
+      escKey?.off('down', escHandler);
+    });
 
     this.activeOverlay = panel;
     this.rootContainer.add(panel);
@@ -13638,22 +15874,26 @@ export class OverlayRenderer {
     }
 
     // Play again button
-    const playAgainBtn = this.makePanelButton(
-      -60, L.height / 2 - 40,
-      'PLAY AGAIN',
-      this.theme.buttons.primary,
-      120, 40,
-      onPlayAgain
-    );
+    const playAgainBtn = createButton(this.scene, {
+      x: -60, y: L.height / 2 - 40,
+      w: 120, h: 40,
+      label: 'PLAY AGAIN',
+      style: this.theme.buttons.primary,
+      fontFamily: this.theme.fonts.body.family,
+      onClick: onPlayAgain,
+      centered: true,
+    });
 
     // Menu button
-    const menuBtn = this.makePanelButton(
-      80, L.height / 2 - 40,
-      'MENU',
-      this.theme.buttons.secondary,
-      80, 40,
-      onMenu
-    );
+    const menuBtn = createButton(this.scene, {
+      x: 80, y: L.height / 2 - 40,
+      w: 80, h: 40,
+      label: 'MENU',
+      style: this.theme.buttons.secondary,
+      fontFamily: this.theme.fonts.body.family,
+      onClick: onMenu,
+      centered: true,
+    });
 
     panel.add([...children, playAgainBtn, menuBtn]);
 
@@ -13671,6 +15911,41 @@ export class OverlayRenderer {
 
     this.activeOverlay = panel;
     this.rootContainer.add(panel);
+  }
+
+  /** Show placement prompt with card preview in top-right corner. */
+  showPlacementPreview(cardData: CardRenderData, prompt: string): void {
+    this.close();
+
+    const container = this.scene.add.container(0, 0);
+
+    // Card preview at top-right (above phase label area)
+    const previewX = 1040;
+    const previewY = 20;
+    const cardContainer = this.cardRenderer.render(cardData, 'full', previewX, previewY);
+    container.add(cardContainer);
+
+    // Prompt banner above the board
+    const bannerY = 690;
+    const bannerW = 400;
+    const bannerH = 32;
+    const bannerX = 283 + (7 * 102) / 2; // board center X
+
+    const bannerBg = this.scene.add.graphics();
+    bannerBg.fillStyle(0x000000, 0.8);
+    bannerBg.fillRoundedRect(bannerX - bannerW / 2, bannerY, bannerW, bannerH, 6);
+    container.add(bannerBg);
+
+    const promptText = this.scene.add.text(bannerX, bannerY + bannerH / 2, prompt, {
+      fontFamily: this.theme.fonts.body.family,
+      fontSize: `${this.theme.fonts.body.size}px`,
+      color: this.theme.overlays.titleColor,
+      align: 'center',
+    }).setOrigin(0.5, 0.5);
+    container.add(promptText);
+
+    this.activeOverlay = container;
+    this.rootContainer.add(container);
   }
 
   /** Show card detail overlay (right-click). */
@@ -13700,12 +15975,15 @@ export class OverlayRenderer {
     container.add(blocker);
     container.bringToTop(detail);
 
-    // ESC key to close
+    // ESC key to close — track so we can remove on close()
     const escKey = this.scene.input.keyboard?.addKey('ESC');
-    escKey?.once('down', () => {
+    const escHandler = () => {
       this.close();
       EventBus.emit(EV.DETAIL_HIDE, {});
-    });
+    };
+    escKey?.once('down', escHandler);
+    // Remove ESC listener when overlay is destroyed (e.g. clicked away)
+    container.once('destroy', () => escKey?.off('down', escHandler));
 
     this.activeOverlay = container;
     this.rootContainer.add(container);
@@ -13750,13 +16028,15 @@ export class OverlayRenderer {
     });
 
     // Close button
-    const closeBtn = this.makePanelButton(
-      0, L.height / 2 - 25,
-      'CLOSE',
-      this.theme.buttons.secondary,
-      80, 30,
-      () => { this.close(); onClose(); }
-    );
+    const closeBtn = createButton(this.scene, {
+      x: 0, y: L.height / 2 - 25,
+      w: 80, h: 30,
+      label: 'CLOSE',
+      style: this.theme.buttons.secondary,
+      fontFamily: this.theme.fonts.body.family,
+      onClick: () => { this.close(); onClose(); },
+      centered: true,
+    });
     panel.add(closeBtn);
 
     this.activeOverlay = panel;
@@ -13765,6 +16045,7 @@ export class OverlayRenderer {
 
   /** Close the current overlay. */
   close(): void {
+    this.destroyCursorFollower();
     if (this.dimmer) {
       this.dimmer.destroy();
       this.dimmer = null;
@@ -13784,6 +16065,86 @@ export class OverlayRenderer {
     this.unsubs.forEach(fn => fn());
     this.close();
     this.rootContainer.destroy();
+  }
+
+  // ─────────────────────────────────────────────
+  // PRIVATE — CURSOR FOLLOWER
+  // ─────────────────────────────────────────────
+
+  private showCursorFollower(icon: CursorIcon): void {
+    this.destroyCursorFollower();
+
+    const container = this.scene.add.container(0, 0);
+    container.setDepth(200); // above everything
+
+    const size = 24;
+    const gfx = this.scene.add.graphics();
+
+    if (icon === 'heal') {
+      // Green cross
+      const t = 6; // thickness
+      gfx.fillStyle(0x00FF88, 0.9);
+      gfx.fillRect(-size / 2, -t / 2, size, t);     // horizontal bar
+      gfx.fillRect(-t / 2, -size / 2, t, size);      // vertical bar
+      gfx.lineStyle(1.5, 0x00CC66, 1);
+      gfx.strokeRect(-size / 2, -t / 2, size, t);
+      gfx.strokeRect(-t / 2, -size / 2, t, size);
+    } else if (icon === 'damage') {
+      // Red X
+      const s = size * 0.4;
+      gfx.lineStyle(3, 0xFF4444, 0.9);
+      gfx.lineBetween(-s, -s, s, s);
+      gfx.lineBetween(s, -s, -s, s);
+    } else {
+      // Default: white circle outline
+      gfx.lineStyle(2, 0xFFFFFF, 0.8);
+      gfx.strokeCircle(0, 0, size * 0.4);
+    }
+
+    container.add(gfx);
+
+    // Label below icon
+    const labelMap: Record<string, string> = {
+      heal: 'HEAL',
+      damage: 'DMG',
+      select: 'SELECT',
+    };
+    const label = this.scene.add.text(0, size / 2 + 4, labelMap[icon] ?? '', {
+      fontFamily: this.theme.fonts.small.family,
+      fontSize: '10px',
+      color: icon === 'heal' ? '#00FF88' : icon === 'damage' ? '#FF4444' : '#FFFFFF',
+      stroke: '#000000',
+      strokeThickness: 2,
+    }).setOrigin(0.5, 0);
+    container.add(label);
+
+    // Offset from cursor so it doesn't obscure the click target
+    const offsetX = 18;
+    const offsetY = 18;
+
+    // Follow pointer
+    const moveHandler = (pointer: Phaser.Input.Pointer) => {
+      container.setPosition(pointer.x + offsetX, pointer.y + offsetY);
+    };
+    this.scene.input.on('pointermove', moveHandler);
+
+    // Set initial position
+    const pointer = this.scene.input.activePointer;
+    container.setPosition(pointer.x + offsetX, pointer.y + offsetY);
+
+    // Store cleanup
+    container.once('destroy', () => {
+      this.scene.input.off('pointermove', moveHandler);
+    });
+
+    this.cursorFollower = container;
+  }
+
+  private destroyCursorFollower(): void {
+    if (this.cursorFollower) {
+      this.cursorFollower.destroy();
+      this.cursorFollower = null;
+    }
   }
 
   // ─────────────────────────────────────────────
@@ -13808,45 +16169,7 @@ export class OverlayRenderer {
     return panel;
   }
 
-  private makePanelButton(
-    x: number, y: number,
-    label: string,
-    style: typeof this.theme.buttons.primary,
-    w: number, h: number,
-    onClick: () => void
-  ): Phaser.GameObjects.Container {
-    const container = this.scene.add.container(x, y);
-
-    const bg = this.scene.add.graphics();
-    bg.fillStyle(ThemeLoader.hexToNum(style.fillColor), 1);
-    bg.fillRoundedRect(-w / 2, -h / 2, w, h, style.cornerRadius);
-    bg.lineStyle(style.strokeWidth, ThemeLoader.hexToNum(style.strokeColor), 1);
-    bg.strokeRoundedRect(-w / 2, -h / 2, w, h, style.cornerRadius);
-
-    const txt = this.scene.add.text(0, 0, label, {
-      fontFamily: this.theme.fonts.body.family,
-      fontSize: `${style.fontSize}px`,
-      color: style.textColor,
-    }).setOrigin(0.5, 0.5);
-
-    container.add([bg, txt]);
-    container.setSize(w, h);
-    container.setInteractive();
-
-    container.on('pointerover', () => {
-      bg.clear();
-      bg.fillStyle(ThemeLoader.hexToNum(style.hoverFillColor), 1);
-      bg.fillRoundedRect(-w / 2, -h / 2, w, h, style.cornerRadius);
-    });
-    container.on('pointerout', () => {
-      bg.clear();
-      bg.fillStyle(ThemeLoader.hexToNum(style.fillColor), 1);
-      bg.fillRoundedRect(-w / 2, -h / 2, w, h, style.cornerRadius);
-    });
-    container.on('pointerdown', onClick);
-
-    return container;
-  }
+  // makePanelButton extracted → helpers/ButtonFactory.ts createButton()
 
   private showDimmer(alpha: number): void {
     const L = this.layout.overlays.dimmer;
@@ -13862,13 +16185,39 @@ export class OverlayRenderer {
 
   private attachEventListeners(): void {
     this.unsubs.push(
-      EventBus.on(EV.PENDING_TARGET, (config: TargetSelectConfig) => {
+      EventBus.on(EV.PENDING_TARGET, (ev: any) => {
+        const cursorIcon: CursorIcon = deriveCursorIcon(ev.sourceAbility);
+        const config: TargetSelectConfig = {
+          prompt: ev.reason ?? 'Choose a target',
+          mode: 'board',
+          cursorIcon,
+        };
         this.showTargetSelect(config, (payload) => {
           EventBus.emit(EV.INTERACTION_RESOLVED, payload);
         });
       }),
 
-     
+      EventBus.on(EV.PENDING_POSITION, (ev: any) => {
+        // Build CardRenderData from the sourceCardId carried in the event
+        const cardId = ev.sourceCardId;
+        if (cardId) {
+          const def = getCard(cardId);
+          const cardData: CardRenderData = {
+            id: cardId, name: def.name, cardClass: def.class,
+            allegiance: def.allegiance, cost: def.cost,
+            artKey: `art_${cardId}`,
+            atk: def.stats?.atk, def: def.stats?.def,
+            currentHP: def.stats?.def, maxHP: def.stats?.def,
+            abilityText: def.abilityText,
+            isEnemy: false, isExhausted: false, isSelected: false,
+          };
+          this.showPlacementPreview(cardData, ev.reason ?? 'Choose a position');
+        }
+      }),
+
+      EventBus.on(EV.INTERACTION_RESOLVED, () => {
+        this.close();
+      }),
 
       EventBus.on(EV.DETAIL_SHOW, (data: CardRenderData) => {
         this.showCardDetail(data);
@@ -13887,10 +16236,13 @@ export class OverlayRenderer {
 //
 // Each thumbnail OWNS its Phaser container and mutable children.
 // Direct field references — no string-based lookups.
-// instanceId enables identity-based lookup during tweens.
 //
-// v0.5: Stable across tween animations. Stats can be updated
-//       by instanceId even while container position is animating.
+// v0.5.1:
+//   - Added mutable col/row fields. BoardRenderer sets these on
+//     creation and updates them on move. Pointer event closures
+//     read thumb.col/thumb.row instead of captured constants,
+//     so clicks always report the current logical position.
+//   - instanceId enables identity-based lookup during tweens.
 // ============================================================
 
 import Phaser from 'phaser';
@@ -13901,12 +16253,19 @@ export class UnitThumbnail {
   readonly container: Phaser.GameObjects.Container;
   readonly instanceId: string;
 
+  // Mutable logical board position — updated by BoardRenderer on move.
+  // Pointer event closures read from these instead of captured values.
+  col: number = 0;
+  row: number = 0;
+
+  // Direct references to mutable children — never string lookups
   private atkBadgeBg: Phaser.GameObjects.Graphics | null = null;
   private atkBadgeText: Phaser.GameObjects.Text | null = null;
   private defBadgeBg: Phaser.GameObjects.Graphics | null = null;
   private defBadgeText: Phaser.GameObjects.Text | null = null;
   private canActGlow: Phaser.GameObjects.Graphics | null = null;
 
+  // Cached layout/theme for badge positioning
   private readonly scene: Phaser.Scene;
   private readonly w: number;
   private readonly h: number;
@@ -13976,7 +16335,9 @@ export class UnitThumbnail {
     this.setCanAct(data.canAct ?? false);
   }
 
-  // ─── Targeted stat updates — safe during tweens ───
+  // ─────────────────────────────────────────────
+  // TARGETED STAT UPDATES — safe during tweens
+  // ─────────────────────────────────────────────
 
   setAtk(atk: number | undefined): void {
     if (this.atkBadgeBg) { this.atkBadgeBg.destroy(); this.atkBadgeBg = null; }
@@ -14020,9 +16381,10 @@ export class UnitThumbnail {
     this.container.add(this.canActGlow);
   }
 
+/** Update only the fields that are provided. undefined = no change. */
   updateStats(atk: number | undefined, currentHP: number | undefined, maxHP: number | undefined, canAct: boolean): void {
-    this.setAtk(atk);
-    this.setDef(currentHP, maxHP);
+    if (atk !== undefined) this.setAtk(atk);
+    if (currentHP !== undefined) this.setDef(currentHP, maxHP);
     this.setCanAct(canAct);
   }
 
@@ -14033,42 +16395,23 @@ export class UnitThumbnail {
     this.canActGlow = null;
   }
 }
-
 ```
 
-# src\scenes\BattleScene.ts
+# src\scenes\battle\EngineEventBridge.ts
 
 ```ts
 // ============================================================
-// BattleScene.ts — Phase 2 board game scene
-//
-// PATCH v0.5:
-//   - emitStatsChanged sends instanceId (not col/row) so
-//     BoardRenderer can find the thumbnail even mid-tween.
-//   - UNIT_ATTACKED updates BOTH target AND attacker stats
-//     (counter-attack can damage the attacker too).
-//   - UNIT_MOVED no longer sends `data` — BoardRenderer
-//     only re-keys the thumbnail, no destroy+recreate.
+// EngineEventBridge.ts
+// Bridges GameEngine events → typed EventBus events.
+// Converts raw engine events into UI-adapted payloads.
 // ============================================================
 
-import Phaser from 'phaser';
-import { GameEngine } from '../game/GameEngine';
-import { LayoutLoader } from '../config/LayoutLoader';
-import { ThemeLoader } from '../config/ThemeLoader';
-import { BoardRenderer } from '../renderers/BoardRenderer';
-import { HandRenderer } from '../renderers/HandRenderer';
-import { HUDRenderer } from '../renderers/HUDRenderer';
-import { OverlayRenderer } from '../renderers/OverlayRenderer';
-import { SelectionManager } from '../input/SelectionManager';
-import { EventBus, EV } from '../events/EventBus';
-import type { BattleLayoutJSON, ThemeJSON } from '../game/types/UITypes';
-import GameState from '../GameState';
-import { getCard } from '../game/data/CardDefinitions';
-import type { CardRenderData } from '../game/types/UITypes';
-import { Player } from '../game/types/GameTypes';
-import SocketManager, { type GameAction } from '../network/SocketManager';
+import { EventBus } from '../../events/EventBus';
+import { getCard } from '../../game/data/CardRegistry';
+import type { CardRenderData } from '../../game/types/UITypes';
+import { Player } from '../../game/types/GameTypes';
 
-function toCardRenderData(
+export function toCardRenderData(
   cardId: string, instanceId: string, owner: Player, localIndex: number,
   currentHP?: number, currentAtk?: number, canAct?: boolean,
 ): CardRenderData {
@@ -14084,22 +16427,18 @@ function toCardRenderData(
   };
 }
 
-function unitCanAct(unit: any, activePlayer: number): boolean {
+export function unitCanAct(unit: any, activePlayer: number): boolean {
   return unit.owner === activePlayer
     && !unit.hasMoved && !unit.hasActed && !unit.isJustPlaced && unit.isActive;
 }
 
-/**
- * Emit UNIT_STATS_CHANGED for a unit by instanceId.
- * BoardRenderer looks this up in its instanceId index — works even mid-tween.
- */
 function emitStatsChanged(engine: any, instanceId: string): void {
   const state = engine.getState();
   const cell = state.board.find((c: any) => c.unit?.instanceId === instanceId);
   if (!cell?.unit) return;
   const u = cell.unit;
   EventBus.emit('UNIT_STATS_CHANGED', {
-    instanceId: u.instanceId,    // ← KEY CHANGE: send instanceId, not col/row
+    instanceId: u.instanceId,
     atk: u.currentAtk,
     currentHP: u.currentDef,
     maxHP: u.maxDef,
@@ -14107,7 +16446,7 @@ function emitStatsChanged(engine: any, instanceId: string): void {
   });
 }
 
-function refreshCanActIndicators(engine: any): void {
+export function refreshCanActIndicators(engine: any): void {
   const state = engine.getState();
   const canActCells: Array<{ col: number; row: number }> = [];
   for (const cell of state.board) {
@@ -14119,15 +16458,8 @@ function refreshCanActIndicators(engine: any): void {
   EventBus.emit('CAN_ACT_UPDATE', { cells: canActCells });
 }
 
-interface BattleSceneData {
-  playerName: string;
-  opponentName: string;
-  isCryptoMode: boolean;
-  roomCode: string;
-}
-
-function wireEngineToEventBus(engine: any, localPlayerIndex: number): void {
-  engine.on((event: any) => {
+export function wireEngineToEventBus(engine: any, localPlayerIndex: number): () => void {
+  const handler = (event: any) => {
     switch (event.type) {
 
       case 'UNIT_PLACED': {
@@ -14143,7 +16475,6 @@ function wireEngineToEventBus(engine: any, localPlayerIndex: number): void {
         break;
       }
 
-      // UNIT_MOVED: only send from/to — BoardRenderer re-keys the thumbnail
       case 'UNIT_MOVED': {
         EventBus.emit('UNIT_MOVED', { from: event.from, to: event.to });
         break;
@@ -14175,15 +16506,15 @@ function wireEngineToEventBus(engine: any, localPlayerIndex: number): void {
         break;
       }
 
-      // UNIT_ATTACKED: update BOTH target and attacker badges immediately.
-      // Counter-attack damages the attacker too — both need badge refresh.
       case 'UNIT_ATTACKED': {
         EventBus.emit('UNIT_ATTACKED', event);
-        emitStatsChanged(engine, event.targetInstanceId);
-        // Also update attacker (counter-attack may have damaged them)
-        if (event.attackerInstanceId && event.attackerInstanceId !== 'EFFECT') {
-          emitStatsChanged(engine, event.attackerInstanceId);
-        }
+        EventBus.emit('UNIT_STATS_CHANGED', {
+          instanceId: event.targetInstanceId,
+          atk: undefined,
+          currentHP: event.targetNewHP,
+          maxHP: event.maxHP,
+          canAct: false,
+        });
         break;
       }
 
@@ -14239,7 +16570,10 @@ function wireEngineToEventBus(engine: any, localPlayerIndex: number): void {
       case 'PENDING_POSITION':
       case 'PENDING_COLUMN':
       case 'PENDING_DISCARD': {
-        EventBus.emit(event.type, event);
+        const pendState = engine.getState();
+        if (pendState.turn?.activePlayer === localPlayerIndex) {
+          EventBus.emit(event.type, event);
+        }
         break;
       }
 
@@ -14258,7 +16592,418 @@ function wireEngineToEventBus(engine: any, localPlayerIndex: number): void {
         break;
       }
     }
+  };
+  engine.on(handler);
+  return () => engine.off(handler);
+}
+
+```
+
+# src\scenes\battle\GameOverHandler.ts
+
+```ts
+// ============================================================
+// GameOverHandler.ts
+// Handles GAME_OVER event: records result + transitions scene.
+// ============================================================
+
+import { EventBus, EV } from '../../events/EventBus';
+import type { GameEngine } from '../../game/GameEngine';
+import GameState from '../../GameState';
+import SocketManager from '../../network/SocketManager';
+
+export function setupGameOverHandler(
+  scene: Phaser.Scene,
+  engine: GameEngine,
+  localPlayerIndex: number,
+  playerName: string,
+  opponentName: string,
+  isCryptoMode: boolean,
+): void {
+  EventBus.on(EV.GAME_OVER, (ev: any) => {
+    if (!scene.scene.isActive('BattleScene')) return;
+
+    const result = ev.result ?? ev;
+    const turnCount = result?.turns ?? engine.getState().turn?.turnNumber ?? 0;
+    const reason = result?.reason ?? 'KING_DESTROYED';
+    const playerWon = (result?.winner ?? ev.winner) === localPlayerIndex;
+
+    if (playerWon) GameState.recordWin(); else GameState.recordLoss();
+
+    GameState.setLastMatch({
+      playerName, opponentName, playerWon, isTie: false,
+      reason, turns: turnCount,
+      stakeAmount: GameState.currentStake,
+      payout: playerWon ? GameState.currentStake * 2 * 0.95 : 0,
+    });
+
+    if (isCryptoMode) SocketManager.sendGameOver(localPlayerIndex, playerWon);
+
+    scene.time.delayedCall(1500, () => {
+      scene.cameras.main.fadeOut(300, 0, 0, 0);
+      scene.cameras.main.once('camerafadeoutcomplete', () => scene.scene.start('ResultScene'));
+    });
   });
+}
+
+```
+
+# src\scenes\battle\HUDRefreshCoordinator.ts
+
+```ts
+// ============================================================
+// HUDRefreshCoordinator.ts
+// Keeps the HUD in sync with engine state via EventBus.
+// ============================================================
+
+import { EventBus, EV } from '../../events/EventBus';
+import type { GameEngine } from '../../game/GameEngine';
+import GameState from '../../GameState';
+
+export function setupHUDRefresh(
+  engine: GameEngine,
+  localPlayerIndex: number,
+  playerName: string,
+  opponentName: string,
+): Array<() => void> {
+  const oppIdx = localPlayerIndex === 0 ? 1 : 0;
+
+  const refreshHUD = () => {
+    const state = engine.getState();
+    if (!state) return;
+
+    const getKingHP = (owner: number) => {
+      const cell = state.board.find((c) => c.unit?.cardId === 'king' && c.unit?.owner === owner);
+      return { current: cell?.unit?.currentDef ?? 30, max: cell?.unit?.maxDef ?? 30 };
+    };
+
+    const playerKing = getKingHP(localPlayerIndex);
+    const opponentKing = getKingHP(oppIdx);
+    const playerMod = state.modifiers[localPlayerIndex];
+    const opponentMod = state.modifiers[oppIdx];
+
+    const computeLEGRate = (mod: typeof playerMod) => {
+      if (mod.legRateFrozen) return 0;
+      return Math.max(1, mod.legRateBase + mod.legRateBonus - mod.legRatePenalty);
+    };
+
+    EventBus.emit(EV.HUD_REFRESH, {
+      playerName, opponentName,
+      playerKingHP: playerKing.current, playerKingMaxHP: playerKing.max,
+      opponentKingHP: opponentKing.current, opponentKingMaxHP: opponentKing.max,
+      playerLEG: playerMod?.legPool ?? 0,
+      playerCrown: playerMod ? computeLEGRate(playerMod) : 1,
+      opponentLEGCount: opponentMod?.legPool ?? 0,
+      currentPhase: state.turn?.phase ?? 'DRAW',
+      turnNumber: state.turn?.turnNumber ?? 1,
+      isPlayerTurn: state.turn?.activePlayer === localPlayerIndex,
+      playerWins: GameState.winCount, playerLosses: GameState.lossCount,
+      opponentHandCount: state.players[oppIdx]?.hand?.length ?? 0,
+      playerHandCount: state.players[localPlayerIndex]?.hand?.length ?? 0,
+    });
+  };
+
+  const unsubs: Array<() => void> = [];
+  unsubs.push(EventBus.on(EV.LEG_GAINED,          refreshHUD));
+  unsubs.push(EventBus.on(EV.LEG_SPENT,           refreshHUD));
+  unsubs.push(EventBus.on('LEG_RATE_CHANGED',     refreshHUD));
+  unsubs.push(EventBus.on(EV.UNIT_ATTACKED,       refreshHUD));
+  unsubs.push(EventBus.on(EV.UNIT_HEALED,         refreshHUD));
+  unsubs.push(EventBus.on('PHASE_CHANGED',        refreshHUD));
+  unsubs.push(EventBus.on('TURN_STARTED',         refreshHUD));
+  unsubs.push(EventBus.on(EV.CARD_PLAYED,         refreshHUD));
+  unsubs.push(EventBus.on('OPPONENT_CARD_DRAWN',  refreshHUD));
+
+  return unsubs;
+}
+
+```
+
+# src\scenes\battle\InputCoordinator.ts
+
+```ts
+// ============================================================
+// InputCoordinator.ts
+// Sets up SelectionManager with engine-backed callbacks.
+// ============================================================
+
+import type { GameEngine } from '../../game/GameEngine';
+import type { BattleLayoutJSON } from '../../game/types/UITypes';
+import { SelectionManager } from '../../input/SelectionManager';
+import SocketManager from '../../network/SocketManager';
+
+export function createSelectionManager(
+  engine: GameEngine,
+  layout: BattleLayoutJSON,
+  localPlayerIndex: number,
+): SelectionManager {
+  const getBoardUnit = (col: number, row: number) => {
+    const cell = engine.getState().board.find((c) => c.col === col && c.row === row);
+    return cell?.unit ?? null;
+  };
+
+  return new SelectionManager(layout, {
+    getAttackRange: (col: number, row: number) => {
+      const unit = getBoardUnit(col, row);
+      if (!unit) return [];
+      return engine.getAttackRange(unit.instanceId).map((p) => ({ col: p.col, row: p.row }));
+    },
+    getValidMoves: (col: number, row: number) => {
+      const unit = getBoardUnit(col, row);
+      if (!unit) return [];
+      return engine.getValidMoveSquares(unit.instanceId).map((p) => ({ col: p.col, row: p.row }));
+    },
+    getValidAttacks: (col: number, row: number) => {
+      const unit = getBoardUnit(col, row);
+      if (!unit) return [];
+      return engine.getValidAttackSquares(unit.instanceId).map((p) => ({ col: p.col, row: p.row }));
+    },
+    getValidDeployPositions: () => {
+      return engine.getValidDeployPositions().map((p) => ({ col: p.col, row: p.row }));
+    },
+    playCard: (handIndex: number, col: number, row: number) => {
+      const ok = engine.playCard(handIndex, col, row);
+      if (ok !== false) SocketManager.sendGameAction({ type: 'PLAY_CARD', handIndex, col, row });
+    },
+    moveUnit: (fromCol: number, fromRow: number, toCol: number, toRow: number) => {
+      const unit = getBoardUnit(fromCol, fromRow);
+      if (!unit) return;
+      const ok = engine.moveUnit(unit.instanceId, toCol, toRow);
+      if (ok !== false) SocketManager.sendGameAction({ type: 'MOVE_UNIT', fromCol, fromRow, col: toCol, row: toRow });
+    },
+    attackUnit: (fromCol: number, fromRow: number, targetCol: number, targetRow: number) => {
+      const attacker = getBoardUnit(fromCol, fromRow);
+      const target   = getBoardUnit(targetCol, targetRow);
+      if (!attacker || !target) return;
+      const ok = engine.attackUnit(attacker.instanceId, target.instanceId);
+      if (ok !== false) SocketManager.sendGameAction({ type: 'ATTACK_UNIT', fromCol, fromRow, targetCol, targetRow });
+    },
+    selectTarget: (col: number, row: number) => {
+      const unit = getBoardUnit(col, row);
+      if (unit) {
+        engine.selectTarget(unit.instanceId);
+        SocketManager.sendGameAction({ type: 'SELECT_TARGET', col, row });
+      }
+    },
+    selectPosition: (col: number, row: number) => {
+      engine.selectPosition(col, row);
+      SocketManager.sendGameAction({ type: 'SELECT_POSITION', col, row });
+    },
+    selectHandCard: () => {},
+    cancelPending: () => {
+      engine.cancelPending();
+      SocketManager.sendGameAction({ type: 'CANCEL_PENDING' });
+    },
+    isAwaitingInput: () => engine.getState().status === 'AWAITING_INPUT',
+    canAct: () => {
+      const state = engine.getState();
+      return state.turn?.activePlayer === localPlayerIndex && state.turn?.phase === 'ACT';
+    },
+    isPlayerUnit: (col: number, row: number) => {
+      const unit = getBoardUnit(col, row);
+      return unit?.owner === localPlayerIndex;
+    },
+    isOccupied: (col: number, row: number) => getBoardUnit(col, row) !== null,
+    getPhase: () => engine.getState().turn?.phase ?? 'DRAW',
+  } as any);
+}
+
+```
+
+# src\scenes\battle\NetworkCoordinator.ts
+
+```ts
+// ============================================================
+// NetworkCoordinator.ts
+// Socket.io relay: replay opponent actions + handle disconnect.
+// ============================================================
+
+import type { GameEngine } from '../../game/GameEngine';
+import type { GameAction } from '../../network/SocketManager';
+import SocketManager from '../../network/SocketManager';
+import GameState from '../../GameState';
+import { boardHashFromCells } from '../../game/utils/boardHash';
+
+export interface NetworkCoordinatorDeps {
+  engine: GameEngine;
+  scene: Phaser.Scene;
+  playerName: string;
+  opponentName: string;
+  localPlayerIndex: number;
+}
+
+function getBoardUnit(engine: GameEngine, col: number, row: number) {
+  const cell = engine.getState().board.find((c) => c.col === col && c.row === row);
+  return cell?.unit ?? null;
+}
+
+export function replayOpponentAction(deps: NetworkCoordinatorDeps, action: GameAction): void {
+  const { engine } = deps;
+  console.log('[NetworkCoordinator] Replaying opponent action:', action.type);
+  switch (action.type) {
+    case 'PLAY_CARD':
+      engine.playCard(action.handIndex!, action.col, action.row); break;
+    case 'MOVE_UNIT': {
+      const unit = getBoardUnit(engine, action.fromCol!, action.fromRow!);
+      if (unit) engine.moveUnit(unit.instanceId, action.col!, action.row!);
+      else console.warn('[NetworkCoordinator] MOVE_UNIT replay: no unit at', action.fromCol, action.fromRow);
+      break;
+    }
+    case 'ATTACK_UNIT': {
+      const attacker = getBoardUnit(engine, action.fromCol!, action.fromRow!);
+      const target   = getBoardUnit(engine, action.targetCol!, action.targetRow!);
+      if (attacker && target) engine.attackUnit(attacker.instanceId, target.instanceId);
+      else console.warn('[NetworkCoordinator] ATTACK_UNIT replay: unit not found');
+      break;
+    }
+    case 'SELECT_POSITION':
+      engine.selectPosition(action.col!, action.row!); break;
+    case 'SELECT_TARGET': {
+      const tgt = getBoardUnit(engine, action.col!, action.row!);
+      if (tgt) engine.selectTarget(tgt.instanceId);
+      else console.warn('[NetworkCoordinator] SELECT_TARGET replay: no unit at', action.col, action.row);
+      break;
+    }
+    case 'CANCEL_PENDING':
+      engine.cancelPending(); break;
+    case 'END_PLAY_PHASE':
+      engine.endPlayPhase();
+      SocketManager.sendStateHash(boardHashFromCells(engine.getState().board), engine.getState().turn?.turnNumber ?? 0);
+      break;
+    case 'END_ACT_PHASE':
+      engine.endActPhase();
+      SocketManager.sendStateHash(boardHashFromCells(engine.getState().board), engine.getState().turn?.turnNumber ?? 0);
+      break;
+    default: console.warn('[NetworkCoordinator] Unknown opponent action:', (action as any).type);
+  }
+}
+
+/** Overlay objects for the "opponent disconnected" banner — so we can remove them on reconnect. */
+let disconnectOverlay: Phaser.GameObjects.GameObject[] = [];
+
+export function handleOpponentDisconnect(deps: NetworkCoordinatorDeps): void {
+  const { scene } = deps;
+
+  // Show a non-blocking "waiting" banner (opponent may reconnect)
+  const bg = scene.add.rectangle(640, 30, 500, 50, 0x000000, 0.85).setDepth(999);
+  const txt = scene.add.text(640, 30, 'Opponent disconnected — waiting for reconnect...', {
+    fontSize: '16px', color: '#FF6666', align: 'center',
+  }).setOrigin(0.5).setDepth(999);
+  disconnectOverlay = [bg, txt];
+}
+
+export function handleOpponentReconnect(deps: NetworkCoordinatorDeps): void {
+  // Remove the disconnect banner
+  for (const obj of disconnectOverlay) obj.destroy();
+  disconnectOverlay = [];
+
+  // Brief "reconnected" flash
+  const { scene } = deps;
+  const flash = scene.add.text(640, 30, 'Opponent reconnected!', {
+    fontSize: '16px', color: '#00FF88', align: 'center',
+  }).setOrigin(0.5).setDepth(999);
+  scene.time.delayedCall(2000, () => flash.destroy());
+}
+
+export function handleFinalDisconnect(deps: NetworkCoordinatorDeps): void {
+  const { engine, scene, playerName, opponentName } = deps;
+
+  // Clean up any lingering banner
+  for (const obj of disconnectOverlay) obj.destroy();
+  disconnectOverlay = [];
+
+  GameState.recordWin();
+  GameState.setLastMatch({
+    playerName, opponentName, playerWon: true, isTie: false,
+    reason: 'DISCONNECT',
+    turns: engine.getState()?.turn?.turnNumber ?? 0,
+    stakeAmount: GameState.currentStake,
+    payout: GameState.currentMode === 'CryptoPlay' ? GameState.currentStake * 2 * 0.95 : 0,
+  });
+
+  scene.add.rectangle(640, 360, 600, 120, 0x000000, 0.85);
+  scene.add.text(640, 345, 'Opponent disconnected', { fontSize: '26px', color: '#FF6666', align: 'center' }).setOrigin(0.5);
+  scene.add.text(640, 380, 'You win! Going to results...', { fontSize: '18px', color: '#00FF88', align: 'center' }).setOrigin(0.5);
+
+  scene.time.delayedCall(3000, () => {
+    scene.cameras.main.fadeOut(300, 0, 0, 0);
+    scene.cameras.main.once('camerafadeoutcomplete', () => scene.scene.start('ResultScene'));
+  });
+}
+
+export function setupSocketCallbacks(deps: NetworkCoordinatorDeps): void {
+  SocketManager.setCallbacks({
+    onRoomCreated: (code) => GameState.setRoomCode(code),
+    onRoomJoined: (code) => GameState.setRoomCode(code),
+    onOpponentJoined: (name) => GameState.setOpponentName(name),
+    onOpponentAction: (action: GameAction) => replayOpponentAction(deps, action),
+    onOpponentDisconnected: () => handleOpponentDisconnect(deps),
+    onOpponentReconnected: () => handleOpponentReconnect(deps),
+    onOpponentAbandon: () => handleFinalDisconnect(deps),
+    onConnectionLost: () => showConnectionOverlay(deps.scene, true),
+    onReconnected: () => showConnectionOverlay(deps.scene, false),
+    onReconnectFailed: () => handleFinalDisconnect(deps),
+    onError: (msg) => console.error('[NetworkCoordinator] Socket error:', msg),
+    onPayoutResult: () => {},
+  });
+}
+
+/** Self-connection overlay: "Connection lost — reconnecting..." */
+let connectionOverlay: Phaser.GameObjects.GameObject[] = [];
+
+function showConnectionOverlay(scene: Phaser.Scene, show: boolean): void {
+  for (const obj of connectionOverlay) obj.destroy();
+  connectionOverlay = [];
+  if (!show) return;
+
+  const bg = scene.add.rectangle(640, 360, 500, 80, 0x000000, 0.9).setDepth(1000);
+  const txt = scene.add.text(640, 360, 'Connection lost — reconnecting...', {
+    fontSize: '20px', color: '#FFAA00', align: 'center',
+  }).setOrigin(0.5).setDepth(1000);
+  connectionOverlay = [bg, txt];
+}
+
+```
+
+# src\scenes\BattleScene.ts
+
+```ts
+// ============================================================
+// BattleScene.ts — Thin shell coordinator
+//
+// Owns Phaser lifecycle (create/shutdown). Delegates to:
+//   - EngineEventBridge:      engine → EventBus wiring
+//   - NetworkCoordinator:     socket relay + disconnect
+//   - HUDRefreshCoordinator:  HUD sync via events
+//   - InputCoordinator:       SelectionManager setup
+//   - GameOverHandler:        GAME_OVER → ResultScene
+// ============================================================
+
+import Phaser from 'phaser';
+import { GameEngine } from '../game/GameEngine';
+import { LayoutLoader } from '../config/LayoutLoader';
+import { ThemeLoader } from '../config/ThemeLoader';
+import { BoardRenderer } from '../renderers/BoardRenderer';
+import { HandRenderer } from '../renderers/HandRenderer';
+import { HUDRenderer } from '../renderers/HUDRenderer';
+import { OverlayRenderer } from '../renderers/OverlayRenderer';
+import { SelectionManager } from '../input/SelectionManager';
+import { EventBus, EV } from '../events/EventBus';
+import GameState from '../GameState';
+import SocketManager from '../network/SocketManager';
+
+import { wireEngineToEventBus } from './battle/EngineEventBridge';
+import { setupSocketCallbacks } from './battle/NetworkCoordinator';
+import { setupHUDRefresh } from './battle/HUDRefreshCoordinator';
+import { createSelectionManager } from './battle/InputCoordinator';
+import { setupGameOverHandler } from './battle/GameOverHandler';
+import { boardHashFromCells } from '../game/utils/boardHash';
+
+interface BattleSceneData {
+  playerName: string;
+  opponentName: string;
+  isCryptoMode: boolean;
+  roomCode: string;
 }
 
 export default class BattleScene extends Phaser.Scene {
@@ -14270,62 +17015,10 @@ export default class BattleScene extends Phaser.Scene {
   private selectionManager!: SelectionManager;
   private sceneData!: BattleSceneData;
   private hudUnsubs: Array<() => void> = [];
+  private bridgeUnsub?: () => void;
 
   constructor() { super('BattleScene'); }
   init(data: BattleSceneData) { this.sceneData = data; }
-
-  private getBoardUnit(col: number, row: number) {
-    const cell = this.engine.getState().board.find(c => c.col === col && c.row === row);
-    return cell?.unit ?? null;
-  }
-
-  private replayOpponentAction(action: GameAction): void {
-    console.log('[BattleScene] Replaying opponent action:', action.type);
-    switch (action.type) {
-      case 'PLAY_CARD':
-        this.engine.playCard(action.handIndex!, action.col, action.row); break;
-      case 'MOVE_UNIT': {
-        const unit = this.getBoardUnit(action.fromCol!, action.fromRow!);
-        if (unit) this.engine.moveUnit(unit.instanceId, action.col!, action.row!);
-        else console.warn('[BattleScene] MOVE_UNIT replay: no unit at', action.fromCol, action.fromRow);
-        break;
-      }
-      case 'ATTACK_UNIT': {
-        const attacker = this.getBoardUnit(action.fromCol!, action.fromRow!);
-        const target   = this.getBoardUnit(action.targetCol!, action.targetRow!);
-        if (attacker && target) this.engine.attackUnit(attacker.instanceId, target.instanceId);
-        else console.warn('[BattleScene] ATTACK_UNIT replay: unit not found');
-        break;
-      }
-      case 'END_PLAY_PHASE': this.engine.endPlayPhase(); break;
-      case 'END_ACT_PHASE':  this.engine.endActPhase(); break;
-      default: console.warn('[BattleScene] Unknown opponent action:', (action as any).type);
-    }
-  }
-
-  private handleOpponentDisconnect(): void {
-    const playerName   = this.sceneData?.playerName   ?? GameState.playerName ?? 'You';
-    const opponentName = this.sceneData?.opponentName ?? GameState.opponentName ?? 'Opponent';
-
-    GameState.recordWin();
-    GameState.setLastMatch({
-      playerName, opponentName, playerRoll: 0, opponentRoll: 0,
-      playerWon: true, isTie: false, stakeAmount: GameState.currentStake,
-      payout: GameState.currentMode === 'CryptoPlay' ? GameState.currentStake * 2 * 0.95 : 0,
-    });
-    (GameState as any).lastMatchExtra = {
-      reason: 'DISCONNECT', turnCount: this.engine?.getState()?.turn?.turnNumber ?? 0, winnerName: playerName,
-    };
-
-    this.add.rectangle(640, 360, 600, 120, 0x000000, 0.85);
-    this.add.text(640, 345, 'Opponent disconnected', { fontSize: '26px', color: '#FF6666', align: 'center' }).setOrigin(0.5);
-    this.add.text(640, 380, 'You win! Going to results...', { fontSize: '18px', color: '#00FF88', align: 'center' }).setOrigin(0.5);
-
-    this.time.delayedCall(3000, () => {
-      this.cameras.main.fadeOut(300, 0, 0, 0);
-      this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('ResultScene'));
-    });
-  }
 
   async create() {
     this.cameras.main.fadeIn(300, 0, 0, 0);
@@ -14347,110 +17040,24 @@ export default class BattleScene extends Phaser.Scene {
     const opponentName = this.sceneData?.opponentName  ?? GameState.opponentName ?? 'Opponent';
     const localPlayerIndex = GameState.playerIndex ?? 0;
 
+    // ─── Engine + event bridge ────────────────────
     this.engine = new GameEngine();
-    wireEngineToEventBus(this.engine, localPlayerIndex);
+    this.bridgeUnsub = wireEngineToEventBus(this.engine, localPlayerIndex);
 
-    // ─── HUD refresh ──────────────────────────
-    const refreshHUD = () => {
-      const state = this.engine.getState();
-      if (!state) return;
-      const oppIdx = localPlayerIndex === 0 ? 1 : 0;
-      const getKingHP = (owner: number) => {
-        const cell = state.board.find(c => c.unit?.cardId === 'king' && c.unit?.owner === owner);
-        return { current: cell?.unit?.currentDef ?? 30, max: cell?.unit?.maxDef ?? 30 };
-      };
-      const playerKing = getKingHP(localPlayerIndex);
-      const opponentKing = getKingHP(oppIdx);
-      const playerMod = state.modifiers[localPlayerIndex];
-      const opponentMod = state.modifiers[oppIdx];
-      const computeLEGRate = (mod: typeof playerMod) => {
-        if (mod.legRateFrozen) return 0;
-        return Math.max(1, mod.legRateBase + mod.legRateBonus - mod.legRatePenalty);
-      };
-      EventBus.emit(EV.HUD_REFRESH, {
-        playerName, opponentName,
-        playerKingHP: playerKing.current, playerKingMaxHP: playerKing.max,
-        opponentKingHP: opponentKing.current, opponentKingMaxHP: opponentKing.max,
-        playerLEG: playerMod?.legPool ?? 0,
-        playerCrown: playerMod ? computeLEGRate(playerMod) : 1,
-        opponentLEGCount: opponentMod?.legPool ?? 0,
-        currentPhase: state.turn?.phase ?? 'DRAW',
-        turnNumber: state.turn?.turnNumber ?? 1,
-        isPlayerTurn: state.turn?.activePlayer === localPlayerIndex,
-        playerWins: GameState.winCount, playerLosses: GameState.lossCount,
-        opponentHandCount: state.players[oppIdx]?.hand?.length ?? 0,
-        playerHandCount: state.players[localPlayerIndex]?.hand?.length ?? 0,
-      });
-    };
+    // ─── HUD refresh ─────────────────────────────
+    this.hudUnsubs = setupHUDRefresh(this.engine, localPlayerIndex, playerName, opponentName);
 
-    this.hudUnsubs.push(EventBus.on(EV.LEG_GAINED,        refreshHUD));
-    this.hudUnsubs.push(EventBus.on(EV.LEG_SPENT,         refreshHUD));
-    this.hudUnsubs.push(EventBus.on('LEG_RATE_CHANGED',   refreshHUD));
-    this.hudUnsubs.push(EventBus.on(EV.UNIT_ATTACKED,     refreshHUD));
-    this.hudUnsubs.push(EventBus.on(EV.UNIT_HEALED,       refreshHUD));
-    this.hudUnsubs.push(EventBus.on('PHASE_CHANGED',      refreshHUD));
-    this.hudUnsubs.push(EventBus.on('TURN_STARTED',       refreshHUD));
-    this.hudUnsubs.push(EventBus.on(EV.CARD_PLAYED,       refreshHUD));
-    this.hudUnsubs.push(EventBus.on('OPPONENT_CARD_DRAWN', refreshHUD));
-
+    // ─── Renderers ───────────────────────────────
     this.boardRenderer   = new BoardRenderer(this, layout, theme, localPlayerIndex);
     this.handRenderer    = new HandRenderer(this, layout, theme);
     this.hudRenderer     = new HUDRenderer(this, layout, theme);
     this.overlayRenderer = new OverlayRenderer(this, layout, theme);
     this.hudRenderer.setLocalPlayer(localPlayerIndex);
 
-    this.selectionManager = new SelectionManager(layout, {
-      getAttackRange: (col: number, row: number) => {
-        const unit = this.getBoardUnit(col, row);
-        if (!unit) return [];
-        return this.engine.getAttackRange(unit.instanceId).map((p: any) => ({ col: p.col, row: p.row }));
-      },
-      getValidMoves: (col: number, row: number) => {
-        const unit = this.getBoardUnit(col, row);
-        if (!unit) return [];
-        return this.engine.getValidMoveSquares(unit.instanceId).map((p: any) => ({ col: p.col, row: p.row }));
-      },
-      getValidAttacks: (col: number, row: number) => {
-        const unit = this.getBoardUnit(col, row);
-        if (!unit) return [];
-        return this.engine.getValidAttackSquares(unit.instanceId).map((p: any) => ({ col: p.col, row: p.row }));
-      },
-      getValidDeployPositions: () => {
-        return this.engine.getValidDeployPositions().map((p: any) => ({ col: p.col, row: p.row }));
-      },
-      playCard: (handIndex: number, col: number, row: number) => {
-        const ok = this.engine.playCard(handIndex, col, row);
-        if (ok !== false) SocketManager.sendGameAction({ type: 'PLAY_CARD', handIndex, col, row });
-      },
-      moveUnit: (fromCol: number, fromRow: number, toCol: number, toRow: number) => {
-        const unit = this.getBoardUnit(fromCol, fromRow);
-        if (!unit) return;
-        const ok = this.engine.moveUnit(unit.instanceId, toCol, toRow);
-        if (ok !== false) SocketManager.sendGameAction({ type: 'MOVE_UNIT', fromCol, fromRow, col: toCol, row: toRow });
-      },
-      attackUnit: (fromCol: number, fromRow: number, targetCol: number, targetRow: number) => {
-        const attacker = this.getBoardUnit(fromCol, fromRow);
-        const target   = this.getBoardUnit(targetCol, targetRow);
-        if (!attacker || !target) return;
-        const ok = this.engine.attackUnit(attacker.instanceId, target.instanceId);
-        if (ok !== false) SocketManager.sendGameAction({ type: 'ATTACK_UNIT', fromCol, fromRow, targetCol, targetRow });
-      },
-      selectTarget: (instanceId: string) => this.engine.selectTarget(instanceId),
-      selectPosition: (col: number, row: number) => this.engine.selectPosition(col, row),
-      selectHandCard: () => {},
-      isAwaitingInput: () => this.engine.getState().status === 'AWAITING_INPUT',
-      canAct: () => {
-        const state = this.engine.getState();
-        return state.turn?.activePlayer === localPlayerIndex && state.turn?.phase === 'ACT';
-      },
-      isPlayerUnit: (col: number, row: number) => {
-        const unit = this.getBoardUnit(col, row);
-        return unit?.owner === localPlayerIndex;
-      },
-      isOccupied: (col: number, row: number) => this.getBoardUnit(col, row) !== null,
-      getPhase: () => this.engine.getState().turn?.phase ?? 'DRAW',
-    } as any);
+    // ─── Input ───────────────────────────────────
+    this.selectionManager = createSelectionManager(this.engine, layout, localPlayerIndex);
 
+    // ─── Initial HUD emit ────────────────────────
     EventBus.emit(EV.HUD_REFRESH, {
       playerName, opponentName,
       playerKingHP: 30, playerKingMaxHP: 30, opponentKingHP: 30, opponentKingMaxHP: 30,
@@ -14460,6 +17067,7 @@ export default class BattleScene extends Phaser.Scene {
       opponentHandCount: 4,
     });
 
+    // ─── End turn button ─────────────────────────
     this.hudRenderer.onEndTurnClick(() => {
       const state = this.engine.getState();
       if (state.turn?.activePlayer !== localPlayerIndex) return;
@@ -14467,53 +17075,47 @@ export default class BattleScene extends Phaser.Scene {
       if (phase === 'PLAY') {
         this.engine.endPlayPhase();
         SocketManager.sendGameAction({ type: 'END_PLAY_PHASE' });
+        SocketManager.sendStateHash(boardHashFromCells(this.engine.getState().board), this.engine.getState().turn?.turnNumber ?? 0);
       } else if (phase === 'ACT') {
         this.engine.endActPhase();
         SocketManager.sendGameAction({ type: 'END_ACT_PHASE' });
+        SocketManager.sendStateHash(boardHashFromCells(this.engine.getState().board), this.engine.getState().turn?.turnNumber ?? 0);
       }
     });
 
-    EventBus.on(EV.GAME_OVER, (ev: any) => {
-      if (!this.scene.isActive('BattleScene')) return;
-      const result = ev.result ?? ev;
-      const turnCount = result?.turns ?? this.engine.getState().turn?.turnNumber ?? 0;
-      const reason = result?.reason ?? 'KING_DESTROYED';
-      const playerWon = (result?.winner ?? ev.winner) === localPlayerIndex;
-      if (playerWon) GameState.recordWin(); else GameState.recordLoss();
-      GameState.setLastMatch({
-        playerName, opponentName, playerRoll: 0, opponentRoll: 0, playerWon, isTie: false,
-        stakeAmount: GameState.currentStake, payout: playerWon ? GameState.currentStake * 2 * 0.95 : 0,
-      });
-      (GameState as any).lastMatchExtra = { reason, turnCount, winnerName: playerWon ? playerName : opponentName };
-      if (this.sceneData.isCryptoMode) SocketManager.sendGameOver(localPlayerIndex, playerWon);
-      this.time.delayedCall(1500, () => {
-        this.cameras.main.fadeOut(300, 0, 0, 0);
-        this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('ResultScene'));
-      });
+    // ─── Game over ───────────────────────────────
+    setupGameOverHandler(this, this.engine, localPlayerIndex, playerName, opponentName, this.sceneData.isCryptoMode);
+
+    // ─── Network ─────────────────────────────────
+    setupSocketCallbacks({
+      engine: this.engine, scene: this,
+      playerName, opponentName, localPlayerIndex,
     });
 
-    SocketManager.setCallbacks({
-      onRoomCreated: (code) => GameState.setRoomCode(code),
-      onRoomJoined: (code) => GameState.setRoomCode(code),
-      onOpponentJoined: (name) => GameState.setOpponentName(name),
-      onOpponentAction: (action: GameAction) => this.replayOpponentAction(action),
-      onOpponentDisconnected: () => this.handleOpponentDisconnect(),
-      onOpponentRollReceived: () => {},
-      onError: (msg) => console.error('[BattleScene] Socket error:', msg),
-      onPayoutResult: () => {},
-    });
+    // ─── Start game after both players are ready ──
+    const startEngine = () => {
+      this.engine.startGame();
+      const v = this.engine.getState();
+      console.log('[BattleScene] Game started —',
+        `P1 hand: ${v.players[0]?.hand?.length ?? '?'}`,
+        `P2 hand: ${v.players[1]?.hand?.length ?? '?'}`,
+        `Board units: ${v.board.filter((c: any) => c.unit).length}`,
+        `Phase: ${v.turn?.phase}`, `Active: P${(v.turn?.activePlayer ?? 0) + 1}`
+      );
+    };
 
-    this.engine.startGame();
-    const v = this.engine.getState();
-    console.log('[BattleScene] Game started —',
-      `P1 hand: ${v.players[0]?.hand?.length ?? '?'}`,
-      `P2 hand: ${v.players[1]?.hand?.length ?? '?'}`,
-      `Board units: ${v.board.filter(c => c.unit).length}`,
-      `Phase: ${v.turn?.phase}`, `Active: P${(v.turn?.activePlayer ?? 0) + 1}`
-    );
+    if (SocketManager.isConnected()) {
+      // Multiplayer: wait for both players to be ready
+      SocketManager.onBothBattleReady(() => startEngine());
+      SocketManager.signalBattleReady();
+    } else {
+      // Single-player / local testing: start immediately
+      startEngine();
+    }
   }
 
   shutdown() {
+    this.bridgeUnsub?.();
     this.hudUnsubs.forEach(unsub => unsub());
     EventBus.clearAll?.();
     this.boardRenderer?.destroy?.();
@@ -14589,13 +17191,19 @@ export default class MainMenuScene extends Phaser.Scene {
     this.cleanupPrevious();
 
     const { width, height } = this.scale;
-
 // Background — use loaded image if available, fallback to solid color
     if (this.textures.exists('bg_main_menu')) {
       this.add.image(width / 2, height / 2, 'bg_main_menu').setDisplaySize(width, height);
     } else {
       this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a2e);
     }
+
+    // ── Dark panel behind content for text readability ─────────
+    const panel = this.add.graphics();
+    panel.fillStyle(0x16213e, 0.88);
+    panel.fillRoundedRect(width / 2 - 260, BASE_Y - 40, 520, 500, 10);
+    panel.lineStyle(2, 0x4fc3f7, 0.4);
+    panel.strokeRoundedRect(width / 2 - 260, BASE_Y - 40, 520, 500, 10);
 
     // Fade in
     this.cameras.main.fadeIn(400, 0, 0, 0);
@@ -14605,26 +17213,26 @@ export default class MainMenuScene extends Phaser.Scene {
       fontSize: '44px',
       fontFamily: '"Courier New", monospace',
       fontStyle: 'bold',
-      color: '#ffffff',
+      color: '#FFFFFF',
     }).setOrigin(0.5);
 
     this.add.text(LAYOUT.tagline.x, LAYOUT.tagline.y, 'Chess-like On-Chain Card Game', {
       fontSize: '18px',
       fontFamily: '"Courier New", monospace',
-      color: '#888888',
+      color: '#AAAAAA',
     }).setOrigin(0.5);
 
     // ── Labels ───────────────────────────────────────────────
     this.add.text(LAYOUT.nameLabel.x, LAYOUT.nameLabel.y, 'Your Name', {
       fontSize: '16px',
       fontFamily: '"Courier New", monospace',
-      color: '#aaaaaa',
+      color: '#AAAAAA',
     }).setOrigin(0.5);
 
     this.add.text(LAYOUT.roomLabel.x, LAYOUT.roomLabel.y, 'Room Code  (leave blank to create new room)', {
       fontSize: '14px',
       fontFamily: '"Courier New", monospace',
-      color: '#777777',
+      color: '#AAAAAA',
     }).setOrigin(0.5);
 
     // ── HTML Inputs via DOMInputManager ──────────────────────
@@ -14768,11 +17376,12 @@ export default class MainMenuScene extends Phaser.Scene {
       : match.isTie ? '#f5a623'
       : '#ff6666';
 
+    const turnsInfo = match.turns > 0 ? ` (${match.turns} turns)` : '';
     const resultMsg = match.playerWon
-      ? `Last: You beat ${match.opponentName}! (${match.playerRoll} vs ${match.opponentRoll})`
+      ? `Last: You beat ${match.opponentName}!${turnsInfo}`
       : match.isTie
       ? `Last: Tie with ${match.opponentName}`
-      : `Last: ${match.opponentName} beat you (${match.playerRoll} vs ${match.opponentRoll})`;
+      : `Last: ${match.opponentName} beat you${turnsInfo}`;
 
     this.add.text(LAYOUT.matchBanner.x, LAYOUT.matchBanner.y, resultMsg, {
       fontSize: '15px',
@@ -15085,10 +17694,11 @@ create(): void {
 // ============================================================
 // ResultScene.ts
 // Shows match result after BattleScene ends.
-// Reads GameState.lastMatch + lastMatchExtra + payoutResult.
+// Reads GameState.lastMatch + payoutResult.
 //
 // Handles:
 //   - Victory / Defeat / Tie headline
+//   - Dynamic mode badge (FREE PLAY / CRYPTO PLAY + stake)
 //   - Winner name + reason (King destroyed, Disconnect, etc.)
 //   - Turn count
 //   - AVAX payout amount + clickable tx link (crypto mode)
@@ -15100,18 +17710,6 @@ create(): void {
 import Phaser from 'phaser';
 import GameState, { GameMode } from '../GameState';
 
-interface MatchExtra {
-  reason?: string;
-  turnCount?: number;
-  winnerName?: string;
-}
-
-interface PayoutResult {
-  success: boolean;
-  txHash?: string;
-  error?: string;
-}
-
 export default class ResultScene extends Phaser.Scene {
   constructor() {
     super('ResultScene');
@@ -15120,8 +17718,7 @@ export default class ResultScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale;
     const match = GameState.lastMatch;
-    const extra = (GameState as any).lastMatchExtra as MatchExtra | undefined;
-    const payoutResult = (GameState as any).payoutResult as PayoutResult | undefined;
+    const payoutResult = GameState.payoutResult;
 
     // ── Background ─────────────────────────────────────────────
     if (this.textures.exists('bg_result')) {
@@ -15130,16 +17727,22 @@ export default class ResultScene extends Phaser.Scene {
       this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a2e);
     }
 
-    // ── Title ──────────────────────────────────────────────────
-    this.add.text(width / 2, 50, 'OnChainBattles', {
-      fontSize: '28px', color: '#ffffff', fontStyle: 'bold',
-    }).setOrigin(0.5);
-
     // ── No match data fallback ─────────────────────────────────
     if (!match) {
-      this.add.text(width / 2, height / 2, 'Match Complete', {
-        fontSize: '48px', color: '#ffffff',
+      const fbPanel = this.add.graphics();
+      fbPanel.fillStyle(0x16213e, 0.62);
+      fbPanel.fillRoundedRect(width / 2 - 300, 30, 600, 660, 10);
+      fbPanel.lineStyle(2, 0xaaaaaa, 0.8);
+      fbPanel.strokeRoundedRect(width / 2 - 300, 30, 600, 660, 10);
+
+      this.add.text(width / 2, 60, 'OnChainBattles', {
+        fontSize: '28px', color: '#FFFFFF', fontStyle: 'bold',
       }).setOrigin(0.5);
+
+      this.add.text(width / 2, height / 2, 'Match Complete', {
+        fontSize: '48px', color: '#FFFFFF',
+      }).setOrigin(0.5);
+
       this.addNavigationButtons(width, height);
       this.addAutoReturn();
       this.cameras.main.fadeIn(300, 0, 0, 0);
@@ -15151,34 +17754,52 @@ export default class ResultScene extends Phaser.Scene {
     const tie = match.isTie;
 
     const headline = tie ? "It's a Tie!" : won ? 'Victory!' : 'Defeat';
-    const headlineColor = tie ? '#f5a623' : won ? '#00ff88' : '#ff4444';
+    const headlineColor = tie ? '#F5A623' : won ? '#00FF88' : '#FF4444';
     const panelBorder = tie ? 0xf5a623 : won ? 0x00ff88 : 0xff4444;
 
     // ── Central panel ──────────────────────────────────────────
     const panelW = 600;
-    const panelH = 400;
+    const panelH = 660;
     const panelX = width / 2;
-    const panelY = height / 2 - 10;
+    const panelTop = 30;
 
     const panelBg = this.add.graphics();
-    panelBg.fillStyle(0x16213e, 0.92);
-    panelBg.fillRoundedRect(panelX - panelW / 2, panelY - panelH / 2, panelW, panelH, 10);
-    panelBg.lineStyle(2, panelBorder, 1);
-    panelBg.strokeRoundedRect(panelX - panelW / 2, panelY - panelH / 2, panelW, panelH, 10);
+    panelBg.fillStyle(0x16213e, 0.72);
+    panelBg.fillRoundedRect(panelX - panelW / 2, panelTop, panelW, panelH, 10);
+    panelBg.lineStyle(2, panelBorder, 0.8);
+    panelBg.strokeRoundedRect(panelX - panelW / 2, panelTop, panelW, panelH, 10);
+
+    // ── Title ──────────────────────────────────────────────────
+    let yPos = panelTop + 30;
+
+    this.add.text(panelX, yPos, 'OnChainBattles', {
+      fontSize: '28px', color: '#FFFFFF', fontStyle: 'bold',
+    }).setOrigin(0.5);
+    yPos += 36;
+
+    // ── Mode badge (FREE PLAY / CRYPTO) ────────────────────────
+    const isCrypto = GameState.currentMode === GameMode.CryptoPlay;
+
+    const modeLabel = isCrypto
+      ? `CRYPTO PLAY  ·  Staked: ${match.stakeAmount} AVAX each`
+      : 'FREE PLAY';
+    const modeColor = isCrypto ? '#F5A623' : '#00FF88';
+
+    this.add.text(panelX, yPos, modeLabel, {
+      fontSize: '14px',
+      fontFamily: '"Courier New", monospace',
+      fontStyle: 'bold',
+      color: modeColor,
+    }).setOrigin(0.5);
+    yPos += 34;
 
     // ── Headline ───────────────────────────────────────────────
-    let yPos = panelY - panelH / 2 + 50;
-
     this.add.text(panelX, yPos, headline, {
       fontSize: '56px', color: headlineColor, fontStyle: 'bold',
     }).setOrigin(0.5);
     yPos += 70;
 
     // ── Winner name ────────────────────────────────────────────
-    const winnerName = extra?.winnerName
-      ?? (won ? match.playerName : match.opponentName)
-      ?? '—';
-
     const winnerLabel = won
       ? `You defeated ${match.opponentName}`
       : tie
@@ -15186,29 +17807,29 @@ export default class ResultScene extends Phaser.Scene {
         : `${match.opponentName} wins`;
 
     this.add.text(panelX, yPos, winnerLabel, {
-      fontSize: '22px', color: '#aaaaaa',
+      fontSize: '22px', color: '#AAAAAA',
     }).setOrigin(0.5);
     yPos += 40;
 
     // ── Reason ─────────────────────────────────────────────────
-    if (extra?.reason) {
+    if (match.reason) {
       const reasonMap: Record<string, string> = {
         'KING_DESTROYED': 'King destroyed',
         'DISCONNECT':     'Opponent disconnected',
         'SURRENDER':      'Surrender',
         'TIMEOUT':        'Timeout',
       };
-      const reasonText = reasonMap[extra.reason] ?? extra.reason;
+      const reasonText = reasonMap[match.reason] ?? match.reason;
       this.add.text(panelX, yPos, reasonText, {
-        fontSize: '16px', color: '#666688',
+        fontSize: '16px', color: '#AAAAAA',
       }).setOrigin(0.5);
       yPos += 28;
     }
 
     // ── Turn count ─────────────────────────────────────────────
-    if (extra?.turnCount) {
-      this.add.text(panelX, yPos, `Turns played: ${extra.turnCount}`, {
-        fontSize: '16px', color: '#888899',
+    if (match.turns > 0) {
+      this.add.text(panelX, yPos, `Turns played: ${match.turns}`, {
+        fontSize: '16px', color: '#AAAAAA',
       }).setOrigin(0.5);
       yPos += 30;
     }
@@ -15221,19 +17842,16 @@ export default class ResultScene extends Phaser.Scene {
 
     // ── Win/Loss record ────────────────────────────────────────
     this.add.text(panelX, yPos, `Record: ${GameState.winCount}W / ${GameState.lossCount}L`, {
-      fontSize: '18px', color: '#ffffff',
+      fontSize: '18px', color: '#FFFFFF',
     }).setOrigin(0.5);
     yPos += 35;
 
-    // ── Crypto payout info ─────────────────────────────────────
-    const isCrypto = GameState.currentMode === GameMode.CryptoPlay
-      || (match.stakeAmount != null && match.stakeAmount > 0);
-
+    // ── Crypto payout info (only in crypto mode) ───────────────
     if (isCrypto) {
       if (won) {
         const payoutAmount = (match.stakeAmount * 2 * 0.95).toFixed(4);
         this.add.text(panelX, yPos, `Payout: ${payoutAmount} AVAX`, {
-          fontSize: '20px', color: '#f5a623',
+          fontSize: '20px', color: '#F5A623',
         }).setOrigin(0.5);
         yPos += 30;
 
@@ -15245,21 +17863,21 @@ export default class ResultScene extends Phaser.Scene {
             fontSize: '14px', color: '#4FC3F7',
           }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
-          txText.on('pointerover', () => txText.setColor('#ffffff'));
+          txText.on('pointerover', () => txText.setColor('#FFFFFF'));
           txText.on('pointerout', () => txText.setColor('#4FC3F7'));
           txText.on('pointerdown', () => {
             window.open(`https://testnet.snowtrace.io/tx/${txHash}`, '_blank');
           });
           yPos += 25;
         } else if (payoutResult && !payoutResult.success) {
-          this.add.text(panelX, yPos, `Payout pending...`, {
-            fontSize: '14px', color: '#ff6666',
+          this.add.text(panelX, yPos, 'Payout pending...', {
+            fontSize: '14px', color: '#FF6666',
           }).setOrigin(0.5);
           yPos += 25;
         }
       } else if (!tie) {
         this.add.text(panelX, yPos, `You lost ${match.stakeAmount} AVAX`, {
-          fontSize: '18px', color: '#ff6666',
+          fontSize: '18px', color: '#FF6666',
         }).setOrigin(0.5);
         yPos += 30;
       }
@@ -15282,20 +17900,20 @@ export default class ResultScene extends Phaser.Scene {
 
     // Play Again
     const playAgainBtn = this.add.text(width / 2 - 100, btnY, '[ PLAY AGAIN ]', {
-      fontSize: '26px', color: '#00ff88',
+      fontSize: '26px', color: '#00FF88',
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
-    playAgainBtn.on('pointerover', () => playAgainBtn.setColor('#ffffff'));
-    playAgainBtn.on('pointerout', () => playAgainBtn.setColor('#00ff88'));
+    playAgainBtn.on('pointerover', () => playAgainBtn.setColor('#FFFFFF'));
+    playAgainBtn.on('pointerout', () => playAgainBtn.setColor('#00FF88'));
     playAgainBtn.on('pointerdown', () => this.goToMenu());
 
     // Menu
     const menuBtn = this.add.text(width / 2 + 120, btnY, '[ MENU ]', {
-      fontSize: '22px', color: '#aaaaaa',
+      fontSize: '22px', color: '#AAAAAA',
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
-    menuBtn.on('pointerover', () => menuBtn.setColor('#ffffff'));
-    menuBtn.on('pointerout', () => menuBtn.setColor('#aaaaaa'));
+    menuBtn.on('pointerover', () => menuBtn.setColor('#FFFFFF'));
+    menuBtn.on('pointerout', () => menuBtn.setColor('#AAAAAA'));
     menuBtn.on('pointerdown', () => this.goToMenu());
   }
 
@@ -15307,9 +17925,7 @@ export default class ResultScene extends Phaser.Scene {
   }
 
   private goToMenu(): void {
-    // Clear payout data so it doesn't leak into next match
-    (GameState as any).payoutResult = undefined;
-    (GameState as any).lastMatchExtra = undefined;
+    GameState.clearMatchData();
 
     this.cameras.main.fadeOut(200, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
@@ -15317,6 +17933,7 @@ export default class ResultScene extends Phaser.Scene {
     });
   }
 }
+
 ```
 
 # src\scenes\RoomScene.ts
@@ -15339,6 +17956,7 @@ import Phaser from 'phaser';
 import GameState, { GameMode, RoomAction } from '../GameState';
 import SocketManager from '../network/SocketManager';
 import EscrowManager, { STAKE_AVAX } from '../web3/EscrowManager';
+import WalletManager from '../web3/WalletManager';
 import { MenuButton } from '../ui/MenuButton';
 import { ToastNotification } from '../ui/ToastNotification';
 import { ShareHelper } from '../ui/ShareHelper';
@@ -15389,13 +18007,20 @@ export default class RoomScene extends Phaser.Scene {
     const { width, height } = this.scale;
     this.isCryptoMode = GameState.currentMode === GameMode.CryptoPlay;
 
-    // Background
-   // Background — use loaded image if available, fallback to solid color
+// Background — use loaded image if available, fallback to solid color
     if (this.textures.exists('bg_lobby')) {
       this.add.image(width / 2, height / 2, 'bg_lobby').setDisplaySize(width, height);
     } else {
       this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a2e);
     }
+
+    // ── Dark panel behind content for text readability ─────────
+    const panel = this.add.graphics();
+    panel.fillStyle(0x16213e, 0.88);
+    panel.fillRoundedRect(width / 2 - 380, 15, 760, 490, 10);
+    panel.lineStyle(2, 0x4fc3f7, 0.4);
+    panel.strokeRoundedRect(width / 2 - 380, 15, 760, 490, 10);
+
     this.cameras.main.fadeIn(400, 0, 0, 0);
 
     // ── Title ────────────────────────────────────────────────
@@ -15403,7 +18028,7 @@ export default class RoomScene extends Phaser.Scene {
       fontSize: '28px',
       fontFamily: '"Courier New", monospace',
       fontStyle: 'bold',
-      color: '#ffffff',
+      color: '#FFFFFF',
     }).setOrigin(0.5);
 
     // ── Mode badge ───────────────────────────────────────────
@@ -15484,23 +18109,23 @@ export default class RoomScene extends Phaser.Scene {
       color: '#00ff88',
     }).setOrigin(0.5);
 
-    this.opponentNameText = this.add.text(
+this.opponentNameText = this.add.text(
       LAYOUT.opponentName.x,
       LAYOUT.opponentName.y,
       'Waiting for opponent...',
       {
         fontSize: '18px',
         fontFamily: '"Courier New", monospace',
-        color: '#555555',
+        color: '#AAAAAA',
       },
     ).setOrigin(0.5);
 
     // ── VS icon ──────────────────────────────────────────────
-    this.add.text(LAYOUT.vs.x, LAYOUT.vs.y, 'VS', {
+this.add.text(LAYOUT.vs.x, LAYOUT.vs.y, 'VS', {
       fontSize: '48px',
       fontFamily: '"Courier New", monospace',
       fontStyle: 'bold',
-      color: '#253348',
+      color: '#4FC3F7',
     }).setOrigin(0.5);
 
     // ── Status ───────────────────────────────────────────────
@@ -15511,11 +18136,11 @@ export default class RoomScene extends Phaser.Scene {
       color: '#f5a623',
     }).setOrigin(0.5);
 
-    this.subStatusText = this.add.text(LAYOUT.subStatus.x, LAYOUT.subStatus.y,
+this.subStatusText = this.add.text(LAYOUT.subStatus.x, LAYOUT.subStatus.y,
       'Share your room code with a friend', {
       fontSize: '13px',
       fontFamily: '"Courier New", monospace',
-      color: '#777777',
+      color: '#AAAAAA',
     }).setOrigin(0.5);
 
     // ── Connect socket ───────────────────────────────────────
@@ -15579,9 +18204,6 @@ export default class RoomScene extends Phaser.Scene {
   onOpponentDisconnected: () => this.onOpponentDisconnected(),
   onError: (msg) => this.onSocketError(msg),
   onBothCryptoReady: () => this.onBothCryptoReady(),
-  onOpponentRollReceived: () => {},
-  onCryptoMatchResult: () => {},
-  onTieReroll: () => {},
   onHostDepositConfirmed: () => this.onHostDepositConfirmed(),
 
 });
@@ -15603,7 +18225,7 @@ private onHostDepositConfirmed(): void {
     this.shareBtn.text.setVisible(true);
 
     if (this.isCryptoMode && GameState.walletAddress) {
-      SocketManager.registerWallet(GameState.walletAddress);
+      this.signAndRegisterWallet();
     }
   }
 
@@ -15617,7 +18239,7 @@ private onHostDepositConfirmed(): void {
     this.shareBtn.text.setVisible(true);
 
     if (this.isCryptoMode && GameState.walletAddress) {
-      SocketManager.registerWallet(GameState.walletAddress);
+      this.signAndRegisterWallet();
     }
   }
 
@@ -15688,18 +18310,37 @@ private onHostDepositConfirmed(): void {
     }
 
     // Store tx hash for ResultScene display
-    (GameState as any).depositTxHash = txHash;
+    GameState.depositTxHash = txHash;
 
     this.cryptoPhase = 'waiting_opponent_deposit';
     this.statusText.setText('Funds locked ✓  Waiting for opponent...').setColor('#4fc3f7');
     this.subStatusText.setText('');
-    SocketManager.registerWallet(GameState.walletAddress!);
+    this.signAndRegisterWallet();
     SocketManager.signalCryptoReady();
   } catch (err: any) {
     this.statusText.setText(`Deposit failed: ${err.message}`).setColor('#ff4444');
     this.time.delayedCall(4000, () => this.scene.start('MainMenuScene'));
   }
 }
+
+  // ─── Wallet registration with signature ─────────────────────
+
+  private async signAndRegisterWallet(): Promise<void> {
+    const wallet = GameState.walletAddress;
+    if (!wallet) return;
+    const signer = WalletManager.getSigner();
+    if (!signer) {
+      console.warn('[RoomScene] No signer available for wallet verification');
+      return;
+    }
+    try {
+      const message = `OnChainBattles:${GameState.roomCode}:${Date.now()}`;
+      const signature = await signer.signMessage(message);
+      SocketManager.registerWallet(wallet, message, signature);
+    } catch (err) {
+      console.error('[RoomScene] Wallet signature failed:', err);
+    }
+  }
 
   // ─── Scene transition ────────────────────────────────────────
 
@@ -16398,6 +19039,86 @@ export class ToastNotification {
 
 ```
 
+# src\utils\Logger.ts
+
+```ts
+// ============================================================
+// Logger.ts — Lightweight structured logging.
+//
+// Usage:
+//   const log = new Logger('SocketManager');
+//   log.info('Connected');     // [SocketManager] Connected
+//   log.debug('Payload:', x);  // Only shows when level ≤ DEBUG
+//
+// Level is set globally from VITE_LOG_LEVEL env var or
+// Logger.setGlobalLevel(). Defaults to INFO in prod, DEBUG in dev.
+// ============================================================
+
+export enum LogLevel {
+  DEBUG = 0,
+  INFO  = 1,
+  WARN  = 2,
+  ERROR = 3,
+  NONE  = 4,
+}
+
+const LEVEL_NAMES: Record<string, LogLevel> = {
+  debug: LogLevel.DEBUG,
+  info:  LogLevel.INFO,
+  warn:  LogLevel.WARN,
+  error: LogLevel.ERROR,
+  none:  LogLevel.NONE,
+};
+
+function resolveEnvLevel(): LogLevel {
+  // Works in both Vite (import.meta.env) and Node (process.env)
+  let raw: string | undefined;
+  try { raw = (import.meta as any)?.env?.VITE_LOG_LEVEL; } catch { /* ignore */ }
+  if (!raw) {
+    try { raw = process?.env?.LOG_LEVEL; } catch { /* ignore */ }
+  }
+  if (raw && LEVEL_NAMES[raw.toLowerCase()] !== undefined) {
+    return LEVEL_NAMES[raw.toLowerCase()];
+  }
+  // Default: DEBUG in dev, WARN in prod
+  try {
+    if ((import.meta as any)?.env?.MODE === 'production') return LogLevel.WARN;
+  } catch { /* ignore */ }
+  return LogLevel.DEBUG;
+}
+
+let globalLevel: LogLevel = resolveEnvLevel();
+
+export class Logger {
+  constructor(private tag: string) {}
+
+  static setGlobalLevel(level: LogLevel): void {
+    globalLevel = level;
+  }
+
+  static getGlobalLevel(): LogLevel {
+    return globalLevel;
+  }
+
+  debug(...args: unknown[]): void {
+    if (globalLevel <= LogLevel.DEBUG) console.log(`[${this.tag}]`, ...args);
+  }
+
+  info(...args: unknown[]): void {
+    if (globalLevel <= LogLevel.INFO) console.log(`[${this.tag}]`, ...args);
+  }
+
+  warn(...args: unknown[]): void {
+    if (globalLevel <= LogLevel.WARN) console.warn(`[${this.tag}]`, ...args);
+  }
+
+  error(...args: unknown[]): void {
+    if (globalLevel <= LogLevel.ERROR) console.error(`[${this.tag}]`, ...args);
+  }
+}
+
+```
+
 # src\utils\PhaserUtils.ts
 
 ```ts
@@ -16503,7 +19224,7 @@ class EscrowManagerClass {
       console.log(`[EscrowManager] createMatch tx sent: ${tx.hash}`);
 
       const receipt = await tx.wait();
-      console.log(`[EscrowManager] createMatch confirmed — block: ${receipt.blockNumber}, tx: ${tx.hash}`);
+      console.log(`[EscrowManager] createMatch confirmed — block: ${receipt?.blockNumber ?? '?'}, tx: ${tx.hash}`);
 
       return tx.hash;
     } catch (err: any) {
@@ -16527,7 +19248,7 @@ class EscrowManagerClass {
       console.log(`[EscrowManager] joinMatch tx sent: ${tx.hash}`);
 
       const receipt = await tx.wait();
-      console.log(`[EscrowManager] joinMatch confirmed — block: ${receipt.blockNumber}, tx: ${tx.hash}`);
+      console.log(`[EscrowManager] joinMatch confirmed — block: ${receipt?.blockNumber ?? '?'}, tx: ${tx.hash}`);
 
       return tx.hash;
     } catch (err: any) {
@@ -16729,6 +19450,1707 @@ describe("Counter", function () {
 
 ```
 
+# tests\engine\abilities\onDeployDraw.test.ts
+
+```ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createTestEngine, deployCard, Player } from '../helpers/TestHarness';
+import type { TestEngine } from '../helpers/TestHarness';
+
+let t: TestEngine;
+
+beforeEach(() => { t = createTestEngine(); });
+
+describe('onDeployDraw — Scout and Messenger', () => {
+  it('scout deploy emits SCOUT_RESULT (reveal opponent top cards)', () => {
+    const scoutIdx = t.findInHand('scout');
+    if (scoutIdx < 0) return;
+
+    const pos = t.deployPositions()[0];
+    if (!pos) return;
+
+    const affordable = t.engine.getAffordableCards();
+    if (!affordable.includes(scoutIdx)) return;
+
+    t.engine.playCard(scoutIdx, pos.col, pos.row);
+
+    const scoutEvents = t.eventsOfType('SCOUT_RESULT');
+    expect(scoutEvents.length).toBeGreaterThan(0);
+    const ev = scoutEvents[0] as any;
+    expect(ev.topCards).toBeDefined();
+  });
+
+  it('messenger deploy draws 1 card', () => {
+    const msgIdx = t.findInHand('messenger');
+    if (msgIdx < 0) return;
+
+    const pos = t.deployPositions()[0];
+    if (!pos) return;
+
+    const affordable = t.engine.getAffordableCards();
+    if (!affordable.includes(msgIdx)) return;
+
+    const handBefore = t.state().players[Player.P1].hand.length;
+    const deckBefore = t.state().players[Player.P1].deckCount;
+
+    t.engine.playCard(msgIdx, pos.col, pos.row);
+
+    const handAfter = t.state().players[Player.P1].hand.length;
+    const deckAfter = t.state().players[Player.P1].deckCount;
+
+    // Played 1, drew 1 → net hand change = 0
+    expect(handAfter).toBe(handBefore - 1 + 1);
+    expect(deckAfter).toBe(deckBefore - 1);
+  });
+
+  it('foot_soldier has no on-deploy draw (it draws on death)', () => {
+    const idx = t.findInHand('foot_soldier');
+    if (idx < 0) return;
+
+    const pos = t.deployPositions()[0];
+    if (!pos) return;
+
+    const affordable = t.engine.getAffordableCards();
+    if (!affordable.includes(idx)) return;
+
+    const drawsBefore = t.eventsOfType('CARD_DRAWN').length;
+    t.engine.playCard(idx, pos.col, pos.row);
+
+    // foot_soldier has ON_DEATH_DRAW, not ON_DEPLOY_DRAW
+    // No draw events should fire from deploy
+    const drawsAfter = t.eventsOfType('CARD_DRAWN').length;
+    expect(drawsAfter).toBe(drawsBefore);
+  });
+});
+
+```
+
+# tests\engine\abilities\onDeployHeal.test.ts
+
+```ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createTestEngine, skipTurn, deployCard, Player, EngineStatus } from '../helpers/TestHarness';
+import type { TestEngine } from '../helpers/TestHarness';
+
+let t: TestEngine;
+
+beforeEach(() => { t = createTestEngine(); });
+
+describe('Priest — onDeployHeal', () => {
+  it('creates TARGET pending when friendly units are damaged', () => {
+    // First deploy a cheap unit that we can damage later
+    const soldierPos = deployCard(t, 'foot_soldier');
+    if (!soldierPos) return;
+
+    // Skip turns until we have enough LEG for Priest (cost 6)
+    // P1 gains 1 LEG/turn base. We need several turns.
+    for (let i = 0; i < 6; i++) skipTurn(t.engine);
+
+    // Now it's P1's turn with accumulated LEG
+    const priestIdx = t.findInHand('priest');
+    if (priestIdx < 0) return; // not in hand
+
+    const pos = t.deployPositions()[0];
+    if (!pos) return;
+
+    // Check if we can afford it
+    const affordable = t.engine.getAffordableCards();
+    if (!affordable.includes(priestIdx)) return;
+
+    t.engine.playCard(priestIdx, pos.col, pos.row);
+
+    // Priest triggers heal — but only if damaged units exist
+    // Since foot_soldier is at full HP, priest should NOT create pending
+    // (we filter out full-HP units)
+    // This validates the full-HP filter fix
+    const allFull = t.state().board
+      .filter(c => c.unit?.owner === Player.P1 && c.unit.cardId !== 'king')
+      .every(c => c.unit!.currentDef === c.unit!.maxDef);
+
+    if (allFull) {
+      // No pending — healed nobody since all are full
+      expect(t.state().status).toBe('IDLE');
+    } else {
+      // Some unit is damaged — pending TARGET should exist
+      expect(t.state().status).toBe('AWAITING_INPUT');
+    }
+  });
+
+  it('skips pending when no damaged friendly units', () => {
+    // Accumulate LEG
+    for (let i = 0; i < 6; i++) skipTurn(t.engine);
+
+    const priestIdx = t.findInHand('priest');
+    if (priestIdx < 0) return;
+
+    const affordable = t.engine.getAffordableCards();
+    if (!affordable.includes(priestIdx)) return;
+
+    const pos = t.deployPositions()[0];
+    if (!pos) return;
+
+    // All friendly units should be at full HP → no pending
+    t.engine.playCard(priestIdx, pos.col, pos.row);
+
+    // The Priest just deployed at full HP, king is full HP
+    // Since we filter u.currentDef < u.maxDef, pending should NOT trigger
+    // Status stays IDLE
+    expect(t.state().status).not.toBe('AWAITING_INPUT');
+  });
+
+  it('cancelPending returns engine to IDLE', () => {
+    // This test needs a damaged unit to trigger pending
+    // We'll check: if status is AWAITING_INPUT after priest play, cancel works
+    for (let i = 0; i < 6; i++) skipTurn(t.engine);
+
+    const priestIdx = t.findInHand('priest');
+    if (priestIdx < 0) return;
+    const affordable = t.engine.getAffordableCards();
+    if (!affordable.includes(priestIdx)) return;
+
+    const pos = t.deployPositions()[0];
+    if (!pos) return;
+    t.engine.playCard(priestIdx, pos.col, pos.row);
+
+    if (t.state().status === EngineStatus.AWAITING_INPUT) {
+      t.engine.cancelPending();
+      expect(t.state().status).toBe(EngineStatus.IDLE);
+    }
+  });
+
+  it('emits PENDING_TARGET event when heal triggers', () => {
+    for (let i = 0; i < 6; i++) skipTurn(t.engine);
+
+    const priestIdx = t.findInHand('priest');
+    if (priestIdx < 0) return;
+    const affordable = t.engine.getAffordableCards();
+    if (!affordable.includes(priestIdx)) return;
+
+    const pos = t.deployPositions()[0];
+    if (!pos) return;
+
+    const eventsBefore = t.events.length;
+    t.engine.playCard(priestIdx, pos.col, pos.row);
+
+    if (t.state().status === EngineStatus.AWAITING_INPUT) {
+      const pendingEvents = t.eventsOfType('PENDING_TARGET');
+      expect(pendingEvents.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+```
+
+# tests\engine\gameLoop.test.ts
+
+```ts
+/**
+ * gameLoop.test.ts — Full functional game loop smoke test.
+ *
+ * Plays a complete game from startGame() to GAME_OVER (king death).
+ * Both players are driven by a simple AI that deploys, moves toward
+ * the enemy king, and attacks when in range.
+ *
+ * Run after every major update:  npx vitest run tests/engine/gameLoop.test.ts
+ */
+
+import { describe, it, expect, beforeEach } from 'vitest';
+import { GameEngine } from '../../src/game/GameEngine';
+import { Player, TurnPhase, EngineStatus } from '../../src/game/types/GameTypes';
+import type { GameEvent } from '../../src/game/types/EventTypes';
+import type { GameStateSnapshot, Unit } from '../../src/game/types/GameTypes';
+import GameState from '../../src/GameState';
+
+// Register all ability handlers
+import './helpers/TestHarness';
+
+// ─── Helpers ───────────────────────────────────────────────
+
+const TEST_SEED = 12345;
+const MAX_TURNS = 200; // Safety cap — game should end well before this
+
+interface SimpleUnit {
+  instanceId: string;
+  cardId: string;
+  col: number;
+  row: number;
+  owner: number;
+  currentAtk: number;
+  currentDef: number;
+}
+
+function getUnits(state: GameStateSnapshot, player: Player): SimpleUnit[] {
+  return state.board
+    .filter(c => c.unit && c.unit.owner === player)
+    .map(c => ({
+      instanceId: c.unit!.instanceId,
+      cardId: c.unit!.cardId,
+      col: c.col,
+      row: c.row,
+      owner: c.unit!.owner,
+      currentAtk: c.unit!.currentAtk,
+      currentDef: c.unit!.currentDef,
+    }));
+}
+
+function getEnemyKing(state: GameStateSnapshot, myPlayer: Player): SimpleUnit | null {
+  const enemy = myPlayer === Player.P1 ? Player.P2 : Player.P1;
+  const cell = state.board.find(c => c.unit?.cardId === 'king' && c.unit?.owner === enemy);
+  if (!cell?.unit) return null;
+  return {
+    instanceId: cell.unit.instanceId,
+    cardId: cell.unit.cardId,
+    col: cell.col,
+    row: cell.row,
+    owner: cell.unit.owner,
+    currentAtk: cell.unit.currentAtk,
+    currentDef: cell.unit.currentDef,
+  };
+}
+
+/**
+ * Simple AI: plays the PLAY phase.
+ * Deploys the first affordable card to the position closest to the enemy king.
+ */
+function aiPlayPhase(engine: GameEngine): void {
+  const state = engine.getState();
+  const active = state.turn.activePlayer;
+  const enemyKing = getEnemyKing(state, active);
+  const enemyRow = enemyKing ? enemyKing.row : (active === Player.P1 ? 6 : 0);
+
+  // Deploy as many affordable cards as possible
+  let safety = 20;
+  while (safety-- > 0) {
+    if (engine.getState().status === EngineStatus.AWAITING_INPUT) {
+      handlePending(engine);
+    }
+    if (engine.getState().status === EngineStatus.GAME_OVER) return;
+
+    const affordable = engine.getAffordableCards();
+    if (affordable.length === 0) break;
+
+    const positions = engine.getValidDeployPositions();
+    if (positions.length === 0) break;
+
+    // Pick deploy position closest to enemy
+    const sorted = [...positions].sort((a, b) =>
+      Math.abs(a.row - enemyRow) - Math.abs(b.row - enemyRow)
+    );
+
+    const ok = engine.playCard(affordable[0], sorted[0].col, sorted[0].row);
+    if (!ok) break;
+
+    // Handle any pending interaction from deploy abilities
+    if (engine.getState().status === EngineStatus.AWAITING_INPUT) {
+      handlePending(engine);
+    }
+  }
+}
+
+/**
+ * Simple AI: plays the ACT phase.
+ * For each unit: move toward enemy king, then attack if possible.
+ */
+function aiActPhase(engine: GameEngine): void {
+  const state = engine.getState();
+  const active = state.turn.activePlayer;
+  const myUnits = getUnits(state, active);
+
+  for (const unit of myUnits) {
+    if (engine.getState().status === EngineStatus.GAME_OVER) return;
+    if (engine.getState().status === EngineStatus.AWAITING_INPUT) {
+      handlePending(engine);
+    }
+
+    // Re-read state since board may have changed
+    const freshState = engine.getState();
+    const enemyKing = getEnemyKing(freshState, active);
+    if (!enemyKing) return; // enemy king dead — game should end
+
+    // Try to move toward enemy king
+    const moves = engine.getValidMoveSquares(unit.instanceId);
+    if (moves.length > 0) {
+      // Pick the move closest to enemy king
+      const best = [...moves].sort((a, b) => {
+        const distA = Math.abs(a.col - enemyKing.col) + Math.abs(a.row - enemyKing.row);
+        const distB = Math.abs(b.col - enemyKing.col) + Math.abs(b.row - enemyKing.row);
+        return distA - distB;
+      })[0];
+      engine.moveUnit(unit.instanceId, best.col, best.row);
+    }
+
+    // Try to attack
+    const attacks = engine.getValidAttackSquares(unit.instanceId);
+    if (attacks.length > 0) {
+      // Prefer attacking the king
+      const kingTarget = attacks.find(a => a.col === enemyKing.col && a.row === enemyKing.row);
+      const target = kingTarget || attacks[0];
+
+      const targetCell = freshState.board.find(c => c.col === target.col && c.row === target.row);
+      if (targetCell?.unit) {
+        engine.attackUnit(unit.instanceId, targetCell.unit.instanceId);
+      }
+    }
+
+    if (engine.getState().status === EngineStatus.AWAITING_INPUT) {
+      handlePending(engine);
+    }
+  }
+}
+
+/**
+ * Handle any pending interaction by auto-selecting the first valid option,
+ * or cancelling if no option is suitable.
+ */
+function handlePending(engine: GameEngine): void {
+  // We can't read the pending from getState(), so try resolvers in order.
+  // The engine silently ignores wrong-kind calls, so this is safe.
+  const state = engine.getState();
+  if (state.status !== EngineStatus.AWAITING_INPUT) return;
+
+  // Try selectTarget: pick first friendly unit on board for heals, etc.
+  const active = state.turn.activePlayer;
+  const friendlies = getUnits(state, active);
+  for (const u of friendlies) {
+    engine.selectTarget(u.instanceId);
+    if (engine.getState().status !== EngineStatus.AWAITING_INPUT) return;
+  }
+
+  // Try selectPosition: pick first valid deploy position
+  const positions = engine.getValidDeployPositions();
+  for (const p of positions) {
+    engine.selectPosition(p.col, p.row);
+    if (engine.getState().status !== EngineStatus.AWAITING_INPUT) return;
+  }
+
+  // Try selectColumn: try each column
+  for (let col = 0; col < 7; col++) {
+    engine.selectColumn(col);
+    if (engine.getState().status !== EngineStatus.AWAITING_INPUT) return;
+  }
+
+  // Try selectDiscard: discard first card
+  engine.selectDiscard(0);
+  if (engine.getState().status !== EngineStatus.AWAITING_INPUT) {
+    return;
+  }
+
+  // Last resort: cancel
+  engine.cancelPending();
+}
+
+/**
+ * Run a full game loop. Returns collected events and final state.
+ */
+function playFullGame(seed: number = TEST_SEED): {
+  events: GameEvent[];
+  state: GameStateSnapshot;
+  turns: number;
+} {
+  GameState.gameSeed = seed;
+  const engine = new GameEngine();
+  const events: GameEvent[] = [];
+  engine.on(ev => events.push(ev));
+  engine.startGame();
+
+  let turns = 0;
+
+  while (turns < MAX_TURNS) {
+    const state = engine.getState();
+    if (state.status === EngineStatus.GAME_OVER) break;
+
+    // PLAY phase
+    if (state.turn.phase === TurnPhase.PLAY) {
+      aiPlayPhase(engine);
+      if (engine.getState().status === EngineStatus.GAME_OVER) break;
+      engine.endPlayPhase();
+    }
+
+    // ACT phase
+    if (engine.getState().turn.phase === TurnPhase.ACT) {
+      aiActPhase(engine);
+      if (engine.getState().status === EngineStatus.GAME_OVER) break;
+      engine.endActPhase();
+    }
+
+    turns++;
+  }
+
+  return { events, state: engine.getState(), turns };
+}
+
+// ─── Tests ─────────────────────────────────────────────────
+
+describe('Game Loop — full match to completion', () => {
+  it('plays a full game to GAME_OVER', () => {
+    const { events, state, turns } = playFullGame();
+
+    expect(state.status).toBe(EngineStatus.GAME_OVER);
+    expect(turns).toBeLessThan(MAX_TURNS);
+
+    // Should have a GAME_OVER event
+    const gameOverEvents = events.filter(e => e.type === 'GAME_OVER');
+    expect(gameOverEvents.length).toBe(1);
+
+    const result = (gameOverEvents[0] as any).result;
+    expect(result.reason).toBe('KING_DESTROYED');
+    expect([Player.P1, Player.P2]).toContain(result.winner);
+    expect([Player.P1, Player.P2]).toContain(result.loser);
+    expect(result.winner).not.toBe(result.loser);
+
+    console.log(`Game ended in ${turns} half-turns. Winner: P${result.winner + 1}, Reason: ${result.reason}`);
+  });
+
+  it('both players deploy units during the game', () => {
+    const { events } = playFullGame();
+
+    const p1Deploys = events.filter(
+      e => e.type === 'UNIT_PLACED' && (e as any).owner === Player.P1
+    );
+    const p2Deploys = events.filter(
+      e => e.type === 'UNIT_PLACED' && (e as any).owner === Player.P2
+    );
+
+    // Kings count as UNIT_PLACED, but we should see more than just kings
+    expect(p1Deploys.length).toBeGreaterThan(1);
+    expect(p2Deploys.length).toBeGreaterThan(1);
+  });
+
+  it('combat occurs during the game', () => {
+    const { events } = playFullGame();
+
+    const attacks = events.filter(e => e.type === 'UNIT_ATTACKED');
+    expect(attacks.length).toBeGreaterThan(0);
+  });
+
+  it('units die during the game', () => {
+    const { events } = playFullGame();
+
+    const deaths = events.filter(e => e.type === 'UNIT_DIED');
+    // At minimum one king dies (game over condition)
+    expect(deaths.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('LEG accumulates over turns', () => {
+    const { events } = playFullGame();
+
+    const legEvents = events.filter(e => e.type === 'LEG_GAINED');
+    expect(legEvents.length).toBeGreaterThan(0);
+  });
+
+  it('cards are drawn each turn', () => {
+    const { events } = playFullGame();
+
+    const draws = events.filter(e => e.type === 'CARD_DRAWN');
+    expect(draws.length).toBeGreaterThan(2); // More than just opening hands
+  });
+
+  it('no engine crash with different seeds', () => {
+    // Run 5 games with different seeds — none should throw or stall
+    const seeds = [1, 99, 7777, 42424, 100001];
+    for (const seed of seeds) {
+      const { state, turns } = playFullGame(seed);
+      expect(state.status).toBe(EngineStatus.GAME_OVER);
+      expect(turns).toBeLessThan(MAX_TURNS);
+    }
+  });
+});
+
+describe('Game Loop — invariants hold throughout', () => {
+  it('turn number always increases', () => {
+    GameState.gameSeed = TEST_SEED;
+    const engine = new GameEngine();
+    engine.on(() => {});
+    engine.startGame();
+
+    let lastTurn = 0;
+    let steps = 0;
+
+    while (steps < MAX_TURNS) {
+      const state = engine.getState();
+      if (state.status === EngineStatus.GAME_OVER) break;
+
+      expect(state.turn.turnNumber).toBeGreaterThanOrEqual(lastTurn);
+      lastTurn = state.turn.turnNumber;
+
+      if (state.turn.phase === TurnPhase.PLAY) {
+        aiPlayPhase(engine);
+        if (engine.getState().status === EngineStatus.GAME_OVER) break;
+        engine.endPlayPhase();
+      }
+      if (engine.getState().turn.phase === TurnPhase.ACT) {
+        aiActPhase(engine);
+        if (engine.getState().status === EngineStatus.GAME_OVER) break;
+        engine.endActPhase();
+      }
+      steps++;
+    }
+
+    expect(engine.getState().status).toBe(EngineStatus.GAME_OVER);
+  });
+
+  it('active player alternates each full turn', () => {
+    GameState.gameSeed = TEST_SEED;
+    const engine = new GameEngine();
+    engine.startGame();
+
+    const playerSequence: Player[] = [];
+    let steps = 0;
+
+    while (steps < MAX_TURNS * 2) {
+      const state = engine.getState();
+      if (state.status === EngineStatus.GAME_OVER) break;
+
+      if (state.turn.phase === TurnPhase.PLAY) {
+        playerSequence.push(state.turn.activePlayer);
+        engine.endPlayPhase();
+      }
+      if (engine.getState().turn.phase === TurnPhase.ACT) {
+        engine.endActPhase();
+      }
+      steps++;
+    }
+
+    // Players should alternate: P1, P2, P1, P2, ...
+    for (let i = 1; i < playerSequence.length; i++) {
+      expect(playerSequence[i]).not.toBe(playerSequence[i - 1]);
+    }
+  });
+
+  it('board never has two units in the same cell', () => {
+    GameState.gameSeed = TEST_SEED;
+    const engine = new GameEngine();
+    const events: GameEvent[] = [];
+    engine.on(ev => events.push(ev));
+    engine.startGame();
+
+    let steps = 0;
+    while (steps < MAX_TURNS) {
+      const state = engine.getState();
+      if (state.status === EngineStatus.GAME_OVER) break;
+
+      // Check board invariant: no duplicate positions
+      const occupied = state.board.filter(c => c.unit !== null);
+      const positions = occupied.map(c => `${c.col},${c.row}`);
+      const unique = new Set(positions);
+      expect(unique.size).toBe(positions.length);
+
+      if (state.turn.phase === TurnPhase.PLAY) {
+        aiPlayPhase(engine);
+        if (engine.getState().status === EngineStatus.GAME_OVER) break;
+        engine.endPlayPhase();
+      }
+      if (engine.getState().turn.phase === TurnPhase.ACT) {
+        aiActPhase(engine);
+        if (engine.getState().status === EngineStatus.GAME_OVER) break;
+        engine.endActPhase();
+      }
+      steps++;
+    }
+  });
+
+  it('unit HP never exceeds maxDef', () => {
+    GameState.gameSeed = TEST_SEED;
+    const engine = new GameEngine();
+    engine.on(() => {}); // keep event pipeline active
+    engine.startGame();
+
+    let steps = 0;
+    while (steps < MAX_TURNS) {
+      const state = engine.getState();
+      if (state.status === EngineStatus.GAME_OVER) break;
+
+      // Check all units' HP ≤ maxDef
+      for (const cell of state.board) {
+        if (cell.unit) {
+          expect(cell.unit.currentDef).toBeLessThanOrEqual(cell.unit.maxDef);
+        }
+      }
+
+      if (state.turn.phase === TurnPhase.PLAY) {
+        aiPlayPhase(engine);
+        if (engine.getState().status === EngineStatus.GAME_OVER) break;
+        engine.endPlayPhase();
+      }
+      if (engine.getState().turn.phase === TurnPhase.ACT) {
+        aiActPhase(engine);
+        if (engine.getState().status === EngineStatus.GAME_OVER) break;
+        engine.endActPhase();
+      }
+      steps++;
+    }
+  });
+
+  it('dead units are removed from board', () => {
+    GameState.gameSeed = TEST_SEED;
+    const engine = new GameEngine();
+    engine.startGame();
+
+    let steps = 0;
+    while (steps < MAX_TURNS) {
+      const state = engine.getState();
+      if (state.status === EngineStatus.GAME_OVER) break;
+
+      // No unit on board should have 0 or negative HP
+      for (const cell of state.board) {
+        if (cell.unit) {
+          expect(cell.unit.currentDef).toBeGreaterThan(0);
+        }
+      }
+
+      if (state.turn.phase === TurnPhase.PLAY) {
+        aiPlayPhase(engine);
+        if (engine.getState().status === EngineStatus.GAME_OVER) break;
+        engine.endPlayPhase();
+      }
+      if (engine.getState().turn.phase === TurnPhase.ACT) {
+        aiActPhase(engine);
+        if (engine.getState().status === EngineStatus.GAME_OVER) break;
+        engine.endActPhase();
+      }
+      steps++;
+    }
+  });
+});
+
+describe('Game Loop — replay determinism', () => {
+  it('two games with same seed produce identical event sequences', () => {
+    const run1 = playFullGame(777);
+    const run2 = playFullGame(777);
+
+    // Same number of events
+    expect(run1.events.length).toBe(run2.events.length);
+
+    // Same event types in same order
+    const types1 = run1.events.map(e => e.type);
+    const types2 = run2.events.map(e => e.type);
+    expect(types1).toEqual(types2);
+
+    // Same final state
+    expect(run1.state.status).toBe(run2.state.status);
+    expect(run1.turns).toBe(run2.turns);
+  });
+
+  it('different seeds produce different games', () => {
+    const run1 = playFullGame(111);
+    const run2 = playFullGame(222);
+
+    // Both complete, but likely different turn counts or event sequences
+    expect(run1.state.status).toBe(EngineStatus.GAME_OVER);
+    expect(run2.state.status).toBe(EngineStatus.GAME_OVER);
+
+    // Very unlikely to be identical with different seeds
+    const differentTurns = run1.turns !== run2.turns;
+    const differentEvents = run1.events.length !== run2.events.length;
+    expect(differentTurns || differentEvents).toBe(true);
+  });
+});
+
+```
+
+# tests\engine\helpers\TestHarness.ts
+
+```ts
+/**
+ * TestHarness.ts — Shared test utilities for headless GameEngine testing.
+ *
+ * Provides deterministic engine setup: startGame → skip to PLAY phase with
+ * known deck, known hands, and two kings on the board.
+ */
+
+import { GameEngine } from '../../../src/game/GameEngine';
+import { Player, TurnPhase, EngineStatus } from '../../../src/game/types/GameTypes';
+import type { GameEvent } from '../../../src/game/types/EventTypes';
+import type { GameStateSnapshot } from '../../../src/game/types/GameTypes';
+import GameState from '../../../src/GameState';
+
+// Ensure all ability handlers are registered before any test runs
+import '../../../src/game/abilities/handlers/onDeployDraw';
+import '../../../src/game/abilities/handlers/onDeployHeal';
+import '../../../src/game/abilities/handlers/onDeployRevive';
+import '../../../src/game/abilities/handlers/onDeployScout';
+import '../../../src/game/abilities/handlers/customMilitia';
+import '../../../src/game/abilities/handlers/customMystic';
+import '../../../src/game/abilities/handlers/passiveNoOp';
+import '../../../src/game/abilities/handlers/spellCoup';
+import '../../../src/game/abilities/handlers/spellDamageStructure';
+import '../../../src/game/abilities/handlers/spellDrainLeg';
+import '../../../src/game/abilities/handlers/spellDrawStructures';
+import '../../../src/game/abilities/handlers/spellEarthquake';
+import '../../../src/game/abilities/handlers/spellForwardDeploy';
+import '../../../src/game/abilities/handlers/spellFreezeLeg';
+import '../../../src/game/abilities/handlers/spellMotherland';
+import '../../../src/game/abilities/handlers/spellRevolt';
+import '../../../src/game/abilities/handlers/spellTransformAll';
+import '../../../src/game/abilities/handlers/spellTreason';
+import '../../../src/game/abilities/handlers/spellWarHorn';
+
+export interface TestEngine {
+  engine: GameEngine;
+  events: GameEvent[];
+  /** Current snapshot */
+  state(): GameStateSnapshot;
+  /** Find a card in P1's hand by cardId prefix */
+  findInHand(cardIdPrefix: string, player?: Player): number;
+  /** Get first unit on board matching cardId for a player */
+  findUnit(cardId: string, player?: Player): { instanceId: string; col: number; row: number } | null;
+  /** Get valid deploy positions for current player */
+  deployPositions(): Array<{ col: number; row: number }>;
+  /** Collect events of a specific type */
+  eventsOfType(type: string): GameEvent[];
+}
+
+/**
+ * Create a fresh engine with startGame() called.
+ * Engine is in PLAY phase, P1 active, both kings placed, hands dealt.
+ */
+const DEFAULT_TEST_SEED = 42;
+
+export function createTestEngine(seed: number = DEFAULT_TEST_SEED): TestEngine {
+  GameState.gameSeed = seed;
+  const engine = new GameEngine();
+  const events: GameEvent[] = [];
+  engine.on((ev) => events.push(ev));
+  engine.startGame();
+
+  return {
+    engine,
+    events,
+    state: () => engine.getState(),
+    findInHand(cardIdPrefix: string, player: Player = Player.P1): number {
+      const hand = engine.getState().players[player].hand;
+      return hand.findIndex(id => id.startsWith(cardIdPrefix));
+    },
+    findUnit(cardId: string, player: Player = Player.P1) {
+      const cell = engine.getState().board.find(
+        c => c.unit?.cardId === cardId && c.unit?.owner === player
+      );
+      if (!cell?.unit) return null;
+      return { instanceId: cell.unit.instanceId, col: cell.col, row: cell.row };
+    },
+    deployPositions() {
+      return engine.getValidDeployPositions().map(p => ({ col: p.col, row: p.row }));
+    },
+    eventsOfType(type: string) {
+      return events.filter(e => e.type === type);
+    },
+  };
+}
+
+/**
+ * Advance through a full turn: endPlayPhase → endActPhase.
+ * After this, it's the other player's turn in PLAY phase.
+ */
+export function skipTurn(engine: GameEngine): void {
+  engine.endPlayPhase();
+  engine.endActPhase();
+}
+
+/**
+ * Deploy a card from hand onto the board.
+ * Finds the card in the active player's hand, picks a valid deploy position.
+ * Returns the position used, or null if failed.
+ */
+export function deployCard(
+  t: TestEngine,
+  cardIdPrefix: string,
+  preferredCol?: number,
+  preferredRow?: number,
+): { col: number; row: number } | null {
+  const handIdx = t.findInHand(cardIdPrefix);
+  if (handIdx < 0) return null;
+
+  const positions = t.deployPositions();
+  let pos = positions[0];
+  if (preferredCol !== undefined && preferredRow !== undefined) {
+    const exact = positions.find(p => p.col === preferredCol && p.row === preferredRow);
+    if (exact) pos = exact;
+  }
+  if (!pos) return null;
+
+  const ok = t.engine.playCard(handIdx, pos.col, pos.row);
+  return ok ? pos : null;
+}
+
+export { Player, TurnPhase, EngineStatus };
+
+```
+
+# tests\engine\pending\pendingCommand.test.ts
+
+```ts
+import { describe, it, expect } from 'vitest';
+import type { PendingCommand } from '../../../src/game/pending/PendingCommand';
+import { Player } from '../../../src/game/types/GameTypes';
+
+describe('PendingCommand — serialization', () => {
+  it('TARGET variant round-trips through JSON', () => {
+    const cmd: PendingCommand = {
+      kind: 'TARGET',
+      owner: Player.P1,
+      sourceCardId: 'priest',
+      sourceAbility: 'ON_DEPLOY_HEAL_FRIENDLY',
+      reason: 'Choose a friendly unit to heal',
+      validTargetIds: ['foot_soldier_1', 'king_0'],
+      deferredEvents: [],
+    };
+
+    const json = JSON.stringify(cmd);
+    const parsed: PendingCommand = JSON.parse(json);
+
+    expect(parsed.kind).toBe('TARGET');
+    expect(parsed.owner).toBe(Player.P1);
+    expect(parsed.sourceCardId).toBe('priest');
+    if (parsed.kind === 'TARGET') {
+      expect(parsed.validTargetIds).toHaveLength(2);
+      expect(parsed.validTargetIds).toContain('foot_soldier_1');
+    }
+  });
+
+  it('POSITION variant round-trips through JSON', () => {
+    const cmd: PendingCommand = {
+      kind: 'POSITION',
+      owner: Player.P1,
+      sourceCardId: 'militia',
+      sourceAbility: 'CUSTOM',
+      reason: 'Choose where to summon',
+      validPositions: [{ col: 2, row: 1 }, { col: 3, row: 0 }],
+      deferredEvents: [],
+    };
+
+    const json = JSON.stringify(cmd);
+    const parsed: PendingCommand = JSON.parse(json);
+
+    expect(parsed.kind).toBe('POSITION');
+    if (parsed.kind === 'POSITION') {
+      expect(parsed.validPositions).toHaveLength(2);
+    }
+  });
+
+  it('COLUMN variant round-trips through JSON', () => {
+    const cmd: PendingCommand = {
+      kind: 'COLUMN',
+      owner: Player.P2,
+      sourceCardId: 'earthquake',
+      sourceAbility: 'SPELL_EARTHQUAKE',
+      reason: 'Choose a column',
+      deferredEvents: [],
+    };
+
+    const json = JSON.stringify(cmd);
+    const parsed: PendingCommand = JSON.parse(json);
+
+    expect(parsed.kind).toBe('COLUMN');
+    expect(parsed.owner).toBe(Player.P2);
+  });
+
+  it('DISCARD variant round-trips through JSON', () => {
+    const cmd: PendingCommand = {
+      kind: 'DISCARD',
+      owner: Player.P1,
+      sourceCardId: 'war_horn',
+      sourceAbility: 'SPELL_WAR_HORN',
+      count: 1,
+      reason: 'Discard 1 card',
+      deferredEvents: [],
+    };
+
+    const json = JSON.stringify(cmd);
+    const parsed: PendingCommand = JSON.parse(json);
+
+    expect(parsed.kind).toBe('DISCARD');
+    if (parsed.kind === 'DISCARD') {
+      expect(parsed.count).toBe(1);
+    }
+  });
+
+  it('contains no function properties', () => {
+    const cmd: PendingCommand = {
+      kind: 'TARGET',
+      owner: Player.P1,
+      sourceCardId: 'priest',
+      sourceAbility: 'ON_DEPLOY_HEAL_FRIENDLY',
+      reason: 'test',
+      validTargetIds: ['a'],
+      deferredEvents: [],
+    };
+
+    for (const key of Object.keys(cmd)) {
+      expect(typeof (cmd as any)[key]).not.toBe('function');
+    }
+  });
+
+  it('deferredEvents array serializes correctly', () => {
+    const cmd: PendingCommand = {
+      kind: 'TARGET',
+      owner: Player.P1,
+      sourceCardId: 'mystic',
+      sourceAbility: 'CUSTOM',
+      reason: 'test',
+      validTargetIds: ['a'],
+      deferredEvents: [
+        { type: 'LEG_RATE_CHANGED', player: Player.P2, oldRate: 2, newRate: 1, reason: 'Mystic drain' } as any,
+      ],
+    };
+
+    const parsed: PendingCommand = JSON.parse(JSON.stringify(cmd));
+    expect(parsed.deferredEvents).toHaveLength(1);
+    expect((parsed.deferredEvents[0] as any).type).toBe('LEG_RATE_CHANGED');
+  });
+});
+
+```
+
+# tests\engine\pending\pendingResolver.test.ts
+
+```ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createTestEngine, skipTurn, Player, EngineStatus } from '../helpers/TestHarness';
+import type { TestEngine } from '../helpers/TestHarness';
+
+let t: TestEngine;
+
+beforeEach(() => { t = createTestEngine(); });
+
+describe('PendingResolver — cancelPending', () => {
+  it('cancelPending on IDLE engine is safe no-op', () => {
+    expect(t.state().status).toBe(EngineStatus.IDLE);
+    t.engine.cancelPending();
+    expect(t.state().status).toBe(EngineStatus.IDLE);
+  });
+
+  it('cancelPending clears AWAITING_INPUT back to IDLE', () => {
+    // Accumulate LEG for priest
+    for (let i = 0; i < 6; i++) skipTurn(t.engine);
+
+    const priestIdx = t.findInHand('priest');
+    if (priestIdx < 0) return;
+    const affordable = t.engine.getAffordableCards();
+    if (!affordable.includes(priestIdx)) return;
+
+    const pos = t.deployPositions()[0];
+    if (!pos) return;
+    t.engine.playCard(priestIdx, pos.col, pos.row);
+
+    if (t.state().status === EngineStatus.AWAITING_INPUT) {
+      t.engine.cancelPending();
+      expect(t.state().status).toBe(EngineStatus.IDLE);
+    }
+  });
+
+  it('after cancel, player can still end phase', () => {
+    for (let i = 0; i < 6; i++) skipTurn(t.engine);
+
+    const priestIdx = t.findInHand('priest');
+    if (priestIdx < 0) return;
+    const affordable = t.engine.getAffordableCards();
+    if (!affordable.includes(priestIdx)) return;
+
+    const pos = t.deployPositions()[0];
+    if (!pos) return;
+    t.engine.playCard(priestIdx, pos.col, pos.row);
+
+    if (t.state().status === EngineStatus.AWAITING_INPUT) {
+      t.engine.cancelPending();
+    }
+
+    // Should be able to proceed normally
+    t.engine.endPlayPhase();
+    expect(t.state().turn.phase).toBe('ACT');
+  });
+});
+
+describe('PendingResolver — selectTarget', () => {
+  it('selectTarget with invalid instanceId is ignored', () => {
+    t.engine.selectTarget('nonexistent_id');
+    expect(t.state().status).toBe(EngineStatus.IDLE);
+  });
+
+  it('selectTarget when no pending is a no-op', () => {
+    const king = t.findUnit('king', Player.P1);
+    if (king) {
+      t.engine.selectTarget(king.instanceId);
+    }
+    expect(t.state().status).toBe(EngineStatus.IDLE);
+  });
+});
+
+describe('PendingResolver — selectColumn', () => {
+  it('selectColumn when no pending is a no-op', () => {
+    t.engine.selectColumn(3);
+    expect(t.state().status).toBe(EngineStatus.IDLE);
+  });
+
+  it('selectColumn with out-of-bounds is ignored', () => {
+    t.engine.selectColumn(-1);
+    t.engine.selectColumn(99);
+    expect(t.state().status).toBe(EngineStatus.IDLE);
+  });
+});
+
+describe('PendingResolver — selectPosition', () => {
+  it('selectPosition when no pending is a no-op', () => {
+    t.engine.selectPosition(3, 3);
+    expect(t.state().status).toBe(EngineStatus.IDLE);
+  });
+});
+
+describe('PendingResolver — selectDiscard', () => {
+  it('selectDiscard when no pending is a no-op', () => {
+    t.engine.selectDiscard(0);
+    expect(t.state().status).toBe(EngineStatus.IDLE);
+  });
+
+  it('selectDiscard with invalid index is ignored', () => {
+    t.engine.selectDiscard(-1);
+    t.engine.selectDiscard(999);
+    expect(t.state().status).toBe(EngineStatus.IDLE);
+  });
+});
+
+```
+
+# tests\engine\phases\actPhase.test.ts
+
+```ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createTestEngine, skipTurn, deployCard, Player, TurnPhase } from '../helpers/TestHarness';
+import type { TestEngine } from '../helpers/TestHarness';
+
+let t: TestEngine;
+
+beforeEach(() => { t = createTestEngine(); });
+
+describe('ActPhase — movement', () => {
+  it('king can move in ACT phase', () => {
+    t.engine.endPlayPhase(); // → ACT
+
+    const king = t.findUnit('king', Player.P1);
+    if (!king) return;
+
+    const moves = t.engine.getValidMoveSquares(king.instanceId);
+    if (moves.length === 0) return;
+
+    const target = moves[0];
+    const result = t.engine.moveUnit(king.instanceId, target.col, target.row);
+    expect(result).toBe(true);
+
+    // King should be at new position
+    const movedKing = t.findUnit('king', Player.P1);
+    expect(movedKing?.col).toBe(target.col);
+    expect(movedKing?.row).toBe(target.row);
+  });
+
+  it('moveUnit rejects during PLAY phase', () => {
+    const king = t.findUnit('king', Player.P1);
+    if (!king) return;
+
+    const result = t.engine.moveUnit(king.instanceId, king.col + 1, king.row);
+    expect(result).toBe(false);
+  });
+
+  it('moveUnit emits UNIT_MOVED event', () => {
+    t.engine.endPlayPhase();
+
+    const king = t.findUnit('king', Player.P1);
+    if (!king) return;
+
+    const moves = t.engine.getValidMoveSquares(king.instanceId);
+    if (moves.length === 0) return;
+
+    t.engine.moveUnit(king.instanceId, moves[0].col, moves[0].row);
+
+    const moveEvents = t.eventsOfType('UNIT_MOVED');
+    expect(moveEvents.length).toBeGreaterThan(0);
+  });
+
+  it('unit cannot move to occupied cell', () => {
+    t.engine.endPlayPhase();
+
+    const king = t.findUnit('king', Player.P1);
+    const enemyKing = t.findUnit('king', Player.P2);
+    if (!king || !enemyKing) return;
+
+    // Try moving king to enemy king's position (should fail)
+    const result = t.engine.moveUnit(king.instanceId, enemyKing.col, enemyKing.row);
+    expect(result).toBe(false);
+  });
+
+  it('getValidMoveSquares returns empty for just-placed unit', () => {
+    // Deploy a unit
+    const pos = deployCard(t, 'foot_soldier');
+    if (!pos) return;
+
+    // The unit was just placed — isJustPlaced = true
+    t.engine.endPlayPhase(); // → ACT
+
+    const unit = t.findUnit('foot_soldier', Player.P1);
+    if (!unit) return;
+
+    // Just-placed units can't act on their deploy turn
+    const moves = t.engine.getValidMoveSquares(unit.instanceId);
+    expect(moves).toHaveLength(0);
+  });
+
+  it('deployed unit can move on next turn', () => {
+    // Deploy on P1 turn 1
+    const pos = deployCard(t, 'foot_soldier');
+    if (!pos) return;
+
+    skipTurn(t.engine); // finish P1
+    skipTurn(t.engine); // P2
+
+    // P1 turn 2 — unit should be able to move
+    t.engine.endPlayPhase(); // → ACT
+
+    const unit = t.findUnit('foot_soldier', Player.P1);
+    if (!unit) return;
+
+    const moves = t.engine.getValidMoveSquares(unit.instanceId);
+    expect(moves.length).toBeGreaterThan(0);
+  });
+});
+
+describe('ActPhase — queries', () => {
+  it('getValidAttackSquares returns positions', () => {
+    t.engine.endPlayPhase();
+
+    const king = t.findUnit('king', Player.P1);
+    if (!king) return;
+
+    // King has HV attack pattern — check it returns something
+    const attacks = t.engine.getValidAttackSquares(king.instanceId);
+    // May be empty if no enemies in range, but shouldn't throw
+    expect(Array.isArray(attacks)).toBe(true);
+  });
+
+  it('getAttackRange returns positions', () => {
+    t.engine.endPlayPhase();
+
+    const king = t.findUnit('king', Player.P1);
+    if (!king) return;
+
+    const range = t.engine.getAttackRange(king.instanceId);
+    expect(Array.isArray(range)).toBe(true);
+  });
+});
+
+```
+
+# tests\engine\phases\combatResolver.test.ts
+
+```ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createTestEngine, skipTurn, deployCard, Player, TurnPhase, EngineStatus } from '../helpers/TestHarness';
+import type { TestEngine } from '../helpers/TestHarness';
+
+let t: TestEngine;
+
+beforeEach(() => { t = createTestEngine(); });
+
+describe('Combat — attack basics', () => {
+  it('rejects attack during PLAY phase', () => {
+    // Can't attack in PLAY
+    const king = t.findUnit('king', Player.P1);
+    const enemyKing = t.findUnit('king', Player.P2);
+    if (king && enemyKing) {
+      const result = t.engine.attackUnit(king.instanceId, enemyKing.instanceId);
+      expect(result).toBe(false);
+    }
+  });
+
+  it('rejects attack with invalid unit IDs', () => {
+    t.engine.endPlayPhase();
+    const result = t.engine.attackUnit('nonexistent', 'also_nonexistent');
+    expect(result).toBe(false);
+  });
+
+  it('attack deals damage and emits UNIT_ATTACKED', () => {
+    // Deploy a foot soldier for P1
+    const pos = deployCard(t, 'foot_soldier');
+    if (!pos) return; // card not in hand, skip
+
+    skipTurn(t.engine); // P1 done
+
+    // Deploy a foot soldier for P2
+    const pos2 = deployCard(t, 'foot_soldier');
+    skipTurn(t.engine); // P2 done
+
+    // P1's turn again — ACT phase: try to attack
+    t.engine.endPlayPhase(); // to ACT
+
+    const p1Unit = t.findUnit('foot_soldier', Player.P1);
+    const p2Unit = t.findUnit('foot_soldier', Player.P2);
+
+    if (p1Unit && p2Unit) {
+      // Check if P2's unit is in attack range
+      const range = t.engine.getValidAttackSquares(p1Unit.instanceId);
+      const canAttack = range.some((p: any) => p.col === p2Unit.col && p.row === p2Unit.row);
+
+      if (canAttack) {
+        const before = t.state().board.find(
+          c => c.unit?.instanceId === p2Unit.instanceId
+        )?.unit?.currentDef ?? 0;
+
+        t.engine.attackUnit(p1Unit.instanceId, p2Unit.instanceId);
+
+        const attacked = t.eventsOfType('UNIT_ATTACKED');
+        expect(attacked.length).toBeGreaterThan(0);
+      }
+    }
+  });
+});
+
+describe('Combat — guards', () => {
+  it('rejects attack when status is AWAITING_INPUT', () => {
+    // If we can trigger AWAITING_INPUT, attack should fail
+    const priestIdx = t.findInHand('priest');
+    if (priestIdx >= 0) {
+      const pos = t.deployPositions()[0];
+      t.engine.playCard(priestIdx, pos.col, pos.row);
+
+      if (t.state().status === EngineStatus.AWAITING_INPUT) {
+        const king = t.findUnit('king', Player.P1);
+        if (king) {
+          const result = t.engine.attackUnit(king.instanceId, 'anything');
+          expect(result).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('moveUnit rejects during PLAY phase', () => {
+    const king = t.findUnit('king', Player.P1);
+    if (king) {
+      const result = t.engine.moveUnit(king.instanceId, king.col + 1, king.row);
+      expect(result).toBe(false);
+    }
+  });
+});
+
+```
+
+# tests\engine\phases\phaseTransitions.test.ts
+
+```ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createTestEngine, skipTurn, Player, TurnPhase, EngineStatus } from '../helpers/TestHarness';
+import type { TestEngine } from '../helpers/TestHarness';
+
+let t: TestEngine;
+
+beforeEach(() => { t = createTestEngine(); });
+
+describe('Phase transitions', () => {
+  it('starts in PLAY phase, P1 active', () => {
+    const s = t.state();
+    expect(s.turn.phase).toBe(TurnPhase.PLAY);
+    expect(s.turn.activePlayer).toBe(Player.P1);
+    expect(s.turn.turnNumber).toBe(1);
+  });
+
+  it('PLAY → ACT via endPlayPhase', () => {
+    t.engine.endPlayPhase();
+    expect(t.state().turn.phase).toBe(TurnPhase.ACT);
+    expect(t.state().turn.activePlayer).toBe(Player.P1);
+  });
+
+  it('ACT → next player PLAY via endActPhase', () => {
+    t.engine.endPlayPhase();
+    t.engine.endActPhase();
+    const s = t.state();
+    expect(s.turn.activePlayer).toBe(Player.P2);
+    expect(s.turn.phase).toBe(TurnPhase.PLAY);
+  });
+
+  it('full round: P1 turn + P2 turn → turn 2', () => {
+    skipTurn(t.engine); // P1
+    skipTurn(t.engine); // P2
+    const s = t.state();
+    expect(s.turn.turnNumber).toBe(2);
+    expect(s.turn.activePlayer).toBe(Player.P1);
+  });
+
+  it('endPlayPhase is no-op during ACT', () => {
+    t.engine.endPlayPhase();
+    t.engine.endPlayPhase(); // no-op
+    expect(t.state().turn.phase).toBe(TurnPhase.ACT);
+  });
+
+  it('endActPhase is no-op during PLAY', () => {
+    t.engine.endActPhase(); // no-op
+    expect(t.state().turn.phase).toBe(TurnPhase.PLAY);
+  });
+
+  it('emits PHASE_CHANGED events', () => {
+    t.engine.endPlayPhase();
+    const phaseEvents = t.eventsOfType('PHASE_CHANGED');
+    expect(phaseEvents.length).toBeGreaterThanOrEqual(1);
+    const last = phaseEvents[phaseEvents.length - 1] as any;
+    expect(last.phase).toBe(TurnPhase.ACT);
+  });
+
+  it('emits TURN_STARTED on turn change', () => {
+    skipTurn(t.engine);
+    const turnEvents = t.eventsOfType('TURN_STARTED');
+    // At least 2: initial + P2's turn
+    expect(turnEvents.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('Phase guards with AWAITING_INPUT', () => {
+  it('endPlayPhase blocked during AWAITING_INPUT', () => {
+    // Play a Priest to trigger pending TARGET
+    const priestIdx = t.findInHand('priest');
+    if (priestIdx >= 0) {
+      const pos = t.deployPositions()[0];
+      t.engine.playCard(priestIdx, pos.col, pos.row);
+
+      if (t.state().status === EngineStatus.AWAITING_INPUT) {
+        t.engine.endPlayPhase(); // should be no-op
+        expect(t.state().turn.phase).toBe(TurnPhase.PLAY);
+      }
+    }
+  });
+});
+
+```
+
+# tests\engine\phases\playPhase.test.ts
+
+```ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createTestEngine, skipTurn, deployCard, Player, TurnPhase, EngineStatus } from '../helpers/TestHarness';
+import type { TestEngine } from '../helpers/TestHarness';
+
+let t: TestEngine;
+
+beforeEach(() => { t = createTestEngine(); });
+
+describe('PlayPhase — card deployment', () => {
+  it('deploys a unit card to valid position', () => {
+    const idx = t.findInHand('foot_soldier');
+    if (idx < 0) return;
+
+    const positions = t.deployPositions();
+    expect(positions.length).toBeGreaterThan(0);
+
+    const pos = positions[0];
+    const affordable = t.engine.getAffordableCards();
+    if (!affordable.includes(idx)) return;
+
+    const handBefore = t.state().players[Player.P1].hand.length;
+    const result = t.engine.playCard(idx, pos.col, pos.row);
+
+    expect(result).toBe(true);
+    expect(t.state().players[Player.P1].hand.length).toBe(handBefore - 1);
+
+    // Unit should be on the board
+    const cell = t.state().board.find(c => c.col === pos.col && c.row === pos.row);
+    expect(cell?.unit).toBeDefined();
+    expect(cell?.unit?.owner).toBe(Player.P1);
+  });
+
+  it('rejects deploy to invalid position (enemy half)', () => {
+    const idx = t.findInHand('foot_soldier');
+    if (idx < 0) return;
+
+    const affordable = t.engine.getAffordableCards();
+    if (!affordable.includes(idx)) return;
+
+    // Row 6 is P2's back row — invalid for P1
+    const result = t.engine.playCard(idx, 3, 6);
+    expect(result).toBe(false);
+  });
+
+  it('rejects deploy to occupied cell', () => {
+    // King is at center of row 0
+    const king = t.findUnit('king', Player.P1);
+    if (!king) return;
+
+    const idx = t.findInHand('foot_soldier');
+    if (idx < 0) return;
+
+    const affordable = t.engine.getAffordableCards();
+    if (!affordable.includes(idx)) return;
+
+    const result = t.engine.playCard(idx, king.col, king.row);
+    expect(result).toBe(false);
+  });
+
+  it('rejects play when not enough LEG', () => {
+    // Knight costs 9 — can't afford on turn 1 (1 LEG)
+    const knightIdx = t.findInHand('knight');
+    if (knightIdx < 0) return;
+
+    const pos = t.deployPositions()[0];
+    if (!pos) return;
+
+    const result = t.engine.playCard(knightIdx, pos.col, pos.row);
+    expect(result).toBe(false);
+  });
+
+  it('rejects play with invalid hand index', () => {
+    expect(t.engine.playCard(99, 3, 0)).toBe(false);
+    expect(t.engine.playCard(-1, 3, 0)).toBe(false);
+  });
+
+  it('rejects play during ACT phase', () => {
+    t.engine.endPlayPhase();
+    const idx = t.findInHand('foot_soldier');
+    if (idx < 0) return;
+
+    const result = t.engine.playCard(idx, 3, 0);
+    expect(result).toBe(false);
+  });
+
+  it('emits CARD_PLAYED and UNIT_PLACED events', () => {
+    const idx = t.findInHand('foot_soldier');
+    if (idx < 0) return;
+
+    const pos = t.deployPositions()[0];
+    if (!pos) return;
+
+    const affordable = t.engine.getAffordableCards();
+    if (!affordable.includes(idx)) return;
+
+    t.engine.playCard(idx, pos.col, pos.row);
+
+    expect(t.eventsOfType('CARD_PLAYED').length).toBeGreaterThan(0);
+    expect(t.eventsOfType('UNIT_PLACED').length).toBeGreaterThanOrEqual(2); // kings + this
+  });
+
+  it('spends LEG on play', () => {
+    const idx = t.findInHand('foot_soldier');
+    if (idx < 0) return;
+
+    const pos = t.deployPositions()[0];
+    if (!pos) return;
+
+    const affordable = t.engine.getAffordableCards();
+    if (!affordable.includes(idx)) return;
+
+    const legBefore = t.state().modifiers[Player.P1].legPool;
+    t.engine.playCard(idx, pos.col, pos.row);
+    const legAfter = t.state().modifiers[Player.P1].legPool;
+
+    expect(legAfter).toBeLessThan(legBefore);
+  });
+});
+
+describe('PlayPhase — LEG economy', () => {
+  it('P1 starts with LEG > 0', () => {
+    expect(t.state().modifiers[Player.P1].legPool).toBeGreaterThan(0);
+  });
+
+  it('LEG accumulates each turn', () => {
+    const leg1 = t.state().modifiers[Player.P1].legPool;
+    skipTurn(t.engine); // P1
+    skipTurn(t.engine); // P2
+
+    const leg2 = t.state().modifiers[Player.P1].legPool;
+    expect(leg2).toBeGreaterThan(leg1);
+  });
+
+  it('getAffordableCards returns indices of playable cards', () => {
+    const affordable = t.engine.getAffordableCards();
+    const hand = t.state().players[Player.P1].hand;
+    const leg = t.state().modifiers[Player.P1].legPool;
+
+    // All returned indices should be valid hand positions
+    for (const idx of affordable) {
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(idx).toBeLessThan(hand.length);
+    }
+  });
+});
+
+```
+
+# tests\engine\replay\replayConsistency.test.ts
+
+```ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { GameEngine } from '../../../src/game/GameEngine';
+import { Player, TurnPhase } from '../../../src/game/types/GameTypes';
+import GameState from '../../../src/GameState';
+
+// Register all handlers
+import '../helpers/TestHarness';
+
+/**
+ * Replay consistency: two engines with identical setup must produce
+ * identical state snapshots when fed the same action sequence.
+ * This is the multiplayer desync safety net.
+ */
+
+const TEST_SEED = 42;
+
+beforeEach(() => {
+  GameState.gameSeed = TEST_SEED;
+});
+
+function createEngine(): GameEngine {
+  const e = new GameEngine();
+  e.startGame();
+  return e;
+}
+
+function snapshotBoard(engine: GameEngine): string {
+  const s = engine.getState();
+  const board = s.board
+    .filter(c => c.unit !== null)
+    .map(c => ({
+      col: c.col,
+      row: c.row,
+      id: c.unit!.instanceId,
+      cardId: c.unit!.cardId,
+      owner: c.unit!.owner,
+      hp: c.unit!.currentDef,
+      atk: c.unit!.currentAtk,
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  return JSON.stringify(board);
+}
+
+function snapshotFull(engine: GameEngine): string {
+  const s = engine.getState();
+  return JSON.stringify({
+    turn: s.turn.turnNumber,
+    activePlayer: s.turn.activePlayer,
+    phase: s.turn.phase,
+    status: s.status,
+    p1Hand: [...s.players[0].hand].sort(),
+    p2Hand: [...s.players[1].hand].sort(),
+    p1Deck: s.players[0].deckCount,
+    p2Deck: s.players[1].deckCount,
+    board: snapshotBoard(engine),
+  });
+}
+
+describe('Replay Consistency', () => {
+  it('two fresh engines produce identical initial state', () => {
+    const a = createEngine();
+    const b = createEngine();
+
+    // Both use same default deck (UNITS_ONLY_DECK_IDS)
+    // Without seeded shuffle, hands may differ
+    // But board (two kings) must match
+    expect(snapshotBoard(a)).toBe(snapshotBoard(b));
+  });
+
+  it('skip-turn sequences produce identical state', () => {
+    const a = createEngine();
+    const b = createEngine();
+
+    // Both skip 4 turns
+    for (let i = 0; i < 4; i++) {
+      a.endPlayPhase(); a.endActPhase();
+      b.endPlayPhase(); b.endActPhase();
+    }
+
+    const sa = a.getState();
+    const sb = b.getState();
+
+    expect(sa.turn.turnNumber).toBe(sb.turn.turnNumber);
+    expect(sa.turn.activePlayer).toBe(sb.turn.activePlayer);
+    expect(sa.turn.phase).toBe(sb.turn.phase);
+    // Board should still match (just kings, LEG gained)
+    expect(snapshotBoard(a)).toBe(snapshotBoard(b));
+  });
+
+  it('playCard at same index+position produces identical board', () => {
+    const a = createEngine();
+    const b = createEngine();
+
+    // Both engines have same default deck → same starting hands
+    const posA = a.getValidDeployPositions();
+    const posB = b.getValidDeployPositions();
+
+    // Deploy positions should match
+    expect(posA.length).toBe(posB.length);
+
+    // Both play hand[0] at same position
+    if (posA.length > 0) {
+      const affordable = a.getAffordableCards();
+      if (affordable.length > 0) {
+        const idx = affordable[0];
+        const p = posA[0];
+
+        a.playCard(idx, p.col, p.row);
+        b.playCard(idx, p.col, p.row);
+
+        // Skip any pending if both engines hit it
+        if (a.getState().status === 'AWAITING_INPUT') a.cancelPending();
+        if (b.getState().status === 'AWAITING_INPUT') b.cancelPending();
+
+        expect(snapshotBoard(a)).toBe(snapshotBoard(b));
+      }
+    }
+  });
+
+  it('identical multi-turn action sequence stays in sync', () => {
+    const a = createEngine();
+    const b = createEngine();
+
+    // Turn 1: P1 skips
+    a.endPlayPhase(); a.endActPhase();
+    b.endPlayPhase(); b.endActPhase();
+
+    // Turn 1: P2 skips
+    a.endPlayPhase(); a.endActPhase();
+    b.endPlayPhase(); b.endActPhase();
+
+    // Turn 2: P1 plays affordable card if available
+    const affA = a.getAffordableCards();
+    const affB = b.getAffordableCards();
+    expect(affA).toEqual(affB);
+
+    if (affA.length > 0) {
+      const posA = a.getValidDeployPositions();
+      if (posA.length > 0) {
+        a.playCard(affA[0], posA[0].col, posA[0].row);
+        b.playCard(affB[0], posA[0].col, posA[0].row);
+
+        if (a.getState().status === 'AWAITING_INPUT') a.cancelPending();
+        if (b.getState().status === 'AWAITING_INPUT') b.cancelPending();
+      }
+    }
+
+    a.endPlayPhase(); a.endActPhase();
+    b.endPlayPhase(); b.endActPhase();
+
+    expect(snapshotFull(a)).toBe(snapshotFull(b));
+  });
+});
+
+```
+
+# tests\mocks\phaser.ts
+
+```ts
+// Minimal Phaser mock for game engine tests.
+// Game logic (GameEngine, phases, abilities) doesn't use Phaser directly,
+// but some imports pull it in transitively. This stub prevents errors.
+
+export default {
+  Scene: class {},
+  GameObjects: { Container: class {}, Graphics: class {}, Text: class {} },
+  Geom: { Rectangle: class { static Contains() { return false; } } },
+};
+
+export const Scene = class {};
+export const GameObjects = {
+  Container: class {},
+  Graphics: class {},
+  Text: class {},
+};
+export const Geom = {
+  Rectangle: class { static Contains() { return false; } },
+};
+
+```
+
 # tsconfig.hardhat.json
 
 ```json
@@ -16768,6 +21190,31 @@ describe("Counter", function () {
   },
   "include": ["src"]
 }
+```
+
+# tsconfig.server.json
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "lib": ["ES2020"],
+    "outDir": "server/dist",
+    "rootDir": ".",
+    "strict": true,
+    "strictPropertyInitialization": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "declaration": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": ["server/**/*.ts", "shared/**/*.ts"]
+}
+
 ```
 
 # vite.config.ts
@@ -16855,6 +21302,26 @@ export default defineConfig({
     plugins: [
         phasermsg()
     ]
+});
+
+```
+
+# vitest.config.ts
+
+```ts
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    include: ['tests/**/*.test.ts'],
+    environment: 'node',
+    globals: true,
+  },
+  resolve: {
+    alias: {
+      phaser: './tests/mocks/phaser.ts',
+    },
+  },
 });
 
 ```

@@ -62,10 +62,8 @@ export class OverlayRenderer {
   private cursorFollower: Phaser.GameObjects.Container | null = null;
 
   private unsubs: Array<() => void> = [];
-
-  // Callbacks
-  private onTargetSelected?: (payload: any) => void;
-  private onCloseOverlay?: () => void;
+  /** Input listeners tied to the current overlay — cleaned up on close(). */
+  private overlayInputCleanups: Array<() => void> = [];
 
   constructor(scene: Phaser.Scene, layout: BattleLayoutJSON, theme: ThemeJSON) {
     this.scene = scene;
@@ -87,7 +85,6 @@ export class OverlayRenderer {
   /** Show the target selection UI. Board mode uses a non-blocking banner; other modes use a modal. */
   showTargetSelect(config: TargetSelectConfig, onSelect: (payload: any) => void): void {
     this.close();
-    this.onTargetSelected = onSelect;
 
     if (config.mode === 'board') {
       // Non-blocking: prompt banner + cancel button, board stays clickable
@@ -143,6 +140,15 @@ export class OverlayRenderer {
     });
     container.add(cancelBtn);
 
+    // ESC key to cancel — tracked for cleanup in close()
+    const escKey = this.scene.input.keyboard?.addKey('ESC');
+    const escHandler = () => {
+      this.close();
+      EventBus.emit(EV.INTERACTION_RESOLVED, { cancelled: true });
+    };
+    escKey?.once('down', escHandler);
+    this.overlayInputCleanups.push(() => escKey?.off('down', escHandler));
+
     this.activeOverlay = container;
     this.rootContainer.add(container);
   }
@@ -177,6 +183,15 @@ export class OverlayRenderer {
       centered: true,
     });
     panel.add(cancelBtn);
+
+    // ESC key to cancel — tracked for cleanup in close()
+    const escKey = this.scene.input.keyboard?.addKey('ESC');
+    const escHandler = () => {
+      this.close();
+      EventBus.emit(EV.INTERACTION_RESOLVED, { cancelled: true });
+    };
+    escKey?.once('down', escHandler);
+    this.overlayInputCleanups.push(() => escKey?.off('down', escHandler));
 
     this.activeOverlay = panel;
     this.rootContainer.add(panel);
@@ -356,15 +371,14 @@ export class OverlayRenderer {
     container.add(blocker);
     container.bringToTop(detail);
 
-    // ESC key to close — track so we can remove on close()
+    // ESC key to close — tracked for cleanup in close()
     const escKey = this.scene.input.keyboard?.addKey('ESC');
     const escHandler = () => {
       this.close();
       EventBus.emit(EV.DETAIL_HIDE, {});
     };
     escKey?.once('down', escHandler);
-    // Remove ESC listener when overlay is destroyed (e.g. clicked away)
-    container.once('destroy', () => escKey?.off('down', escHandler));
+    this.overlayInputCleanups.push(() => escKey?.off('down', escHandler));
 
     this.activeOverlay = container;
     this.rootContainer.add(container);
@@ -427,6 +441,9 @@ export class OverlayRenderer {
   /** Close the current overlay. */
   close(): void {
     this.destroyCursorFollower();
+    // Clean up all input listeners tied to this overlay
+    for (const cleanup of this.overlayInputCleanups) cleanup();
+    this.overlayInputCleanups = [];
     if (this.dimmer) {
       this.dimmer.destroy();
       this.dimmer = null;
@@ -513,10 +530,8 @@ export class OverlayRenderer {
     const pointer = this.scene.input.activePointer;
     container.setPosition(pointer.x + offsetX, pointer.y + offsetY);
 
-    // Store cleanup
-    container.once('destroy', () => {
-      this.scene.input.off('pointermove', moveHandler);
-    });
+    // Track for cleanup — overlayInputCleanups handles it via close() → destroyCursorFollower()
+    this.overlayInputCleanups.push(() => this.scene.input.off('pointermove', moveHandler));
 
     this.cursorFollower = container;
   }

@@ -5,7 +5,9 @@ import type { AbilityContext, AbilityResult } from '../types';
 
 function onDeployHeal(ctx: AbilityContext): AbilityResult {
   const friendlyUnits = ctx.board.getUnitsOf(ctx.owner);
-  const validTargetIds = friendlyUnits.map(u => u.instanceId);
+  const validTargetIds = friendlyUnits
+    .filter(u => u.currentDef < u.maxDef)
+    .map(u => u.instanceId);
 
   if (validTargetIds.length === 0) return { events: [] };
 

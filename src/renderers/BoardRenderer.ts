@@ -42,6 +42,8 @@ export class BoardRenderer {
   private cellGraphics: Map<string, Phaser.GameObjects.Graphics> = new Map();
   private highlights: Map<string, Phaser.GameObjects.Graphics> = new Map();
   private hoveredCell: string | null = null;
+  /** Reusable hover graphic (pooled to avoid create/destroy per hover). */
+  private hoverGfx: Phaser.GameObjects.Graphics | null = null;
   private selectedCell: string | null = null;
   private localPlayerIndex: number = 0;
   private unsubs: Array<() => void> = [];
@@ -187,17 +189,18 @@ const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, c
     this.highlights.forEach(g => g.destroy());
     this.highlights.clear();
     this.selectedCell = null;
+    if (this.hoverGfx) this.hoverGfx.setVisible(false);
   }
 
   clearHighlightType(type: HighlightType): void {
-    const toRemove: string[] = [];
-    this.highlights.forEach((g, key) => {
-      if (key.endsWith(`_${type}`) || key.endsWith(`_${type}_marker`)) {
+    const suffix = `_${type}`;
+    const markerSuffix = `_${type}_marker`;
+    for (const [key, g] of this.highlights) {
+      if (key.endsWith(suffix) || key.endsWith(markerSuffix)) {
         g.destroy();
-        toRemove.push(key);
+        this.highlights.delete(key);
       }
-    });
-    toRemove.forEach(k => this.highlights.delete(k));
+    }
   }
 
   // ─────────────────────────────────────────────
@@ -447,14 +450,29 @@ onComplete: () => {
   // ─────────────────────────────────────────────
 
   private onCellHover(col: number, row: number): void {
-    if (this.hoveredCell) this.clearHighlightType('hover');
     this.hoveredCell = this.cellKey(col, row);
-    this.addHighlight(col, row, 'hover');
+
+    const g = this.layout.grid;
+    const T = this.theme.board;
+    const px = g.originX + col * g.cellSize;
+    const displayRow = this.mirrorRow(row);
+    const py = g.originY + displayRow * g.cellSize;
+
+    if (!this.hoverGfx) {
+      this.hoverGfx = this.scene.add.graphics();
+      this.highlightContainer.add(this.hoverGfx);
+    }
+    this.hoverGfx.clear();
+    const { color, alpha } = ThemeLoader.hexToColorAlpha(T.cellHover);
+    this.hoverGfx.fillStyle(color, alpha);
+    this.hoverGfx.fillRect(px, py, g.cellSize, g.cellSize);
+    this.hoverGfx.setVisible(true);
+
     EventBus.emit(EV.CARD_HOVERED, { col, row });
   }
 
   private onCellHoverEnd(_col: number, _row: number): void {
-    this.clearHighlightType('hover');
+    if (this.hoverGfx) this.hoverGfx.setVisible(false);
     this.hoveredCell = null;
     EventBus.emit(EV.CARD_HOVER_END, { col: _col, row: _row });
   }
@@ -518,9 +536,11 @@ onComplete: () => {
 
       // CAN_ACT_UPDATE: toggle glow per unit on turn boundary
       EventBus.on('CAN_ACT_UPDATE' as any, ({ cells }: { cells: Array<{ col: number; row: number }> }) => {
-        const activeKeys = new Set(cells.map(c => this.cellKey(c.col, c.row)));
-        this.unitsByCell.forEach((thumb, key) => {
-          thumb.setCanAct(activeKeys.has(key));
+        // Build Set with numeric keys to avoid string allocation per cell
+        const activeSet = new Set<number>();
+        for (const c of cells) activeSet.add(c.col * 100 + c.row);
+        this.unitsByCell.forEach((thumb) => {
+          thumb.setCanAct(activeSet.has(thumb.col * 100 + thumb.row));
         });
       }),
     );

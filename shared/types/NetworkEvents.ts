@@ -7,7 +7,7 @@
 // ─── Game Actions (relayed between players) ──────────────────
 
 export interface GameAction {
-  type: 'PLAY_CARD' | 'MOVE_UNIT' | 'ATTACK_UNIT' | 'END_PLAY_PHASE' | 'END_ACT_PHASE' | 'SELECT_POSITION';
+  type: 'PLAY_CARD' | 'MOVE_UNIT' | 'ATTACK_UNIT' | 'END_PLAY_PHASE' | 'END_ACT_PHASE' | 'SELECT_POSITION' | 'SELECT_TARGET' | 'CANCEL_PENDING';
   handIndex?: number;
   col?: number;
   row?: number;
@@ -15,6 +15,10 @@ export interface GameAction {
   fromRow?: number;
   targetCol?: number;
   targetRow?: number;
+  /** Client-assigned sequence number (monotonically increasing per player). */
+  seqNum?: number;
+  /** Server-assigned global order stamp (set before relay to opponent). */
+  serverSeq?: number;
 }
 
 // ─── Client → Server Events ─────────────────────────────────
@@ -22,10 +26,13 @@ export interface GameAction {
 export interface ClientToServerEvents {
   createRoom:     (data: { roomCode: string; playerName: string }) => void;
   joinRoom:       (data: { roomCode: string; playerName: string }) => void;
-  registerWallet: (data: { roomCode: string; walletAddress: string }) => void;
+  registerWallet: (data: { roomCode: string; walletAddress: string; message: string; signature: string }) => void;
   cryptoReady:    (data: { roomCode: string }) => void;
+  player_ready:   (data: { roomCode: string }) => void;
   game_action:    (data: { roomCode: string; action: GameAction }) => void;
   game_over:      (data: { roomCode: string; winnerIndex: number }) => void;
+  state_hash:     (data: { roomCode: string; hash: string; afterGlobalSeq: number }) => void;
+  rejoin_room:    (data: { roomCode: string; playerName: string }) => void;
 }
 
 // ─── Server → Client Events ─────────────────────────────────
@@ -42,7 +49,11 @@ export interface ServerToClientEvents {
   opponentJoined:       (data: { playerName: string; playerIndex: number }) => void;
   opponent_action:      (action: GameAction) => void;
   game_seed:            (data: { seed: number }) => void;
+  both_battle_ready:    () => void;
   opponentDisconnected: () => void;
+  opponentReconnected:  () => void;
+  opponentAbandon:      () => void;
+  rejoinSuccess:        (data: { roomCode: string; playerIndex: number }) => void;
   hostDepositConfirmed: () => void;
   bothCryptoReady:      () => void;
   payout_result:        (data: PayoutResult) => void;
@@ -57,9 +68,31 @@ export interface RoomPlayer {
   wallet: string | null;
 }
 
+export interface GameOverClaim {
+  playerIndex: number;
+  claimedWinner: number;
+}
+
 export interface Room {
   players: RoomPlayer[];
   gameSeed: number | null;
   cryptoReadyCount: number;
+  battleReadyCount: number;
+  actionQueue: GameAction[];
   settled: boolean;
+  // Server-side turn tracking for action validation
+  currentTurnPlayer: number;  // 0 = P1, 1 = P2
+  currentPhase: 'PLAY' | 'ACT';
+  // Game-over verification
+  actionCount: number;
+  gameOverClaims: GameOverClaim[];
+  // Action sequencing
+  lastSeqNum: [number, number];  // last seqNum received from [P1, P2]
+  globalSeq: number;             // monotonic server-wide order stamp
+  // State checksum sync
+  pendingHashes: Map<number, { playerIndex: number; hash: string }[]>;
+  // Reconnection grace
+  disconnectTimers: Map<number, ReturnType<typeof setTimeout>>;
+  // Room age tracking for stale cleanup
+  createdAt: number;
 }

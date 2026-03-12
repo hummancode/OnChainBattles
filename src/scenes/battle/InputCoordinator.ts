@@ -14,7 +14,7 @@ export function createSelectionManager(
   localPlayerIndex: number,
 ): SelectionManager {
   const getBoardUnit = (col: number, row: number) => {
-    const cell = (engine as any).getState().board.find((c: any) => c.col === col && c.row === row);
+    const cell = engine.getState().board.find((c) => c.col === col && c.row === row);
     return cell?.unit ?? null;
   };
 
@@ -22,20 +22,20 @@ export function createSelectionManager(
     getAttackRange: (col: number, row: number) => {
       const unit = getBoardUnit(col, row);
       if (!unit) return [];
-      return engine.getAttackRange(unit.instanceId).map((p: any) => ({ col: p.col, row: p.row }));
+      return engine.getAttackRange(unit.instanceId).map((p) => ({ col: p.col, row: p.row }));
     },
     getValidMoves: (col: number, row: number) => {
       const unit = getBoardUnit(col, row);
       if (!unit) return [];
-      return engine.getValidMoveSquares(unit.instanceId).map((p: any) => ({ col: p.col, row: p.row }));
+      return engine.getValidMoveSquares(unit.instanceId).map((p) => ({ col: p.col, row: p.row }));
     },
     getValidAttacks: (col: number, row: number) => {
       const unit = getBoardUnit(col, row);
       if (!unit) return [];
-      return engine.getValidAttackSquares(unit.instanceId).map((p: any) => ({ col: p.col, row: p.row }));
+      return engine.getValidAttackSquares(unit.instanceId).map((p) => ({ col: p.col, row: p.row }));
     },
     getValidDeployPositions: () => {
-      return engine.getValidDeployPositions().map((p: any) => ({ col: p.col, row: p.row }));
+      return engine.getValidDeployPositions().map((p) => ({ col: p.col, row: p.row }));
     },
     playCard: (handIndex: number, col: number, row: number) => {
       const ok = engine.playCard(handIndex, col, row);
@@ -56,17 +56,23 @@ export function createSelectionManager(
     },
     selectTarget: (col: number, row: number) => {
       const unit = getBoardUnit(col, row);
-      if (unit) engine.selectTarget(unit.instanceId);
+      if (unit) {
+        engine.selectTarget(unit.instanceId);
+        SocketManager.sendGameAction({ type: 'SELECT_TARGET', col, row });
+      }
     },
     selectPosition: (col: number, row: number) => {
       engine.selectPosition(col, row);
       SocketManager.sendGameAction({ type: 'SELECT_POSITION', col, row });
     },
     selectHandCard: () => {},
-    cancelPending: () => engine.cancelPending(),
-    isAwaitingInput: () => (engine as any).getState().status === 'AWAITING_INPUT',
+    cancelPending: () => {
+      engine.cancelPending();
+      SocketManager.sendGameAction({ type: 'CANCEL_PENDING' });
+    },
+    isAwaitingInput: () => engine.getState().status === 'AWAITING_INPUT',
     canAct: () => {
-      const state = (engine as any).getState();
+      const state = engine.getState();
       return state.turn?.activePlayer === localPlayerIndex && state.turn?.phase === 'ACT';
     },
     isPlayerUnit: (col: number, row: number) => {
@@ -74,6 +80,6 @@ export function createSelectionManager(
       return unit?.owner === localPlayerIndex;
     },
     isOccupied: (col: number, row: number) => getBoardUnit(col, row) !== null,
-    getPhase: () => (engine as any).getState().turn?.phase ?? 'DRAW',
+    getPhase: () => engine.getState().turn?.phase ?? 'DRAW',
   } as any);
 }

@@ -107,45 +107,76 @@ export class UnitThumbnail {
   // ─────────────────────────────────────────────
 
   setAtk(atk: number | undefined): void {
-    if (this.atkBadgeBg) { this.atkBadgeBg.destroy(); this.atkBadgeBg = null; }
-    if (this.atkBadgeText) { this.atkBadgeText.destroy(); this.atkBadgeText = null; }
-    if (atk === undefined) return;
+    if (atk === undefined) {
+      if (this.atkBadgeBg) this.atkBadgeBg.setVisible(false);
+      if (this.atkBadgeText) this.atkBadgeText.setVisible(false);
+      return;
+    }
 
     const bx = 2, by = this.h - this.bandHeight - 2;
-    this.atkBadgeBg = this.scene.add.graphics();
+    if (!this.atkBadgeBg) {
+      this.atkBadgeBg = this.scene.add.graphics();
+      this.container.add(this.atkBadgeBg);
+    }
+    this.atkBadgeBg.clear();
     this.atkBadgeBg.fillStyle(ThemeLoader.hexToNum(this.atkBadgeColor), 1);
     this.atkBadgeBg.fillRoundedRect(bx, by - this.badgeHeight / 2, this.badgeWidth, this.badgeHeight, 4);
-    this.atkBadgeText = this.scene.add.text(bx + this.badgeWidth / 2, by, String(atk), {
-      fontFamily: this.fontFamily, fontSize: `${this.badgeFontSize}px`, color: '#FFFFFF',
-    }).setOrigin(0.5, 0.5);
-    this.container.add([this.atkBadgeBg, this.atkBadgeText]);
+    this.atkBadgeBg.setVisible(true);
+
+    if (!this.atkBadgeText) {
+      this.atkBadgeText = this.scene.add.text(bx + this.badgeWidth / 2, by, String(atk), {
+        fontFamily: this.fontFamily, fontSize: `${this.badgeFontSize}px`, color: '#FFFFFF',
+      }).setOrigin(0.5, 0.5);
+      this.container.add(this.atkBadgeText);
+    } else {
+      this.atkBadgeText.setText(String(atk));
+      this.atkBadgeText.setVisible(true);
+    }
   }
 
   setDef(currentHP: number | undefined, maxHP: number | undefined): void {
-    if (this.defBadgeBg) { this.defBadgeBg.destroy(); this.defBadgeBg = null; }
-    if (this.defBadgeText) { this.defBadgeText.destroy(); this.defBadgeText = null; }
-    if (currentHP === undefined) return;
+    if (currentHP === undefined) {
+      if (this.defBadgeBg) this.defBadgeBg.setVisible(false);
+      if (this.defBadgeText) this.defBadgeText.setVisible(false);
+      return;
+    }
 
     const bx = this.w - 2 - this.badgeWidth, by = this.h - this.bandHeight - 2;
     const hpPct = (maxHP && maxHP > 0) ? currentHP / maxHP : 1;
     const fillColor = hpPct > 0.5 ? this.defBadgeColor : hpPct > 0.25 ? this.hpMidColor : this.hpLowColor;
 
-    this.defBadgeBg = this.scene.add.graphics();
+    if (!this.defBadgeBg) {
+      this.defBadgeBg = this.scene.add.graphics();
+      this.container.add(this.defBadgeBg);
+    }
+    this.defBadgeBg.clear();
     this.defBadgeBg.fillStyle(ThemeLoader.hexToNum(fillColor), 1);
     this.defBadgeBg.fillRoundedRect(bx, by - this.badgeHeight / 2, this.badgeWidth, this.badgeHeight, 4);
-    this.defBadgeText = this.scene.add.text(bx + this.badgeWidth / 2, by, String(currentHP), {
-      fontFamily: this.fontFamily, fontSize: `${this.badgeFontSize}px`, color: '#FFFFFF',
-    }).setOrigin(0.5, 0.5);
-    this.container.add([this.defBadgeBg, this.defBadgeText]);
+    this.defBadgeBg.setVisible(true);
+
+    if (!this.defBadgeText) {
+      this.defBadgeText = this.scene.add.text(bx + this.badgeWidth / 2, by, String(currentHP), {
+        fontFamily: this.fontFamily, fontSize: `${this.badgeFontSize}px`, color: '#FFFFFF',
+      }).setOrigin(0.5, 0.5);
+      this.container.add(this.defBadgeText);
+    } else {
+      this.defBadgeText.setText(String(currentHP));
+      this.defBadgeText.setVisible(true);
+    }
   }
 
   setCanAct(canAct: boolean): void {
-    if (this.canActGlow) { this.canActGlow.destroy(); this.canActGlow = null; }
-    if (!canAct) return;
-    this.canActGlow = this.scene.add.graphics();
-    this.canActGlow.lineStyle(3, 0xF5A623, 0.9);
-    this.canActGlow.strokeRect(-1, -1, this.w + 2, this.h + 2);
-    this.container.add(this.canActGlow);
+    if (!canAct) {
+      if (this.canActGlow) this.canActGlow.setVisible(false);
+      return;
+    }
+    if (!this.canActGlow) {
+      this.canActGlow = this.scene.add.graphics();
+      this.canActGlow.lineStyle(3, 0xF5A623, 0.9);
+      this.canActGlow.strokeRect(-1, -1, this.w + 2, this.h + 2);
+      this.container.add(this.canActGlow);
+    }
+    this.canActGlow.setVisible(true);
   }
 
 /** Update only the fields that are provided. undefined = no change. */

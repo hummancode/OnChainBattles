@@ -33,8 +33,8 @@ echo.
 echo [1.5/3] Clearing port 3001...
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr :3001') do taskkill /PID %%a /F >nul 2>nul
 echo        Done.
-echo [2/3] Starting Socket.io server on port 3001...
-start "OCB - Socket Server" cmd /k "cd /d %PROJECT_DIR% && node server/index.js"
+echo [2/3] Building & starting Socket.io server on port 3001...
+start "OCB - Socket Server" cmd /k "cd /d %PROJECT_DIR% && npm run server"
 ping -n 3 127.0.0.1 >nul
 
 echo.

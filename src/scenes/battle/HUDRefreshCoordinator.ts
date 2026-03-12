@@ -16,11 +16,11 @@ export function setupHUDRefresh(
   const oppIdx = localPlayerIndex === 0 ? 1 : 0;
 
   const refreshHUD = () => {
-    const state = (engine as any).getState();
+    const state = engine.getState();
     if (!state) return;
 
     const getKingHP = (owner: number) => {
-      const cell = state.board.find((c: any) => c.unit?.cardId === 'king' && c.unit?.owner === owner);
+      const cell = state.board.find((c) => c.unit?.cardId === 'king' && c.unit?.owner === owner);
       return { current: cell?.unit?.currentDef ?? 30, max: cell?.unit?.maxDef ?? 30 };
     };
 

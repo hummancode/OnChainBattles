@@ -27,6 +27,7 @@ import { setupSocketCallbacks } from './battle/NetworkCoordinator';
 import { setupHUDRefresh } from './battle/HUDRefreshCoordinator';
 import { createSelectionManager } from './battle/InputCoordinator';
 import { setupGameOverHandler } from './battle/GameOverHandler';
+import { boardHashFromCells } from '../game/utils/boardHash';
 
 interface BattleSceneData {
   playerName: string;
@@ -44,6 +45,8 @@ export default class BattleScene extends Phaser.Scene {
   private selectionManager!: SelectionManager;
   private sceneData!: BattleSceneData;
   private hudUnsubs: Array<() => void> = [];
+  private bridgeUnsub?: () => void;
+  private gameOverUnsub?: () => void;
 
   constructor() { super('BattleScene'); }
   init(data: BattleSceneData) { this.sceneData = data; }
@@ -70,7 +73,7 @@ export default class BattleScene extends Phaser.Scene {
 
     // ─── Engine + event bridge ────────────────────
     this.engine = new GameEngine();
-    wireEngineToEventBus(this.engine, localPlayerIndex);
+    this.bridgeUnsub = wireEngineToEventBus(this.engine, localPlayerIndex);
 
     // ─── HUD refresh ─────────────────────────────
     this.hudUnsubs = setupHUDRefresh(this.engine, localPlayerIndex, playerName, opponentName);
@@ -103,14 +106,16 @@ export default class BattleScene extends Phaser.Scene {
       if (phase === 'PLAY') {
         this.engine.endPlayPhase();
         SocketManager.sendGameAction({ type: 'END_PLAY_PHASE' });
+        SocketManager.sendStateHash(boardHashFromCells(this.engine.getState().board), this.engine.getState().turn?.turnNumber ?? 0);
       } else if (phase === 'ACT') {
         this.engine.endActPhase();
         SocketManager.sendGameAction({ type: 'END_ACT_PHASE' });
+        SocketManager.sendStateHash(boardHashFromCells(this.engine.getState().board), this.engine.getState().turn?.turnNumber ?? 0);
       }
     });
 
     // ─── Game over ───────────────────────────────
-    setupGameOverHandler(this, this.engine, localPlayerIndex, playerName, opponentName, this.sceneData.isCryptoMode);
+    this.gameOverUnsub = setupGameOverHandler(this, this.engine, localPlayerIndex, playerName, opponentName, this.sceneData.isCryptoMode);
 
     // ─── Network ─────────────────────────────────
     setupSocketCallbacks({
@@ -118,18 +123,31 @@ export default class BattleScene extends Phaser.Scene {
       playerName, opponentName, localPlayerIndex,
     });
 
-    // ─── Start ───────────────────────────────────
-    this.engine.startGame();
-    const v = this.engine.getState();
-    console.log('[BattleScene] Game started —',
-      `P1 hand: ${v.players[0]?.hand?.length ?? '?'}`,
-      `P2 hand: ${v.players[1]?.hand?.length ?? '?'}`,
-      `Board units: ${v.board.filter((c: any) => c.unit).length}`,
-      `Phase: ${v.turn?.phase}`, `Active: P${(v.turn?.activePlayer ?? 0) + 1}`
-    );
+    // ─── Start game after both players are ready ──
+    const startEngine = () => {
+      this.engine.startGame();
+      const v = this.engine.getState();
+      console.log('[BattleScene] Game started —',
+        `P1 hand: ${v.players[0]?.hand?.length ?? '?'}`,
+        `P2 hand: ${v.players[1]?.hand?.length ?? '?'}`,
+        `Board units: ${v.board.filter((c: any) => c.unit).length}`,
+        `Phase: ${v.turn?.phase}`, `Active: P${(v.turn?.activePlayer ?? 0) + 1}`
+      );
+    };
+
+    if (SocketManager.isConnected()) {
+      // Multiplayer: wait for both players to be ready
+      SocketManager.onBothBattleReady(() => startEngine());
+      SocketManager.signalBattleReady();
+    } else {
+      // Single-player / local testing: start immediately
+      startEngine();
+    }
   }
 
   shutdown() {
+    this.bridgeUnsub?.();
+    this.gameOverUnsub?.();
     this.hudUnsubs.forEach(unsub => unsub());
     EventBus.clearAll?.();
     this.boardRenderer?.destroy?.();

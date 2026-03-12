@@ -40,9 +40,13 @@ export function resolveOnDeploy(
       params: (ability as any).params ?? {},
     };
 
-    const result = handler(ctx);
-    combined.events.push(...result.events);
-    if (result.pending && !combined.pending) combined.pending = result.pending;
+    try {
+      const result = handler(ctx);
+      combined.events.push(...result.events);
+      if (result.pending && !combined.pending) combined.pending = result.pending;
+    } catch (err) {
+      console.error(`[AbilityDispatcher] Handler "${key}" threw for card "${cardId}":`, err);
+    }
   }
 
   return combined;
@@ -59,16 +63,20 @@ export function resolveOnDeath(
   const combined: AbilityResult = { events: [] };
 
   for (const ability of def.abilities) {
-    if (ability.type === 'ON_DEATH_DRAW') {
-      if (cause !== 'REFORM') {
-        combined.events.push({
-          type:          'CARD_DRAWN',
-          player:         unit.owner,
-          cardId:         '__DRAW__',
-          handIndex:      -1,
-          deckRemaining:  -1,
-        });
+    try {
+      if (ability.type === 'ON_DEATH_DRAW') {
+        if (cause !== 'REFORM') {
+          combined.events.push({
+            type:          'CARD_DRAWN',
+            player:         unit.owner,
+            cardId:         '__DRAW__',
+            handIndex:      -1,
+            deckRemaining:  -1,
+          });
+        }
       }
+    } catch (err) {
+      console.error(`[AbilityDispatcher] onDeath handler threw for "${unit.cardId}":`, err);
     }
   }
 
@@ -86,20 +94,24 @@ export function resolveOnKill(
   const combined: AbilityResult = { events: [] };
 
   for (const ability of def.abilities) {
-    if (ability.type === 'ON_KILL_LEG_DRAIN') {
-      const { minTargetCost, amount } = (ability as any).params as { minTargetCost: number; amount: number };
-      const victimCost = getCard(victim.cardId).cost;
-      if (victimCost > minTargetCost) {
-        const victimPlayer = victim.owner;
-        const oldRate = mods[victimPlayer].getEffectiveLEGRate();
-        combined.events.push({
-          type:     'LEG_RATE_CHANGED',
-          player:   victimPlayer,
-          oldRate,
-          newRate:  Math.max(1, oldRate - amount),
-          reason:   'INQUISITOR',
-        });
+    try {
+      if (ability.type === 'ON_KILL_LEG_DRAIN') {
+        const { minTargetCost, amount } = (ability as any).params as { minTargetCost: number; amount: number };
+        const victimCost = getCard(victim.cardId).cost;
+        if (victimCost > minTargetCost) {
+          const victimPlayer = victim.owner;
+          const oldRate = mods[victimPlayer].getEffectiveLEGRate();
+          combined.events.push({
+            type:     'LEG_RATE_CHANGED',
+            player:   victimPlayer,
+            oldRate,
+            newRate:  Math.max(1, oldRate - amount),
+            reason:   'INQUISITOR',
+          });
+        }
       }
+    } catch (err) {
+      console.error(`[AbilityDispatcher] onKill handler threw for "${attacker.cardId}":`, err);
     }
   }
 

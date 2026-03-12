@@ -110,19 +110,26 @@ function emitKingThreats(ctx: GameContext): void {
     const king = ctx.board.getKing(p);
     if (!king) continue;
 
-    const threats = ctx.board.getUnitsOf(opponent(p)).filter(u => {
-      const attacks = getValidAttacks(u, ctx.board);
-      return attacks.some(pos =>
-        pos.col === king.position.col && pos.row === king.position.row
-      );
-    });
+    const kc = king.position.col, kr = king.position.row;
+    const threatIds: string[] = [];
 
-    if (threats.length > 0) {
+    for (const u of ctx.board.getUnitsOf(opponent(p))) {
+      if (!u.isActive) continue;
+      const attacks = getValidAttacks(u, ctx.board);
+      for (const pos of attacks) {
+        if (pos.col === kc && pos.row === kr) {
+          threatIds.push(u.instanceId);
+          break; // one match per unit is enough
+        }
+      }
+    }
+
+    if (threatIds.length > 0) {
       ctx.emit({
         type: 'KING_THREATENED',
         kingInstanceId: king.instanceId,
         kingPlayer: p,
-        attackerInstanceIds: threats.map(u => u.instanceId),
+        attackerInstanceIds: threatIds,
       });
     }
   }

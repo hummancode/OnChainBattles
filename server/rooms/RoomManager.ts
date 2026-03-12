@@ -3,20 +3,52 @@
 // Room CRUD and player tracking.
 // ============================================================
 
+import { randomInt } from 'crypto';
 import type { Room } from '../../shared/types/NetworkEvents.js';
+import { Logger } from '../utils/Logger.js';
+
+const log = new Logger('RoomManager');
 
 export class RoomManager {
   private rooms = new Map<string, Room>();
+  private static readonly STALE_ROOM_MS = 2 * 60 * 60 * 1000; // 2 hours
+  private cleanupTimer: ReturnType<typeof setInterval>;
+
+  constructor() {
+    // Sweep stale rooms every 10 minutes
+    this.cleanupTimer = setInterval(() => this.sweepStaleRooms(), 10 * 60 * 1000);
+  }
+
+  private sweepStaleRooms(): void {
+    const now = Date.now();
+    for (const [code, room] of this.rooms) {
+      if (now - room.createdAt > RoomManager.STALE_ROOM_MS) {
+        log.info(`Sweeping stale room: ${code} (age: ${Math.round((now - room.createdAt) / 60_000)}m)`);
+        this.deleteRoom(code);
+      }
+    }
+  }
 
   createRoom(socketId: string, roomCode: string, playerName: string): Room {
     const room: Room = {
       players: [{ id: socketId, name: playerName, wallet: null }],
       gameSeed: null,
       cryptoReadyCount: 0,
+      battleReadyCount: 0,
+      actionQueue: [],
       settled: false,
+      currentTurnPlayer: 0,
+      currentPhase: 'PLAY',
+      actionCount: 0,
+      gameOverClaims: [],
+      lastSeqNum: [0, 0],
+      globalSeq: 0,
+      pendingHashes: new Map(),
+      disconnectTimers: new Map(),
+      createdAt: Date.now(),
     };
     this.rooms.set(roomCode, room);
-    console.log(`[RoomManager] Room created: ${roomCode} by ${playerName}`);
+    log.info(` Room created: ${roomCode} by ${playerName}`);
     return room;
   }
 
@@ -27,11 +59,11 @@ export class RoomManager {
 
     room.players.push({ id: socketId, name: playerName, wallet: null });
 
-    // Generate shared shuffle seed
-    const seed = Math.floor(Math.random() * 999999);
+    // Generate shared shuffle seed (32-bit, cryptographically random)
+    const seed = randomInt(0, 2 ** 32);
     room.gameSeed = seed;
 
-    console.log(`[RoomManager] ${playerName} joined room: ${roomCode}, seed: ${seed}`);
+    log.info(` ${playerName} joined room: ${roomCode}, seed: ${seed}`);
     return room;
   }
 
@@ -45,7 +77,7 @@ export class RoomManager {
     const player = room.players.find(p => p.id === socketId);
     if (player) {
       player.wallet = walletAddress;
-      console.log(`[RoomManager] Wallet registered for ${player.name}: ${walletAddress}`);
+      log.info(` Wallet registered for ${player.name}: ${walletAddress}`);
     }
   }
 
@@ -53,7 +85,7 @@ export class RoomManager {
     const room = this.rooms.get(roomCode);
     if (!room) return 0;
     room.cryptoReadyCount += 1;
-    console.log(`[RoomManager] cryptoReady: ${room.cryptoReadyCount}/2 in room ${roomCode}`);
+    log.info(` cryptoReady: ${room.cryptoReadyCount}/2 in room ${roomCode}`);
     return room.cryptoReadyCount;
   }
 
@@ -73,7 +105,30 @@ export class RoomManager {
     return null;
   }
 
+  /** Reassign a player's socket ID (after reconnection). Returns player index or -1. */
+  reassignSocket(roomCode: string, playerName: string, newSocketId: string): number {
+    const room = this.rooms.get(roomCode);
+    if (!room) return -1;
+    const idx = room.players.findIndex(p => p.name === playerName);
+    if (idx === -1) return -1;
+    room.players[idx].id = newSocketId;
+    log.info(` Reassigned ${playerName} in ${roomCode} → socket ${newSocketId}`);
+    return idx;
+  }
+
+  dispose(): void {
+    clearInterval(this.cleanupTimer);
+  }
+
   deleteRoom(roomCode: string): void {
+    const room = this.rooms.get(roomCode);
+    if (room) {
+      // Clear any pending disconnect grace timers to avoid dangling callbacks
+      for (const timer of room.disconnectTimers.values()) {
+        clearTimeout(timer);
+      }
+      room.disconnectTimers.clear();
+    }
     this.rooms.delete(roomCode);
   }
 }

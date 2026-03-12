@@ -22,6 +22,10 @@ scripts/generate_placeholder_assets.py
 
 # The digest file itself
 codebase.md
+context/codebase.md
+
+# Context docs - already readable, no need to duplicate
+context/**
 
 # This script itself
 code_gen.bat

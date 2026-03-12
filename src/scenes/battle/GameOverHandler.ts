@@ -15,12 +15,12 @@ export function setupGameOverHandler(
   playerName: string,
   opponentName: string,
   isCryptoMode: boolean,
-): void {
-  EventBus.on(EV.GAME_OVER, (ev: any) => {
+): () => void {
+  const unsub = EventBus.on(EV.GAME_OVER, (ev: any) => {
     if (!scene.scene.isActive('BattleScene')) return;
 
     const result = ev.result ?? ev;
-    const turnCount = result?.turns ?? (engine as any).getState().turn?.turnNumber ?? 0;
+    const turnCount = result?.turns ?? engine.getState().turn?.turnNumber ?? 0;
     const reason = result?.reason ?? 'KING_DESTROYED';
     const playerWon = (result?.winner ?? ev.winner) === localPlayerIndex;
 
@@ -40,4 +40,5 @@ export function setupGameOverHandler(
       scene.cameras.main.once('camerafadeoutcomplete', () => scene.scene.start('ResultScene'));
     });
   });
+  return unsub;
 }

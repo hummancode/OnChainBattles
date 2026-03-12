@@ -18,6 +18,8 @@ import Phaser from 'phaser';
 import GameState, { GameMode } from '../GameState';
 
 export default class ResultScene extends Phaser.Scene {
+  private autoReturnTimer?: Phaser.Time.TimerEvent;
+
   constructor() {
     super('ResultScene');
   }
@@ -225,10 +227,17 @@ export default class ResultScene extends Phaser.Scene {
   }
 
   private addAutoReturn(): void {
-    this.time.delayedCall(15000, () => {
+    this.autoReturnTimer = this.time.delayedCall(15000, () => {
       if (!this.scene.isActive('ResultScene')) return;
       this.goToMenu();
     });
+  }
+
+  shutdown(): void {
+    if (this.autoReturnTimer) {
+      this.autoReturnTimer.destroy();
+      this.autoReturnTimer = undefined;
+    }
   }
 
   private goToMenu(): void {

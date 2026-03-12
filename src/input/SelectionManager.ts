@@ -60,6 +60,8 @@ export class SelectionManager {
   // Track what kind of pending interaction is active
   private pendingKind: 'TARGET' | 'POSITION' | 'COLUMN' | 'DISCARD' | null = null;
   private pendingValidPositions: Array<{ col: number; row: number }> = [];
+  /** Cached attack range for currently selected unit (avoids redundant recalculation). */
+  private cachedAttackRange: Array<{ col: number; row: number }> = [];
 
   private unsubs: Array<() => void> = [];
 
@@ -168,6 +170,7 @@ export class SelectionManager {
       validDeploy: [],
       mode: 'idle',
     };
+    this.cachedAttackRange = [];
 
     EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
       moves: [],
@@ -219,7 +222,7 @@ export class SelectionManager {
     // Select this unit
    const moves       = this.engine.getValidMoves(col, row);
 const attacks     = this.engine.getValidAttacks(col, row);
-const attackRange = this.engine.getAttackRange(col, row);
+this.cachedAttackRange = this.engine.getAttackRange(col, row);
 
 this.state = {
   ...this.state,
@@ -326,14 +329,10 @@ this.state = {
 
   /** Publish current highlights to EventBus so BoardRenderer reacts. */
 private publishHighlights(): void {
-  const attackRange = (this.state.selectedBoardCol !== null && this.state.selectedBoardRow !== null)
-    ? this.engine.getAttackRange(this.state.selectedBoardCol, this.state.selectedBoardRow)
-    : [];
-
   EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
     moves:       this.state.validMoves,
     attacks:     this.state.validAttacks,
-    attackRange: attackRange,
+    attackRange: this.cachedAttackRange,
     deploy:      this.state.validDeploy,
     auras:       [],
   });

@@ -57,6 +57,10 @@ echo Creating .aidigestignore...
     echo.
     echo # The digest file itself
     echo codebase.md
+    echo context/codebase.md
+    echo.
+    echo # Context docs - already readable, no need to duplicate
+    echo context/**
     echo.
     echo # This script itself
     echo code_gen.bat
@@ -81,15 +85,7 @@ echo.
 
 npx ai-digest
 
-if %ERRORLEVEL% EQU 0 (
-    echo.
-    echo ================================================
-    echo SUCCESS! codebase.md has been generated.
-    echo ================================================
-    echo.
-    echo You can now find the codebase.md file in your project directory.
-    echo.
-) else (
+if %ERRORLEVEL% NEQ 0 (
     echo.
     echo ================================================
     echo ERROR: Failed to generate codebase.md
@@ -97,6 +93,20 @@ if %ERRORLEVEL% EQU 0 (
     echo.
     echo Please check the error messages above.
     echo.
+    pause
+    exit /b 1
 )
+
+echo.
+echo codebase.md generated. Moving to context/...
+if exist "codebase.md" (
+    move /Y codebase.md context\codebase.md >nul
+)
+
+echo.
+echo ================================================
+echo SUCCESS! context\codebase.md is up to date.
+echo ================================================
+echo.
 
 pause

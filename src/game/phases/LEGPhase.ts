@@ -74,12 +74,10 @@ export function runLEGPhase(ctx: GameContext): void {
   // 7. Activate BUILD_DELAY units
   runBuildDelayActivation(ctx, ap);
 
-  // 8. Evaluate auras (stat buffs from Commander, Pikeman, etc.)
+  // 8+9. Evaluate auras (stat buffs) + recalculate modifiers (LEG rate, Royal discount)
+  // Single call — evaluateAuras handles both stats AND economy processors.
   const auraEvent = ctx.auras.evaluateAuras(ctx.board, ctx.mods);
   if (auraEvent.changes.length > 0) ctx.emit(auraEvent);
-
-  // 9. Recalculate modifiers (LEG rate bonus, Royal discount)
-  ctx.auras.recalculateModifiers(ctx.board, ctx.mods);
 
   // Advance to PLAY phase
   ctx.phase = TurnPhase.PLAY;
@@ -91,17 +89,13 @@ export function runLEGPhase(ctx: GameContext): void {
 // ─────────────────────────────────────────────
 
 function runAutoHeals(ctx: GameContext, ap: number): void {
-  const healUnits = ctx.board.getUnitsOf(ap).filter(u =>
-    u.isActive && getCard(u.cardId).abilities.some(
-      (a: any) => a.type === 'AURA_AUTO_HEAL'
-    )
-  );
-
-  for (const unit of healUnits) {
+  for (const unit of ctx.board.getUnitsOf(ap)) {
+    if (!unit.isActive) continue;
     const ability = getCard(unit.cardId).abilities.find(
       (a: any) => a.type === 'AURA_AUTO_HEAL'
     ) as any;
-    const amount = ability?.params?.amount ?? 2;
+    if (!ability) continue;
+    const amount = ability.params?.amount ?? 2;
     const healEvents = applyAutoHeal(unit, amount);
     ctx.applyEvents(healEvents);
   }
