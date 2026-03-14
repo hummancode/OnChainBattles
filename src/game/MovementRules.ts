@@ -136,7 +136,73 @@ export function isLancerForwardMove(unit: Unit, toRow: number): boolean {
 
 // ═══════════════════════════════════════════════════════
 // CUSTOM PATTERN RESOLVER
+//
+// Path-blocking rules (when canJump = false):
+//   - Adjacent offsets (|dx|≤1 AND |dy|≤1): no intermediates to check.
+//   - Decomposable offsets (gcd(|dx|,|dy|) ≥ 2, e.g. {-2,-2}, {0,-2}):
+//     Single clear path exists. Trace step-by-step along {dx/gcd, dy/gcd}.
+//     Blocked if ANY intermediate is occupied.
+//   - L-shaped offsets (gcd=1, distance > 1, e.g. {-1,-2}, {2,-1}):
+//     Multiple paths through the bounding rectangle. Check ALL cells in
+//     the rectangle (excluding start + destination). Blocked only if
+//     EVERY intermediate cell is occupied — meaning no path exists.
+//     Example: (0,0)→(1,2) checks (0,1),(1,0),(1,1),(0,2).
 // ═══════════════════════════════════════════════════════
+
+/**
+ * GCD for decomposing offsets into traceable steps.
+ * gcd(0, n) = n, gcd(a, b) = gcd(b, a%b).
+ */
+function gcd(a: number, b: number): number {
+  a = Math.abs(a); b = Math.abs(b);
+  while (b) { [a, b] = [b, a % b]; }
+  return a;
+}
+
+/**
+ * Check if the path from (col, row) to (col+dx, row+dy) is clear.
+ * Only checks intermediate squares — NOT the destination itself.
+ * Returns true if the path is clear.
+ */
+function isPathClear(col: number, row: number, dx: number, dy: number, board: Board): boolean {
+  const dist = Math.max(Math.abs(dx), Math.abs(dy));
+  if (dist <= 1) return true; // adjacent — no intermediates
+
+  const g = gcd(dx, dy);
+
+  if (g >= 2) {
+    // Decomposable (straight/diagonal): single path, ANY blocker stops it
+    const sdx = dx / g;
+    const sdy = dy / g;
+    for (let s = 1; s < g; s++) {
+      const ic = col + sdx * s;
+      const ir = row + sdy * s;
+      if (board.isInBounds(ic, ir) && board.getUnit(ic, ir) !== null) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // L-shaped: multiple paths through bounding rectangle.
+  // Blocked only if ALL intermediate cells are occupied.
+  const minC = Math.min(0, dx), maxC = Math.max(0, dx);
+  const minR = Math.min(0, dy), maxR = Math.max(0, dy);
+
+  for (let dc = minC; dc <= maxC; dc++) {
+    for (let dr = minR; dr <= maxR; dr++) {
+      if (dc === 0 && dr === 0) continue;       // skip origin
+      if (dc === dx && dr === dy) continue;      // skip destination
+      const ic = col + dc;
+      const ir = row + dr;
+      if (!board.isInBounds(ic, ir)) continue;
+      if (board.getUnit(ic, ir) === null) {
+        return true; // at least one cell is free — path exists
+      }
+    }
+  }
+  return false; // every intermediate cell is occupied — fully blocked
+}
 
 function resolveCustomPattern(
   unit: Unit, pattern: CustomPattern, board: Board, isAttack: boolean,
@@ -151,9 +217,14 @@ function resolveCustomPattern(
 
   for (const offset of pattern.offsets) {
     for (let step = 1; step <= range; step++) {
-      const nc = col + offset.dx * step;
-      const nr = row + (offset.dy * dySign) * step;
+      const dx = offset.dx * step;
+      const dy = (offset.dy * dySign) * step;
+      const nc = col + dx;
+      const nr = row + dy;
       if (!board.isInBounds(nc, nr)) break;
+
+      // Path blocking: check intermediate squares (unless canJump)
+      if (!canJump && !isPathClear(col, row, dx, dy, board)) break;
 
       const occupant = board.getUnit(nc, nr);
 
@@ -185,9 +256,13 @@ function resolvePatternRange(unit: Unit, pattern: CustomPattern, board: Board): 
 
   for (const offset of pattern.offsets) {
     for (let step = 1; step <= range; step++) {
-      const nc = col + offset.dx * step;
-      const nr = row + (offset.dy * dySign) * step;
+      const dx = offset.dx * step;
+      const dy = (offset.dy * dySign) * step;
+      const nc = col + dx;
+      const nr = row + dy;
       if (!board.isInBounds(nc, nr)) break;
+      // For range display: show square but stop extending if path blocked
+      if (!canJump && !isPathClear(col, row, dx, dy, board)) break;
       results.push({ col: nc, row: nr });
       if (board.getUnit(nc, nr) && !canJump) break;
     }

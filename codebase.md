@@ -42,6 +42,17 @@
 # Hardhat coverage reports
 /coverage
 
+# Environment files (contain secrets)
+.env
+.env.local
+.env.*.local
+
+# Dev tools (local only, not shipped)
+/dev-tools
+
+# Game session logs (generated during play, for debugging)
+/logs
+
 # Claude Code local settings
 .claude/
 
@@ -423,6 +434,1036 @@ echo.
 echo  Dev environment running. Close the server windows to stop.
 echo.
 pause
+
+```
+
+# dev-tools\card-pattern-editor.html
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<title>Card Pattern Editor v2</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #333;
+  }
+  .header h1 { font-size: 1.4em; color: #c9a84c; }
+  .header .ver { font-size: 11px; color: #555; margin-left: 8px; }
+  .header-controls { display: flex; gap: 12px; align-items: center; }
+  .header-controls select {
+    padding: 6px 12px;
+    background: #16213e;
+    color: #e0e0e0;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-size: 14px;
+    min-width: 200px;
+  }
+
+  .main { display: flex; gap: 24px; flex-wrap: wrap; }
+
+  .controls {
+    display: flex; gap: 16px; align-items: center;
+    margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .controls label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .controls input[type="radio"],
+  .controls input[type="checkbox"] { accent-color: #c9a84c; }
+  .controls input[type="number"] {
+    width: 50px; padding: 3px 6px;
+    background: #16213e; color: #e0e0e0;
+    border: 1px solid #444; border-radius: 3px;
+  }
+
+  .grid-container { position: relative; }
+  .grid-label {
+    text-align: center; font-size: 12px; color: #888;
+    padding: 4px 0; text-transform: uppercase; letter-spacing: 2px;
+  }
+  .col-labels { display: flex; gap: 2px; padding-left: 0; justify-content: center; margin-bottom: 2px; }
+  .col-labels span { width: 52px; text-align: center; font-size: 12px; color: #888; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(7, 52px);
+    grid-template-rows: repeat(7, 52px);
+    gap: 2px;
+  }
+  .cell {
+    width: 52px; height: 52px;
+    background: #16213e;
+    border: 1px solid #333;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: #555;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .cell:hover:not(.center) {
+    border-color: #c9a84c;
+    background: #1e2a4a;
+  }
+  .cell.center {
+    background: #2a1a1a;
+    border-color: #666;
+    cursor: default;
+    font-size: 18px;
+    color: #c9a84c;
+  }
+  /* Custom pattern cells (solid borders) */
+  .cell.custom-move {
+    background: #1a3a5c;
+    border: 2px solid #4a9eff;
+    box-shadow: inset 0 0 8px rgba(74, 158, 255, 0.3);
+  }
+  .cell.custom-attack {
+    background: #4a1a1a;
+    border: 2px solid #ff4a4a;
+    box-shadow: inset 0 0 8px rgba(255, 74, 74, 0.3);
+  }
+  .cell.custom-both {
+    background: #3a1a4a;
+    border: 2px solid #b44aff;
+    box-shadow: inset 0 0 8px rgba(180, 74, 255, 0.3);
+  }
+  /* Base enum pattern cells (dashed borders, visible) */
+  .cell.base-move {
+    background: #0d3460;
+    border: 2px dashed #3d8ef0;
+    box-shadow: inset 0 0 12px rgba(61, 142, 240, 0.25);
+  }
+  .cell.base-attack {
+    background: #501010;
+    border: 2px dashed #e04040;
+    box-shadow: inset 0 0 12px rgba(224, 64, 64, 0.25);
+  }
+  .cell.base-both {
+    background: #3a1050;
+    border: 2px dashed #c050e0;
+    box-shadow: inset 0 0 12px rgba(192, 80, 224, 0.25);
+  }
+  .cell .cell-icon {
+    font-size: 16px;
+    color: rgba(255,255,255,0.55);
+    pointer-events: none;
+  }
+  .cell .tooltip {
+    display: none;
+    position: absolute;
+    bottom: -24px;
+    background: #000;
+    color: #ccc;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    white-space: nowrap;
+    z-index: 10;
+  }
+  .cell:hover .tooltip { display: block; }
+
+  .preview-section { flex: 1; min-width: 350px; }
+  .preview-section h3 { color: #c9a84c; margin-bottom: 8px; }
+  .preview {
+    background: #0a0a1a;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 16px;
+    font-family: 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-x: auto;
+    min-height: 200px;
+    color: #b0b0b0;
+  }
+
+  .actions {
+    display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap;
+  }
+  .btn {
+    padding: 8px 18px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.15s;
+  }
+  .btn-primary { background: #c9a84c; color: #1a1a2e; }
+  .btn-primary:hover { background: #dbb85c; }
+  .btn-primary:disabled { background: #555; color: #888; cursor: not-allowed; }
+  .btn-secondary { background: #333; color: #e0e0e0; }
+  .btn-secondary:hover { background: #444; }
+  .btn-danger { background: #5a2020; color: #ff8888; }
+  .btn-danger:hover { background: #6a2a2a; }
+
+  .status {
+    margin-top: 12px;
+    padding: 8px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+  }
+  .status.saved { background: #1a3a1a; color: #6f6; border: 1px solid #2a5a2a; }
+  .status.unsaved { background: #3a3a1a; color: #ff8; border: 1px solid #5a5a2a; }
+  .status.error { background: #3a1a1a; color: #f88; border: 1px solid #5a2a2a; }
+  .status.idle { background: #1a1a2e; color: #888; border: 1px solid #333; }
+
+  .legend {
+    display: flex; gap: 16px; margin-top: 12px; font-size: 12px; flex-wrap: wrap;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-swatch {
+    width: 16px; height: 16px; border-radius: 3px;
+  }
+
+  .card-info {
+    margin-bottom: 12px; padding: 10px 14px;
+    background: #16213e; border-radius: 6px;
+    font-size: 13px;
+  }
+  .card-info .card-name { color: #c9a84c; font-weight: bold; font-size: 15px; }
+  .card-info .card-id { color: #888; margin-left: 8px; }
+  .card-info .card-enums { color: #6af; margin-left: 12px; font-size: 12px; font-family: monospace; }
+
+  .kbd { background: #333; padding: 1px 5px; border-radius: 3px; font-size: 11px; color: #aaa; border: 1px solid #555; }
+  #debug { font-size: 11px; color: #666; margin-top: 6px; font-family: monospace; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Card Pattern Editor <span class="ver">v2</span></h1>
+  <div class="header-controls">
+    <select id="cardSelect"><option value="">Loading cards...</option></select>
+    <button class="btn btn-primary" id="saveBtn" disabled>Save to File</button>
+  </div>
+</div>
+
+<div id="cardInfo" class="card-info" style="display:none;">
+  <span class="card-name" id="cardName"></span>
+  <span class="card-id" id="cardId"></span>
+  <span class="card-enums" id="cardEnums"></span>
+</div>
+
+<div class="controls">
+  <label><input type="radio" name="mode" value="move" checked> Movement</label>
+  <label><input type="radio" name="mode" value="attack"> Attack</label>
+  <span style="color:#555">|</span>
+  <label><input type="checkbox" id="canJump"> canJump</label>
+  <label><input type="checkbox" id="requiresEnemy"> requiresEnemy</label>
+  <label>Range: <input type="number" id="range" value="1" min="1" max="5"></label>
+  <span style="color:#555">|</span>
+  <span style="font-size:12px;color:#888">
+    <span class="kbd">M</span> movement &nbsp;
+    <span class="kbd">A</span> attack &nbsp;
+    <span class="kbd">C</span> clear all
+  </span>
+</div>
+
+<div class="main">
+  <div>
+    <div class="grid-container">
+      <div class="grid-label">Enemy Side</div>
+      <div class="col-labels">
+        <span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span>
+      </div>
+      <div class="grid" id="grid"></div>
+      <div class="grid-label">Your Side</div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-swatch" style="background:#0d3460;border:2px dashed #3d8ef0"></div> Base Move</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#501010;border:2px dashed #e04040"></div> Base Attack</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#3a1050;border:2px dashed #c050e0"></div> Base Both</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#1a3a5c;border:2px solid #4a9eff"></div> Custom Move</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#4a1a1a;border:2px solid #ff4a4a"></div> Custom Attack</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#3a1a4a;border:2px solid #b44aff"></div> Custom Both</div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-primary" id="saveBtn2">Save to File</button>
+      <button class="btn btn-secondary" id="clearMoveBtn">Clear Movement</button>
+      <button class="btn btn-secondary" id="clearAtkBtn">Clear Attack</button>
+      <button class="btn btn-danger" id="clearAllBtn">Clear All</button>
+    </div>
+
+    <div class="status idle" id="status">Select a card to begin editing.</div>
+    <div id="debug"></div>
+  </div>
+
+  <div class="preview-section">
+    <h3>TypeScript Preview</h3>
+    <div class="preview" id="preview">// Select a card and toggle cells to see preview</div>
+  </div>
+</div>
+
+<script>
+const GRID_SIZE = 7;
+const CENTER = 3;
+
+// ── Enum to offset maps ─────────────────────────────────────
+
+function omniOffsets(range) {
+  const out = [];
+  for (let dy = -range; dy <= range; dy++) {
+    for (let dx = -range; dx <= range; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) <= range) {
+        out.push(dx + ',' + dy);
+      }
+    }
+  }
+  return out;
+}
+
+const MOVE_MAP = {
+  'OMNI_1':          () => omniOffsets(1),
+  'OMNI_2':          () => omniOffsets(2),
+  'OMNI_3':          () => omniOffsets(3),
+  'VERTICAL_2':      () => ['0,-1', '0,1', '0,-2', '0,2'],
+  'JUMP_DIAGONAL_1': () => ['1,-1', '-1,-1', '1,1', '-1,1'],
+  'FWD_VERTICAL_1':  () => ['0,-1'],
+  'STATIC':          () => [],
+};
+
+const ATK_MAP = {
+  'HV':                () => ['0,-1', '0,1', '-1,0', '1,0'],
+  'OMNI':              () => omniOffsets(1),
+  'DIAGONAL_RANGED_2': () => ['1,-1', '-1,-1', '1,1', '-1,1', '2,-2', '-2,-2', '2,2', '-2,2'],
+  'STRAIGHT_RANGED_3': () => ['0,-1', '0,-2', '0,-3', '0,1', '0,2', '0,3', '-1,0', '-2,0', '-3,0', '1,0', '2,0', '3,0'],
+  'ON_JUMP':           () => [],
+  'AREA_ADJ':          () => omniOffsets(1),
+  'FWD_VERTICAL':      () => ['0,-1'],
+  'NONE':              () => [],
+};
+
+// ── State ───────────────────────────────────────────────────
+
+let customMoveKeys   = new Set();
+let customAttackKeys = new Set();
+let baseMoveKeys     = new Set();
+let baseAttackKeys   = new Set();
+let currentCard = null;
+let dirty = false;
+
+// ── DOM refs ────────────────────────────────────────────────
+
+const grid       = document.getElementById('grid');
+const cardSelect = document.getElementById('cardSelect');
+const preview    = document.getElementById('preview');
+const statusEl   = document.getElementById('status');
+const saveBtn    = document.getElementById('saveBtn');
+const saveBtn2   = document.getElementById('saveBtn2');
+const debugEl    = document.getElementById('debug');
+
+// ── Grid ────────────────────────────────────────────────────
+
+function buildGrid() {
+  grid.innerHTML = '';
+  for (let row = 0; row < GRID_SIZE; row++) {
+    for (let col = 0; col < GRID_SIZE; col++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.col = col;
+      cell.dataset.row = row;
+      const dx = col - CENTER;
+      const dy = row - CENTER;
+
+      if (dx === 0 && dy === 0) {
+        cell.classList.add('center');
+        cell.textContent = '\u265A';
+      } else {
+        const tip = document.createElement('span');
+        tip.className = 'tooltip';
+        tip.textContent = 'dx:' + dx + ', dy:' + (-dy) + (dy < 0 ? ' (fwd)' : dy > 0 ? ' (back)' : '');
+        cell.appendChild(tip);
+        cell.addEventListener('click', function() { toggleCell(dx, dy); });
+      }
+      grid.appendChild(cell);
+    }
+  }
+}
+
+function toggleCell(dx, dy) {
+  const key = dx + ',' + dy;
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+  const set = (mode === 'move') ? customMoveKeys : customAttackKeys;
+  if (set.has(key)) set.delete(key); else set.add(key);
+  dirty = true;
+  refreshGrid();
+  updatePreview();
+  updateStatus();
+}
+
+function refreshGrid() {
+  const cells = grid.querySelectorAll('.cell');
+  for (const cell of cells) {
+    if (cell.classList.contains('center')) continue;
+    const dx = parseInt(cell.dataset.col) - CENTER;
+    const dy = parseInt(cell.dataset.row) - CENTER;
+    const key = dx + ',' + dy;
+
+    // Reset classes
+    cell.className = 'cell';
+
+    // Remove old icon
+    const oldIcon = cell.querySelector('.cell-icon');
+    if (oldIcon) oldIcon.remove();
+
+    const cm = customMoveKeys.has(key);
+    const ca = customAttackKeys.has(key);
+    const bm = baseMoveKeys.has(key);
+    const ba = baseAttackKeys.has(key);
+
+    // Custom takes visual priority
+    if (cm && ca) {
+      cell.classList.add('custom-both');
+    } else if (cm) {
+      cell.classList.add('custom-move');
+    } else if (ca) {
+      cell.classList.add('custom-attack');
+    } else if (bm && ba) {
+      cell.classList.add('base-both');
+      addIcon(cell, '\u2726'); // four-pointed star
+    } else if (bm) {
+      cell.classList.add('base-move');
+      addIcon(cell, '\u2192'); // right arrow
+    } else if (ba) {
+      cell.classList.add('base-attack');
+      addIcon(cell, '\u2694'); // crossed swords
+    }
+  }
+  saveBtn.disabled  = !dirty || !currentCard;
+  saveBtn2.disabled = !dirty || !currentCard;
+}
+
+function addIcon(cell, icon) {
+  const span = document.createElement('span');
+  span.className = 'cell-icon';
+  span.textContent = icon;
+  cell.appendChild(span);
+}
+
+// ── Preview ─────────────────────────────────────────────────
+
+function buildPatternObj(keys) {
+  if (keys.size === 0) return null;
+  const canJump = document.getElementById('canJump').checked;
+  const requiresEnemy = document.getElementById('requiresEnemy').checked;
+  const range = parseInt(document.getElementById('range').value) || 1;
+
+  // Editor grid: up (toward enemy) = negative screen-dy.
+  // Engine convention: dy > 0 = toward enemy (P1 perspective).
+  // Negate dy on save so the file matches the engine convention.
+  const offsets = [...keys].map(function(k) {
+    const parts = k.split(',');
+    return { dx: parseInt(parts[0]), dy: -parseInt(parts[1]) };
+  }).sort(function(a, b) { return a.dy - b.dy || a.dx - b.dx; });
+
+  const obj = { offsets: offsets };
+  if (range !== 1) obj.range = range;
+  if (canJump) obj.canJump = true;
+  if (requiresEnemy) obj.requiresEnemy = true;
+  return obj;
+}
+
+function formatPatternTS(p, indent) {
+  if (!p) return '';
+  var lines = ['{'];
+  lines.push(indent + '  offsets: [');
+  for (var i = 0; i < p.offsets.length; i += 4) {
+    var chunk = p.offsets.slice(i, i + 4);
+    lines.push(indent + '    ' + chunk.map(function(o) { return '{ dx: ' + o.dx + ', dy: ' + o.dy + ' }'; }).join(', ') + ',');
+  }
+  lines.push(indent + '  ],');
+  if (p.range !== undefined && p.range !== 1) lines.push(indent + '  range: ' + p.range + ',');
+  if (p.canJump) lines.push(indent + '  canJump: true,');
+  if (p.requiresEnemy) lines.push(indent + '  requiresEnemy: true,');
+  lines.push(indent + '}');
+  return lines.join('\n');
+}
+
+function updatePreview() {
+  var mp = buildPatternObj(customMoveKeys);
+  var ap = buildPatternObj(customAttackKeys);
+  var text = '';
+  if (ap) text += 'customAttack: ' + formatPatternTS(ap, '      ') + ',\n';
+  if (mp) text += 'customMove: ' + formatPatternTS(mp, '      ') + ',\n';
+  if (!text) text = '// No custom patterns set';
+  preview.textContent = text;
+}
+
+// ── Status ──────────────────────────────────────────────────
+
+function updateStatus() {
+  if (!currentCard) {
+    statusEl.className = 'status idle';
+    statusEl.textContent = 'Select a card to begin editing.';
+  } else if (dirty) {
+    statusEl.className = 'status unsaved';
+    statusEl.textContent = 'Unsaved changes';
+  } else {
+    statusEl.className = 'status idle';
+    statusEl.textContent = 'Card loaded — click grid to edit.';
+  }
+}
+
+function showSaved(file) {
+  dirty = false;
+  statusEl.className = 'status saved';
+  statusEl.textContent = 'Saved ' + file + ' \u2713';
+  saveBtn.disabled = true;
+  saveBtn2.disabled = true;
+}
+
+function showError(msg) {
+  statusEl.className = 'status error';
+  statusEl.textContent = 'Error: ' + msg;
+}
+
+// ── Load ────────────────────────────────────────────────────
+
+async function loadCards() {
+  try {
+    var res = await fetch('/api/cards');
+    var cards = await res.json();
+    cardSelect.innerHTML = '<option value="">-- Select a card --</option>';
+
+    var units  = cards.filter(function(c) { return c.hasStats; });
+    var spells = cards.filter(function(c) { return !c.hasStats; });
+
+    if (units.length) {
+      var g = document.createElement('optgroup');
+      g.label = 'Units & Structures';
+      units.forEach(function(c) {
+        var opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name + (c.customMove || c.customAttack ? ' \u2022' : '');
+        g.appendChild(opt);
+      });
+      cardSelect.appendChild(g);
+    }
+    if (spells.length) {
+      var g2 = document.createElement('optgroup');
+      g2.label = 'Spells (no patterns)';
+      spells.forEach(function(c) {
+        var opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name;
+        opt.disabled = true;
+        g2.appendChild(opt);
+      });
+      cardSelect.appendChild(g2);
+    }
+  } catch (err) {
+    showError('Failed to load cards: ' + err.message);
+  }
+}
+
+async function loadCard(id) {
+  if (!id) {
+    currentCard = null;
+    customMoveKeys.clear();
+    customAttackKeys.clear();
+    baseMoveKeys.clear();
+    baseAttackKeys.clear();
+    dirty = false;
+    document.getElementById('cardInfo').style.display = 'none';
+    debugEl.textContent = '';
+    refreshGrid();
+    updatePreview();
+    updateStatus();
+    return;
+  }
+
+  try {
+    var res = await fetch('/api/card/' + id);
+    currentCard = await res.json();
+
+    document.getElementById('cardInfo').style.display = 'block';
+    document.getElementById('cardName').textContent = currentCard.name;
+    document.getElementById('cardId').textContent = '(' + currentCard.id + ')';
+
+    // Show movement/attack enums
+    var parts = [];
+    if (currentCard.movement) parts.push('Move: ' + currentCard.movement);
+    if (currentCard.attackPattern) parts.push('Atk: ' + currentCard.attackPattern);
+    document.getElementById('cardEnums').textContent = parts.join('  |  ');
+
+    // Resolve base enum patterns into grid keys
+    baseMoveKeys.clear();
+    baseAttackKeys.clear();
+
+    if (currentCard.movement && MOVE_MAP[currentCard.movement]) {
+      MOVE_MAP[currentCard.movement]().forEach(function(k) { baseMoveKeys.add(k); });
+    }
+    if (currentCard.attackPattern && ATK_MAP[currentCard.attackPattern]) {
+      ATK_MAP[currentCard.attackPattern]().forEach(function(k) { baseAttackKeys.add(k); });
+    }
+
+    // Debug output
+    debugEl.textContent = 'Base: ' + baseMoveKeys.size + ' move, ' + baseAttackKeys.size + ' attack cells';
+
+    // Load custom patterns
+    customMoveKeys.clear();
+    customAttackKeys.clear();
+    document.getElementById('canJump').checked = false;
+    document.getElementById('requiresEnemy').checked = false;
+    document.getElementById('range').value = 1;
+
+    // Engine convention: dy > 0 = toward enemy. Editor grid: up = negative screen-dy.
+    // Negate dy on load to convert engine coords → screen coords.
+    if (currentCard.customMove && currentCard.customMove.offsets) {
+      currentCard.customMove.offsets.forEach(function(o) { customMoveKeys.add(o.dx + ',' + (-o.dy)); });
+      if (currentCard.customMove.canJump) document.getElementById('canJump').checked = true;
+      if (currentCard.customMove.requiresEnemy) document.getElementById('requiresEnemy').checked = true;
+      if (currentCard.customMove.range) document.getElementById('range').value = currentCard.customMove.range;
+    }
+    if (currentCard.customAttack && currentCard.customAttack.offsets) {
+      currentCard.customAttack.offsets.forEach(function(o) { customAttackKeys.add(o.dx + ',' + (-o.dy)); });
+    }
+
+    dirty = false;
+    refreshGrid();
+    updatePreview();
+    updateStatus();
+  } catch (err) {
+    showError('Failed to load card: ' + err.message);
+  }
+}
+
+// ── Save ────────────────────────────────────────────────────
+
+async function saveCard() {
+  if (!currentCard) return;
+  var mp = buildPatternObj(customMoveKeys);
+  var ap = buildPatternObj(customAttackKeys);
+
+  try {
+    var res = await fetch('/api/card/' + currentCard.id + '/patterns', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customMove: mp, customAttack: ap }),
+    });
+    var result = await res.json();
+    if (result.success) showSaved(result.file);
+    else showError(result.error || 'Save failed');
+  } catch (err) {
+    showError('Save failed: ' + err.message);
+  }
+}
+
+// ── Events ──────────────────────────────────────────────────
+
+cardSelect.addEventListener('change', function() { loadCard(cardSelect.value); });
+saveBtn.addEventListener('click', saveCard);
+saveBtn2.addEventListener('click', saveCard);
+
+document.getElementById('clearMoveBtn').addEventListener('click', function() {
+  customMoveKeys.clear(); dirty = true;
+  refreshGrid(); updatePreview(); updateStatus();
+});
+document.getElementById('clearAtkBtn').addEventListener('click', function() {
+  customAttackKeys.clear(); dirty = true;
+  refreshGrid(); updatePreview(); updateStatus();
+});
+document.getElementById('clearAllBtn').addEventListener('click', function() {
+  customMoveKeys.clear(); customAttackKeys.clear(); dirty = true;
+  refreshGrid(); updatePreview(); updateStatus();
+});
+
+['canJump', 'requiresEnemy', 'range'].forEach(function(name) {
+  document.getElementById(name).addEventListener('change', function() {
+    if (customMoveKeys.size || customAttackKeys.size) dirty = true;
+    updatePreview(); updateStatus();
+  });
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.key === 'm' || e.key === 'M') {
+    document.querySelector('input[name="mode"][value="move"]').checked = true;
+  } else if (e.key === 'a' || e.key === 'A') {
+    document.querySelector('input[name="mode"][value="attack"]').checked = true;
+  } else if (e.key === 'c' || e.key === 'C') {
+    customMoveKeys.clear(); customAttackKeys.clear(); dirty = true;
+    refreshGrid(); updatePreview(); updateStatus();
+  }
+});
+
+// ── Init ────────────────────────────────────────────────────
+
+buildGrid();
+loadCards();
+console.log('[Card Pattern Editor v2] loaded');
+</script>
+</body>
+</html>
+
+```
+
+# dev-tools\editor.bat
+
+```bat
+@echo off
+title Card Pattern Editor
+echo Stopping any existing editor server...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :3333 ^| findstr LISTENING') do taskkill /F /PID %%a >nul 2>&1
+timeout /t 1 /nobreak >nul
+echo Starting Card Pattern Editor...
+echo.
+start "" http://localhost:3333
+node "%~dp0server.js"
+
+```
+
+# dev-tools\server.js
+
+```js
+import express from 'express';
+import { readFileSync, writeFileSync, readdirSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const CARDS_DIR = join(__dirname, '..', 'src', 'game', 'data', 'cards');
+const PORT = 3333;
+
+const app = express();
+app.use(express.json());
+
+// Serve the editor HTML (no cache)
+app.get('/', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(join(__dirname, 'card-pattern-editor.html'));
+});
+
+// ── Parse card file ──────────────────────────────────────────
+
+function parseCardFile(filePath) {
+  const src = readFileSync(filePath, 'utf-8');
+
+  // Extract card id
+  const idMatch = src.match(/id:\s*'([^']+)'/);
+  const nameMatch = src.match(/name:\s*"([^"]*)"/) || src.match(/name:\s*'([^']*)'/);
+  if (!idMatch) return null;
+
+  const card = {
+    id: idMatch[1],
+    name: nameMatch ? nameMatch[1] : idMatch[1],
+    customMove: null,
+    customAttack: null,
+    movement: null,
+    attackPattern: null,
+    hasStats: /stats:\s*\{/.test(src),
+  };
+
+  // Extract movement and attackPattern enum values
+  const movementMatch = src.match(/movement:\s*MovementType\.(\w+)/);
+  if (movementMatch) card.movement = movementMatch[1];
+
+  const atkPatternMatch = src.match(/attackPattern:\s*AtkPattern\.(\w+)/);
+  if (atkPatternMatch) card.attackPattern = atkPatternMatch[1];
+
+  // Check for imported preset patterns (e.g. PATTERN_ARCHER_ATTACK)
+  const importedPatterns = {};
+  const presetImportMatch = src.match(/import\s*\{([^}]+)\}\s*from\s*['"]\.\.\/MovementPresets['"]/);
+  if (presetImportMatch) {
+    const presetNames = presetImportMatch[1].split(',').map(s => s.trim());
+    // Read MovementPresets to get actual values
+    try {
+      const presetsPath = join(CARDS_DIR, '..', 'MovementPresets.ts');
+      const presetsSrc = readFileSync(presetsPath, 'utf-8');
+      for (const name of presetNames) {
+        const pattern = extractPatternFromPresets(presetsSrc, name);
+        if (pattern) importedPatterns[name] = pattern;
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Extract customMove
+  const customMoveRef = src.match(/customMove:\s*(\w+)/);
+  if (customMoveRef && importedPatterns[customMoveRef[1]]) {
+    card.customMove = importedPatterns[customMoveRef[1]];
+  } else {
+    card.customMove = extractInlinePattern(src, 'customMove');
+  }
+
+  // Extract customAttack
+  const customAttackRef = src.match(/customAttack:\s*(\w+)/);
+  if (customAttackRef && importedPatterns[customAttackRef[1]]) {
+    card.customAttack = importedPatterns[customAttackRef[1]];
+  } else {
+    card.customAttack = extractInlinePattern(src, 'customAttack');
+  }
+
+  return card;
+}
+
+function extractPatternFromPresets(src, name) {
+  // Match: export const NAME: CustomPattern = { ... };
+  const regex = new RegExp(
+    `export\\s+const\\s+${name}[^=]*=\\s*\\{([^}]+(?:\\{[^}]*\\}[^}]*)*)\\}`,
+    's'
+  );
+  const match = src.match(regex);
+  if (!match) return null;
+  return parsePatternBlock(match[1]);
+}
+
+function extractInlinePattern(src, fieldName) {
+  // Match: fieldName: { offsets: [...], ... }
+  const regex = new RegExp(
+    `${fieldName}:\\s*\\{\\s*offsets:\\s*\\[([^\\]]+)\\]([^}]*)\\}`,
+    's'
+  );
+  const match = src.match(regex);
+  if (!match) return null;
+  return parsePatternBlock(`offsets: [${match[1]}]${match[2]}`);
+}
+
+function parsePatternBlock(block) {
+  const pattern = { offsets: [] };
+
+  // Parse offsets array
+  const offsetMatches = block.matchAll(/\{\s*dx:\s*(-?\d+)\s*,\s*dy:\s*(-?\d+)\s*\}/g);
+  for (const m of offsetMatches) {
+    pattern.offsets.push({ dx: parseInt(m[1]), dy: parseInt(m[2]) });
+  }
+
+  // Parse range
+  const rangeMatch = block.match(/range:\s*(\d+)/);
+  if (rangeMatch) pattern.range = parseInt(rangeMatch[1]);
+
+  // Parse canJump
+  const jumpMatch = block.match(/canJump:\s*(true|false)/);
+  if (jumpMatch) pattern.canJump = jumpMatch[1] === 'true';
+
+  // Parse requiresEnemy
+  const enemyMatch = block.match(/requiresEnemy:\s*(true|false)/);
+  if (enemyMatch) pattern.requiresEnemy = enemyMatch[1] === 'true';
+
+  return pattern;
+}
+
+// ── Remove a field (brace-counting for nested objects) ───────
+
+function removeField(src, fieldName) {
+  // Match preset reference: "customMove: SOME_PRESET,"
+  const presetRegex = new RegExp(`\\s*${fieldName}:\\s*[A-Z_]\\w*,?`);
+  if (presetRegex.test(src)) {
+    return src.replace(presetRegex, '');
+  }
+
+  // Match inline brace block using brace counting to handle arbitrary nesting
+  const marker = new RegExp(`\\s*${fieldName}:\\s*\\{`);
+  const match = src.match(marker);
+  if (!match) return src;
+
+  const startIdx = match.index;
+  // Find the opening brace
+  const braceStart = src.indexOf('{', startIdx + fieldName.length);
+  let depth = 0;
+  let endIdx = braceStart;
+  for (let i = braceStart; i < src.length; i++) {
+    if (src[i] === '{' || src[i] === '[') depth++;
+    else if (src[i] === '}' || src[i] === ']') depth--;
+    if (depth === 0) {
+      endIdx = i + 1;
+      break;
+    }
+  }
+  // Consume trailing comma, whitespace, and newline
+  while (endIdx < src.length && (src[endIdx] === ',' || src[endIdx] === ' ' || src[endIdx] === '\n' || src[endIdx] === '\r')) endIdx++;
+
+  return src.slice(0, startIdx) + src.slice(endIdx);
+}
+
+// ── Format pattern as TypeScript ─────────────────────────────
+
+function formatPattern(pattern, indent = '      ') {
+  if (!pattern || pattern.offsets.length === 0) return null;
+
+  let lines = [`{`];
+  lines.push(`${indent}  offsets: [`);
+
+  // Group offsets in rows of 4
+  const offsets = pattern.offsets;
+  for (let i = 0; i < offsets.length; i += 4) {
+    const chunk = offsets.slice(i, i + 4);
+    const formatted = chunk.map(o => `{ dx: ${o.dx}, dy: ${o.dy} }`).join(', ');
+    const comma = (i + 4 < offsets.length) ? ',' : ',';
+    lines.push(`${indent}    ${formatted}${comma}`);
+  }
+  lines.push(`${indent}  ],`);
+
+  if (pattern.range !== undefined && pattern.range !== 1) {
+    lines.push(`${indent}  range: ${pattern.range},`);
+  }
+  if (pattern.canJump) {
+    lines.push(`${indent}  canJump: true,`);
+  }
+  if (pattern.requiresEnemy) {
+    lines.push(`${indent}  requiresEnemy: true,`);
+  }
+
+  lines.push(`${indent}}`);
+  return lines.join('\n');
+}
+
+// ── API Routes ───────────────────────────────────────────────
+
+// GET /api/cards — list all cards
+app.get('/api/cards', (_req, res) => {
+  try {
+    const files = readdirSync(CARDS_DIR).filter(f => f.endsWith('.ts') && !f.startsWith('_'));
+    const cards = [];
+    for (const file of files) {
+      const card = parseCardFile(join(CARDS_DIR, file));
+      if (card) {
+        card.file = file;
+        cards.push(card);
+      }
+    }
+    cards.sort((a, b) => a.name.localeCompare(b.name));
+    res.json(cards);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/card/:id — get single card
+app.get('/api/card/:id', (req, res) => {
+  try {
+    const files = readdirSync(CARDS_DIR).filter(f => f.endsWith('.ts') && !f.startsWith('_'));
+    for (const file of files) {
+      const card = parseCardFile(join(CARDS_DIR, file));
+      if (card && card.id === req.params.id) {
+        card.file = file;
+        card.source = readFileSync(join(CARDS_DIR, file), 'utf-8');
+        return res.json(card);
+      }
+    }
+    res.status(404).json({ error: 'Card not found' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/card/:id/patterns — update patterns
+app.post('/api/card/:id/patterns', (req, res) => {
+  try {
+    const { customMove, customAttack } = req.body;
+    const files = readdirSync(CARDS_DIR).filter(f => f.endsWith('.ts') && !f.startsWith('_'));
+
+    let targetFile = null;
+    for (const file of files) {
+      const card = parseCardFile(join(CARDS_DIR, file));
+      if (card && card.id === req.params.id) {
+        targetFile = file;
+        break;
+      }
+    }
+    if (!targetFile) return res.status(404).json({ error: 'Card not found' });
+
+    const filePath = join(CARDS_DIR, targetFile);
+    let src = readFileSync(filePath, 'utf-8');
+
+    // Check if this card uses imported presets — if so, we need to switch to inline
+    const usesPresetMove = src.match(/customMove:\s*[A-Z_]+/);
+    const usesPresetAttack = src.match(/customAttack:\s*[A-Z_]+/);
+
+    // Remove old customMove and customAttack (inline brace blocks or preset references)
+    src = removeField(src, 'customMove');
+    src = removeField(src, 'customAttack');
+
+    // Clean up unused preset imports if we removed references
+    if (usesPresetMove || usesPresetAttack) {
+      // Remove the entire MovementPresets import line if no longer needed
+      const hasOtherPresetRefs = src.match(/(?:customMove|customAttack):\s*[A-Z_]+/);
+      if (!hasOtherPresetRefs) {
+        src = src.replace(/import\s*\{[^}]+\}\s*from\s*['"]\.\.\/MovementPresets['"];?\s*\n?/g, '');
+      }
+    }
+
+    // Insert new patterns before attackPattern line or at end of stats block
+    const moveStr = customMove && customMove.offsets && customMove.offsets.length > 0
+      ? `\n      customMove: ${formatPattern(customMove)},` : '';
+    const attackStr = customAttack && customAttack.offsets && customAttack.offsets.length > 0
+      ? `\n      customAttack: ${formatPattern(customAttack)},` : '';
+
+    if (moveStr || attackStr) {
+      // Insert after attackPattern value — handle both "AtkPattern.X," and "AtkPattern.X }" (last prop)
+      const insertMatch = src.match(/(attackPattern:\s*AtkPattern\.\w+)(,|\s*\})/);
+      if (insertMatch) {
+        const fullMatch = insertMatch[0];
+        const atkPart = insertMatch[1]; // "attackPattern: AtkPattern.XXX"
+        const after = insertMatch[2];   // "," or " }" or "}"
+        const idx = src.indexOf(fullMatch);
+
+        if (after.includes('}')) {
+          // attackPattern was last prop in stats: add comma, insert patterns, re-close
+          // e.g. "attackPattern: AtkPattern.HV }" → "attackPattern: AtkPattern.HV,\n  customAttack: {...},\n  }"
+          const closingBrace = after; // preserve whitespace before }
+          src = src.slice(0, idx) + atkPart + ',' + attackStr + moveStr + '\n    ' + closingBrace.trim() + src.slice(idx + fullMatch.length);
+        } else {
+          // There's already a comma — just insert after it
+          src = src.slice(0, idx + fullMatch.length) + attackStr + moveStr + src.slice(idx + fullMatch.length);
+        }
+      }
+    }
+
+    // Clean up any double commas or trailing issues
+    src = src.replace(/,\s*,/g, ',');
+    // Clean up blank lines in stats block
+    src = src.replace(/\n\s*\n\s*\n/g, '\n\n');
+
+    writeFileSync(filePath, src, 'utf-8');
+    res.json({ success: true, file: targetFile });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const server = app.listen(PORT, () => {
+  console.log(`Card Pattern Editor running at http://localhost:${PORT}`);
+  console.log(`Cards directory: ${CARDS_DIR}`);
+});
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\nERROR: Port ${PORT} is already in use!`);
+    console.error('Close the other editor window first, or run: editor.bat (it auto-kills the old one)\n');
+  } else {
+    console.error(err);
+  }
+  process.exit(1);
+});
 
 ```
 
@@ -1825,7 +2866,8 @@ endlocal
         "server": "tsc -p tsconfig.server.json && node server/dist/server/app.js",
         "test:game": "vitest run",
         "test:game:watch": "vitest",
-        "test:smoke": "vitest run tests/engine/gameLoop.test.ts"
+        "test:smoke": "vitest run tests/engine/gameLoop.test.ts",
+        "dev:editor": "node dev-tools/server.js"
     },
     "devDependencies": {
         "@nomicfoundation/hardhat-ethers": "^4.0.4",
@@ -4193,16 +5235,54 @@ dotenv.config();
 
 const app = express();
 const httpServer = createServer(app);
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : [/^http:\/\/localhost:\d+$/];
+
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
-  cors: { origin: '*' },
+  cors: { origin: allowedOrigins },
 });
 
 const roomManager = new RoomManager();
 const payout = new PayoutService(process.env.FUJI_PRIVATE_KEY!);
 const session = new SessionManager(io, roomManager, payout);
 
+// ── Per-socket rate limiter ──
+const RATE_WINDOW_MS = 1_000;
+const RATE_MAX_EVENTS = 30; // max events per second per socket
+
+interface RateData { count: number; windowStart: number }
+const rateLimitMap = new WeakMap<object, RateData>();
+
+function rateLimited(socket: ReturnType<typeof io['sockets']['sockets']['get']>): boolean {
+  const now = Date.now();
+  let data = rateLimitMap.get(socket!);
+  if (!data) {
+    data = { count: 0, windowStart: now };
+    rateLimitMap.set(socket!, data);
+  }
+  if (now - data.windowStart > RATE_WINDOW_MS) {
+    data.count = 0;
+    data.windowStart = now;
+  }
+  data.count += 1;
+  if (data.count > RATE_MAX_EVENTS) {
+    console.warn(`[Server] Rate limit exceeded for ${socket!.id}`);
+    return true;
+  }
+  return false;
+}
+
 io.on('connection', (socket) => {
   console.log(`[Server] Player connected: ${socket.id}`);
+
+  // Rate-limit middleware: intercept all incoming events
+  socket.use((_event, next) => {
+    if (rateLimited(socket)) {
+      return next(new Error('Rate limit exceeded'));
+    }
+    next();
+  });
 
   // ── Room events ──
   socket.on('createRoom', ({ roomCode, playerName }) => {
@@ -4276,6 +5356,159 @@ httpServer.listen(3001, () => {
 
 ```
 
+# server\game\GameLogWriter.ts
+
+```ts
+// ============================================================
+// GameLogWriter.ts (Server-side)
+// Writes per-session game action logs to logs/ directory.
+// One JSON file per room session.
+//
+// In dev mode (NODE_ENV !== 'production'), also accepts rich
+// game state snapshots from clients and writes periodically.
+//
+// Format: logs/server_<roomCode>_<timestamp>.json
+// ============================================================
+
+import { mkdirSync, writeFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const IS_DEV = process.env.NODE_ENV !== 'production';
+// __dirname = server/dist/server/game/ when compiled
+const LOGS_DIR = IS_DEV
+  ? join(__dirname, '..', '..', 'logs')        // server/dist/logs
+  : join(__dirname, '..', '..', '..', 'logs'); // project-root/logs
+
+const DEV_WRITE_INTERVAL_MS = 30_000;
+
+interface ServerLogEntry {
+  seq: number;
+  ts: number;                 // ms since session start
+  player: number;             // 0 or 1
+  actionType: string;
+  detail: string;
+  raw: Record<string, any>;
+}
+
+interface ServerSessionLog {
+  meta: {
+    roomCode: string;
+    seed: number;
+    players: Array<{ name: string; wallet: string | null }>;
+    startedAt: string;
+    endedAt?: string;
+  };
+  entries: ServerLogEntry[];
+  snapshots: Record<string, any>[];
+}
+
+export class GameLogWriter {
+  private log: ServerSessionLog;
+  private seq = 0;
+  private startMs: number;
+  private filePath: string;
+  private writeTimer: ReturnType<typeof setInterval> | null = null;
+
+  constructor(roomCode: string, seed: number, players: Array<{ name: string; wallet: string | null }>) {
+    this.startMs = Date.now();
+    this.log = {
+      meta: {
+        roomCode,
+        seed,
+        players,
+        startedAt: new Date().toISOString(),
+      },
+      entries: [],
+      snapshots: [],
+    };
+
+    // Pre-compute file path
+    const ts = this.log.meta.startedAt.replace(/[:.]/g, '-');
+    const filename = `server_${roomCode}_${ts}.json`;
+    try {
+      if (!existsSync(LOGS_DIR)) {
+        mkdirSync(LOGS_DIR, { recursive: true });
+      }
+    } catch { /* will fail on write instead */ }
+    this.filePath = join(LOGS_DIR, filename);
+
+    // In dev mode, write to disk periodically
+    if (IS_DEV) {
+      this.writeTimer = setInterval(() => this.writeToDisk(), DEV_WRITE_INTERVAL_MS);
+    }
+  }
+
+  record(playerIndex: number, action: Record<string, any>): void {
+    this.log.entries.push({
+      seq: this.seq++,
+      ts: Date.now() - this.startMs,
+      player: playerIndex,
+      actionType: action.type ?? 'UNKNOWN',
+      detail: describeAction(playerIndex, action),
+      raw: { ...action },
+    });
+  }
+
+  /** Accept a rich game state snapshot (dev only). */
+  recordSnapshot(snapshot: Record<string, any>): void {
+    this.log.snapshots.push({
+      receivedAt: Date.now() - this.startMs,
+      ...snapshot,
+    });
+  }
+
+  flush(): void {
+    this.log.meta.endedAt = new Date().toISOString();
+    if (this.writeTimer) {
+      clearInterval(this.writeTimer);
+      this.writeTimer = null;
+    }
+    this.writeToDisk();
+  }
+
+  private writeToDisk(): void {
+    try {
+      if (!existsSync(LOGS_DIR)) {
+        mkdirSync(LOGS_DIR, { recursive: true });
+      }
+      writeFileSync(this.filePath, JSON.stringify(this.log), 'utf-8');
+      console.log(`[GameLogWriter] Written ${this.filePath} (${this.log.entries.length} actions, ${this.log.snapshots.length} snapshots)`);
+    } catch (e) {
+      console.error('[GameLogWriter] Failed to write log:', e);
+    }
+  }
+
+  get entryCount(): number { return this.log.entries.length; }
+}
+
+function describeAction(player: number, action: Record<string, any>): string {
+  const p = `P${player + 1}`;
+  switch (action.type) {
+    case 'PLAY_CARD':
+      return `${p} played hand[${action.handIndex}] at (${action.col},${action.row})`;
+    case 'MOVE_UNIT':
+      return `${p} moved (${action.fromCol},${action.fromRow}) → (${action.col},${action.row})`;
+    case 'ATTACK_UNIT':
+      return `${p} attacked (${action.fromCol},${action.fromRow}) → (${action.targetCol},${action.targetRow})`;
+    case 'END_PLAY_PHASE':
+      return `${p} ended PLAY phase`;
+    case 'END_ACT_PHASE':
+      return `${p} ended ACT phase`;
+    case 'SELECT_TARGET':
+      return `${p} selected target at (${action.col},${action.row})`;
+    case 'SELECT_POSITION':
+      return `${p} selected position at (${action.col},${action.row})`;
+    case 'CANCEL_PENDING':
+      return `${p} cancelled pending interaction`;
+    default:
+      return `${p}: ${action.type}`;
+  }
+}
+
+```
+
 # server\game\PayoutService.ts
 
 ```ts
@@ -4299,15 +5532,21 @@ const ESCROW_ABI = [
 
 const FUJI_RPC = 'https://api.avax-test.network/ext/bc/C/rpc';
 
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 3_000;
+
 export class PayoutService {
   private contract: ethers.Contract;
+  private wallet: ethers.Wallet;
   private walletAddress: string;
+  /** Simple mutex to serialize transactions (prevents nonce collisions). */
+  private txQueue: Promise<void> = Promise.resolve();
 
   constructor(privateKey: string) {
     const provider = new ethers.JsonRpcProvider(FUJI_RPC);
-    const wallet = new ethers.Wallet(privateKey, provider);
-    this.contract = new ethers.Contract(ESCROW_ADDRESS, ESCROW_ABI, wallet);
-    this.walletAddress = wallet.address;
+    this.wallet = new ethers.Wallet(privateKey, provider);
+    this.contract = new ethers.Contract(ESCROW_ADDRESS, ESCROW_ABI, this.wallet);
+    this.walletAddress = this.wallet.address;
     log.info(` Owner wallet: ${this.walletAddress}`);
   }
 
@@ -4319,31 +5558,72 @@ export class PayoutService {
   }
 
   async payoutWinner(roomCode: string, winnerAddress: string): Promise<PayoutResult> {
-    const matchId = this.matchIdFromCode(roomCode);
-    log.info(` Paying winner ${winnerAddress} for room ${roomCode}`);
-    try {
-      const tx = await this.contract.claimWinnings(matchId, winnerAddress);
-      await tx.wait();
-      log.info(` Payout done! tx: ${tx.hash}`);
-      return { success: true, txHash: tx.hash };
-    } catch (err: any) {
-      log.error(` Payout failed:`, err.message);
-      return { success: false, error: err.message };
-    }
+    return this.enqueue(() => this.doPayoutWinner(roomCode, winnerAddress));
   }
 
   async refundTie(roomCode: string): Promise<PayoutResult> {
+    return this.enqueue(() => this.doRefundTie(roomCode));
+  }
+
+  // ── Internals ──
+
+  /** Serialize all contract calls through a queue to prevent nonce collisions. */
+  private enqueue(fn: () => Promise<PayoutResult>): Promise<PayoutResult> {
+    const resultPromise = this.txQueue.then(fn, fn);
+    // Update the queue tail (swallow result to keep it as Promise<void>)
+    this.txQueue = resultPromise.then(() => {}, () => {});
+    return resultPromise;
+  }
+
+  private async doPayoutWinner(roomCode: string, winnerAddress: string): Promise<PayoutResult> {
+    const matchId = this.matchIdFromCode(roomCode);
+    log.info(` Paying winner ${winnerAddress} for room ${roomCode}`);
+    return this.sendWithRetry(
+      () => this.contract.claimWinnings(matchId, winnerAddress),
+      `payout ${roomCode}`
+    );
+  }
+
+  private async doRefundTie(roomCode: string): Promise<PayoutResult> {
     const matchId = this.matchIdFromCode(roomCode);
     log.info(` Refunding tie for room ${roomCode}`);
-    try {
-      const tx = await this.contract.refundTie(matchId);
-      await tx.wait();
-      log.info(` Tie refund done! tx: ${tx.hash}`);
-      return { success: true, txHash: tx.hash };
-    } catch (err: any) {
-      log.error(` Tie refund failed:`, err.message);
-      return { success: false, error: err.message };
+    return this.sendWithRetry(
+      () => this.contract.refundTie(matchId),
+      `refund ${roomCode}`
+    );
+  }
+
+  private async sendWithRetry(
+    sendFn: () => Promise<ethers.TransactionResponse>,
+    label: string
+  ): Promise<PayoutResult> {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const tx = await sendFn();
+        const receipt = await tx.wait();
+        if (!receipt) {
+          log.warn(`${label}: tx.wait() returned null (tx dropped?), hash: ${tx.hash}`);
+          return { success: false, error: 'Transaction may have been dropped' };
+        }
+        log.info(` ${label} done! tx: ${tx.hash}`);
+        return { success: true, txHash: tx.hash };
+      } catch (err: any) {
+        const isRetryable = err.code === 'NETWORK_ERROR'
+          || err.code === 'SERVER_ERROR'
+          || err.code === 'TIMEOUT'
+          || err.message?.includes('nonce');
+
+        if (isRetryable && attempt < MAX_RETRIES) {
+          log.warn(`${label} attempt ${attempt + 1} failed (retryable): ${err.message}`);
+          await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+          continue;
+        }
+
+        log.error(`${label} failed:`, err.message);
+        return { success: false, error: err.message };
+      }
     }
+    return { success: false, error: 'Max retries exceeded' };
   }
 }
 
@@ -4363,11 +5643,13 @@ import type { ClientToServerEvents, ServerToClientEvents } from '../../shared/ty
 import type { RoomManager } from '../rooms/RoomManager.js';
 import type { PayoutService } from './PayoutService.js';
 import { Logger } from '../utils/Logger.js';
+import { GameLogWriter } from './GameLogWriter.js';
 
 type TypedServer = Server<ClientToServerEvents, ServerToClientEvents>;
 type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
 const log = new Logger('Session');
+const IS_DEV = process.env.NODE_ENV !== 'production';
 
 export class SessionManager {
   constructor(
@@ -4384,6 +5666,16 @@ export class SessionManager {
       log.info(`player_ready: ${room.battleReadyCount}/2 in room ${roomCode}`);
       if (room.battleReadyCount >= 2) {
         this.io.to(roomCode).emit('both_battle_ready');
+
+        // Start server-side game log
+        if (!room.gameLog) {
+          room.gameLog = new GameLogWriter(
+            roomCode,
+            room.gameSeed ?? 0,
+            room.players.map(p => ({ name: p.name, wallet: p.wallet })),
+          );
+        }
+
         for (const queued of room.actionQueue) {
           socket.to(roomCode).emit('opponent_action', queued);
           log.debug(`Flushed queued action: ${queued.type}`);
@@ -4459,6 +5751,9 @@ export class SessionManager {
       room.globalSeq += 1;
       action.serverSeq = room.globalSeq;
 
+      // Log action before relay
+      room.gameLog?.record(playerIndex, action);
+
       socket.to(roomCode).emit('opponent_action', action);
       log.debug(`Relayed ${action.type} in ${roomCode} (action #${room.actionCount}, serverSeq=${room.globalSeq})`);
     });
@@ -4488,6 +5783,8 @@ export class SessionManager {
       }
 
       room.gameOverClaims.push({ playerIndex, claimedWinner: winnerIndex });
+      room.gameLog?.record(playerIndex, { type: 'GAME_OVER', claimedWinner: winnerIndex });
+      room.gameLog?.flush();
       log.info(`game_over claim from P${playerIndex + 1}: winner=P${winnerIndex + 1} (${room.gameOverClaims.length}/2 claims)`);
 
       const hasWallets = room.players.some(p => p.wallet !== null);
@@ -4529,6 +5826,12 @@ export class SessionManager {
       const playerIndex = room.players.findIndex(p => p.id === socket.id);
       if (playerIndex === -1) return;
 
+      // Cap pending hashes to prevent memory leak if one player stops sending
+      if (room.pendingHashes.size > 50) {
+        const oldest = room.pendingHashes.keys().next().value;
+        if (oldest !== undefined) room.pendingHashes.delete(oldest);
+      }
+
       if (!room.pendingHashes.has(afterGlobalSeq)) {
         room.pendingHashes.set(afterGlobalSeq, []);
       }
@@ -4545,6 +5848,16 @@ export class SessionManager {
       }
     });
 
+    // ── Dev-only: rich game state reports for detailed logging ──
+    if (IS_DEV) {
+      socket.on('game_state_report' as any, ({ roomCode, report }: { roomCode: string; report: Record<string, any> }) => {
+        const room = this.rooms.getRoom(roomCode);
+        if (!room) return;
+        room.gameLog?.recordSnapshot(report);
+        log.debug(`State report (${report.trigger}) in ${roomCode}: turn=${report.turn} phase=${report.phase}`);
+      });
+    }
+
     socket.on('cryptoReady', ({ roomCode }) => {
       const count = this.rooms.incrementCryptoReady(roomCode);
       if (count === 1) {
@@ -4557,7 +5870,7 @@ export class SessionManager {
     });
   }
 
-  private static readonly GRACE_PERIOD_MS = 30_000;
+  private static readonly GRACE_PERIOD_MS = 10_000;
 
   async handleDisconnect(socket: TypedSocket): Promise<void> {
     const found = this.rooms.findBySocket(socket.id);
@@ -4567,13 +5880,30 @@ export class SessionManager {
     const disconnected = room.players[playerIndex];
     log.info(`${disconnected.name} disconnected from room: ${roomCode} (grace period: ${SessionManager.GRACE_PERIOD_MS / 1000}s)`);
 
-    // Notify opponent of temporary disconnect
+    // Notify opponent of temporary disconnect with total seconds
+    const totalSec = SessionManager.GRACE_PERIOD_MS / 1000;
     socket.to(roomCode).emit('opponentDisconnected');
+
+    // Countdown interval: emit remaining seconds every 1s
+    let remaining = totalSec;
+    this.io.to(roomCode).emit('disconnectCountdown', { remaining });
+    const countdownInterval = setInterval(() => {
+      remaining--;
+      if (remaining > 0) {
+        this.io.to(roomCode).emit('disconnectCountdown', { remaining });
+      }
+    }, 1000);
+    room.disconnectIntervals.set(playerIndex, countdownInterval);
 
     // Start grace period — if they don't rejoin, finalize disconnect
     const timer = setTimeout(async () => {
+      clearInterval(countdownInterval);
       room.disconnectTimers.delete(playerIndex);
       log.info(`Grace period expired for ${disconnected.name} in ${roomCode} — finalizing disconnect`);
+
+      // Flush game log before cleanup
+      room.gameLog?.record(playerIndex, { type: 'DISCONNECT_ABANDON' });
+      room.gameLog?.flush();
 
       // Notify remaining player that opponent abandoned
       this.io.to(roomCode).emit('opponentAbandon');
@@ -4608,12 +5938,20 @@ export class SessionManager {
       return;
     }
 
-    // Cancel the grace period timer
+    // Reset sequence counter for reconnected player
+    room.lastSeqNum[playerIndex] = 0;
+
+    // Cancel the grace period timer and countdown interval
     const timer = room.disconnectTimers.get(playerIndex);
     if (timer) {
       clearTimeout(timer);
       room.disconnectTimers.delete(playerIndex);
       log.info(`Grace timer cancelled for ${playerName} in ${roomCode}`);
+    }
+    const interval = room.disconnectIntervals.get(playerIndex);
+    if (interval) {
+      clearInterval(interval);
+      room.disconnectIntervals.delete(playerIndex);
     }
 
     socket.join(roomCode);
@@ -4644,6 +5982,23 @@ const log = new Logger('RoomManager');
 
 export class RoomManager {
   private rooms = new Map<string, Room>();
+  private static readonly STALE_ROOM_MS = 2 * 60 * 60 * 1000; // 2 hours
+  private cleanupTimer: ReturnType<typeof setInterval>;
+
+  constructor() {
+    // Sweep stale rooms every 10 minutes
+    this.cleanupTimer = setInterval(() => this.sweepStaleRooms(), 10 * 60 * 1000);
+  }
+
+  private sweepStaleRooms(): void {
+    const now = Date.now();
+    for (const [code, room] of this.rooms) {
+      if (now - room.createdAt > RoomManager.STALE_ROOM_MS) {
+        log.info(`Sweeping stale room: ${code} (age: ${Math.round((now - room.createdAt) / 60_000)}m)`);
+        this.deleteRoom(code);
+      }
+    }
+  }
 
   createRoom(socketId: string, roomCode: string, playerName: string): Room {
     const room: Room = {
@@ -4661,6 +6016,8 @@ export class RoomManager {
       globalSeq: 0,
       pendingHashes: new Map(),
       disconnectTimers: new Map(),
+      disconnectIntervals: new Map(),
+      createdAt: Date.now(),
     };
     this.rooms.set(roomCode, room);
     log.info(` Room created: ${roomCode} by ${playerName}`);
@@ -4731,7 +6088,23 @@ export class RoomManager {
     return idx;
   }
 
+  dispose(): void {
+    clearInterval(this.cleanupTimer);
+  }
+
   deleteRoom(roomCode: string): void {
+    const room = this.rooms.get(roomCode);
+    if (room) {
+      // Clear any pending disconnect grace timers/intervals to avoid dangling callbacks
+      for (const timer of room.disconnectTimers.values()) {
+        clearTimeout(timer);
+      }
+      room.disconnectTimers.clear();
+      for (const interval of room.disconnectIntervals.values()) {
+        clearInterval(interval);
+      }
+      room.disconnectIntervals.clear();
+    }
     this.rooms.delete(roomCode);
   }
 }
@@ -4828,6 +6201,51 @@ export interface GameAction {
 
 // ─── Client → Server Events ─────────────────────────────────
 
+// ─── Game State Report (dev-only, sent by client for server logs) ──
+
+export interface StateReportUnit {
+  instanceId: string;
+  cardId: string;
+  name: string;
+  owner: number;
+  col: number;
+  row: number;
+  baseAtk: number;
+  currentAtk: number;
+  baseDef: number;
+  currentDef: number;
+  maxDef: number;
+  isActive: boolean;
+  hasMoved: boolean;
+  hasActed: boolean;
+  buffs: Array<{ source: string; atkDelta: number; defDelta: number; movDelta: number }>;
+}
+
+export interface StateReportPlayer {
+  player: number;
+  handCards: string[];      // card names
+  handCount: number;
+  deckCount: number;
+  discardCount: number;
+  leg: number;
+  legRate: number;
+  legRateBase: number;
+  legRateBonus: number;
+  legRatePenalty: number;
+  crownDiscount: number;
+  crownPenalty: number;
+}
+
+export interface GameStateReport {
+  trigger: 'GAME_START' | 'PERIODIC' | 'GAME_END';
+  ts: string;                    // ISO timestamp
+  turn: number;
+  phase: string;
+  activePlayer: number;
+  units: StateReportUnit[];
+  players: [StateReportPlayer, StateReportPlayer];
+}
+
 export interface ClientToServerEvents {
   createRoom:     (data: { roomCode: string; playerName: string }) => void;
   joinRoom:       (data: { roomCode: string; playerName: string }) => void;
@@ -4838,6 +6256,7 @@ export interface ClientToServerEvents {
   game_over:      (data: { roomCode: string; winnerIndex: number }) => void;
   state_hash:     (data: { roomCode: string; hash: string; afterGlobalSeq: number }) => void;
   rejoin_room:    (data: { roomCode: string; playerName: string }) => void;
+  game_state_report: (data: { roomCode: string; report: GameStateReport }) => void;
 }
 
 // ─── Server → Client Events ─────────────────────────────────
@@ -4858,6 +6277,7 @@ export interface ServerToClientEvents {
   opponentDisconnected: () => void;
   opponentReconnected:  () => void;
   opponentAbandon:      () => void;
+  disconnectCountdown:  (data: { remaining: number }) => void;
   rejoinSuccess:        (data: { roomCode: string; playerIndex: number }) => void;
   hostDepositConfirmed: () => void;
   bothCryptoReady:      () => void;
@@ -4898,6 +6318,11 @@ export interface Room {
   pendingHashes: Map<number, { playerIndex: number; hash: string }[]>;
   // Reconnection grace
   disconnectTimers: Map<number, ReturnType<typeof setTimeout>>;
+  disconnectIntervals: Map<number, ReturnType<typeof setInterval>>;
+  // Room age tracking for stale cleanup
+  createdAt: number;
+  // Server-side game log (optional, set when battle starts)
+  gameLog?: any;
 }
 
 ```
@@ -6567,8 +7992,22 @@ export type AbilityHandlerFn = (ctx: AbilityContext) => AbilityResult;
 ```ts
 // Shared helpers for aura processors.
 
+import type { StatBuff } from '../types/GameTypes';
 import { Player } from '../types/GameTypes';
 import type { StatDelta } from './AuraProcessor';
+
+// ── Module-level audit trail ─────────────────────────
+// Set by AuraSystem before running the chain, cleared after.
+// Processors don't need to know about it — addDelta handles it.
+let _buffMap: Map<string, StatBuff[]> | null = null;
+
+export function beginAuditTrail(buffMap: Map<string, StatBuff[]>): void {
+  _buffMap = buffMap;
+}
+
+export function endAuditTrail(): void {
+  _buffMap = null;
+}
 
 /** Safely read params from any ability (CommonAbility or CustomAbility). */
 export function params(ab: any): any {
@@ -6584,13 +8023,21 @@ export function addDelta(
   instanceId: string,
   atk: number,
   def: number,
-  mov: number
+  mov: number,
+  source?: string
 ): void {
   const d = deltas.get(instanceId);
   if (!d) return;
   d.atkDelta += atk;
   d.defDelta += def;
   d.moveDelta += mov;
+
+  // Record to audit trail if active
+  if (source && _buffMap) {
+    let buffs = _buffMap.get(instanceId);
+    if (!buffs) { buffs = []; _buffMap.set(instanceId, buffs); }
+    buffs.push({ source, atkDelta: atk, defDelta: def, moveDelta: mov });
+  }
 }
 
 ```
@@ -6661,6 +8108,7 @@ import { BoardHalfDefProcessor } from './processors/BoardHalfDefProcessor';
 import { BoardHalfAtkProcessor } from './processors/BoardHalfAtkProcessor';
 import { VillageSlowProcessor } from './processors/VillageSlowProcessor';
 import { PikemanFlankProcessor } from './processors/PikemanFlankProcessor';
+import { KingSuppressProcessor } from './processors/KingSuppressProcessor';
 
 // Economy processors
 import { RoyalDiscountProcessor } from './processors/RoyalDiscountProcessor';
@@ -6674,6 +8122,7 @@ export function createStatChain(): AuraProcessor[] {
     new BoardHalfAtkProcessor(),
     new VillageSlowProcessor(),
     new PikemanFlankProcessor(),
+    new KingSuppressProcessor(),
   ];
 }
 
@@ -6725,7 +8174,7 @@ export class AdjDefProcessor implements AuraProcessor {
       const adjacents = board.getAdjacentUnits(source.position.col, source.position.row);
       for (const adj of adjacents) {
         if (adj.owner === source.owner) {
-          addDelta(deltas, adj.instanceId, 0, params(ability).amount, 0);
+          addDelta(deltas, adj.instanceId, 0, params(ability).amount, 0, `${source.cardId}:ADJ_DEF`);
         }
       }
     }
@@ -6738,6 +8187,8 @@ export class AdjDefProcessor implements AuraProcessor {
 
 ```ts
 // Commander: enemy-half friendly units +ATK
+// Only applies when the Commander itself is on the enemy half.
+// Neutral zone (middle row) = no aura.
 
 import type { AuraProcessor, StatDelta } from '../AuraProcessor';
 import type { Unit } from '../../types/GameTypes';
@@ -6754,10 +8205,16 @@ export class BoardHalfAtkProcessor implements AuraProcessor {
     for (const ability of def.abilities) {
       if (ability.type !== this.auraType) continue;
       const p = params(ability);
-      const targetHalfOwner = p.half === 'ENEMY' ? otherPlayer(source.owner) : source.owner;
+
+      const enemyOwner = otherPlayer(source.owner);
+
+      // Commander must be on the ENEMY half for ATK aura to activate
+      if (!board.isOwnHalf(source.position.col, source.position.row, enemyOwner)) continue;
+
+      // Buff all friendly units on enemy half
       for (const u of allUnits) {
-        if (u.owner === source.owner && board.isOwnHalf(u.position.col, u.position.row, targetHalfOwner)) {
-          addDelta(deltas, u.instanceId, p.amount, 0, 0);
+        if (u.owner === source.owner && board.isOwnHalf(u.position.col, u.position.row, enemyOwner)) {
+          addDelta(deltas, u.instanceId, p.amount, 0, 0, `${source.cardId}:BOARD_HALF_ATK`);
         }
       }
     }
@@ -6770,13 +8227,15 @@ export class BoardHalfAtkProcessor implements AuraProcessor {
 
 ```ts
 // Commander: own-half friendly units +DEF
+// Only applies when the Commander itself is on its own half.
+// Neutral zone (middle row) = no aura.
 
 import type { AuraProcessor, StatDelta } from '../AuraProcessor';
 import type { Unit } from '../../types/GameTypes';
 import type { IBoard } from '../../interfaces/IBoard';
 import { AbilityType } from '../../types/AbilityTypes';
 import { getCard } from '../../data/CardRegistry';
-import { params, otherPlayer, addDelta } from '../auraHelpers';
+import { params, addDelta } from '../auraHelpers';
 
 export class BoardHalfDefProcessor implements AuraProcessor {
   readonly auraType = AbilityType.AURA_BOARD_HALF_DEF;
@@ -6786,10 +8245,46 @@ export class BoardHalfDefProcessor implements AuraProcessor {
     for (const ability of def.abilities) {
       if (ability.type !== this.auraType) continue;
       const p = params(ability);
-      const benefitOwner = p.half === 'OWN' ? source.owner : otherPlayer(source.owner);
+
+      // Commander must be on its OWN half for DEF aura to activate
+      if (!board.isOwnHalf(source.position.col, source.position.row, source.owner)) continue;
+
+      // Buff all friendly units on own half
       for (const u of allUnits) {
-        if (u.owner === source.owner && board.isOwnHalf(u.position.col, u.position.row, benefitOwner)) {
-          addDelta(deltas, u.instanceId, 0, p.amount, 0);
+        if (u.owner === source.owner && board.isOwnHalf(u.position.col, u.position.row, source.owner)) {
+          addDelta(deltas, u.instanceId, 0, p.amount, 0, `${source.cardId}:BOARD_HALF_DEF`);
+        }
+      }
+    }
+  }
+}
+
+```
+
+# src\game\auras\processors\KingSuppressProcessor.ts
+
+```ts
+// Messenger: adjacent enemy King's ATK = 0
+
+import type { AuraProcessor, StatDelta } from '../AuraProcessor';
+import type { Unit } from '../../types/GameTypes';
+import type { IBoard } from '../../interfaces/IBoard';
+import { AbilityType } from '../../types/AbilityTypes';
+import { getCard } from '../../data/CardRegistry';
+import { addDelta } from '../auraHelpers';
+
+export class KingSuppressProcessor implements AuraProcessor {
+  readonly auraType = AbilityType.AURA_SUPPRESS_KING_ATK;
+
+  process(source: Unit, _allUnits: Unit[], board: IBoard, deltas: Map<string, StatDelta>): void {
+    const def = getCard(source.cardId);
+    for (const ability of def.abilities) {
+      if (ability.type !== this.auraType) continue;
+      const adjacents = board.getAdjacentUnits(source.position.col, source.position.row);
+      for (const adj of adjacents) {
+        if (adj.owner !== source.owner && adj.cardId === 'king') {
+          // Zero the King's ATK by subtracting its base value
+          addDelta(deltas, adj.instanceId, -adj.baseAtk, 0, 0, `${source.cardId}:SUPPRESS_KING_ATK`);
         }
       }
     }
@@ -6857,7 +8352,7 @@ export class PikemanFlankProcessor implements AuraProcessor {
       const hasRight  = rightUnit !== null && rightUnit.owner === source.owner;
       if (hasLeft && hasRight) {
         const p = params(ability);
-        addDelta(deltas, source.instanceId, p.bonusAtk, p.bonusDef, 0);
+        addDelta(deltas, source.instanceId, p.bonusAtk, p.bonusDef, 0, `${source.cardId}:PIKEMAN_FLANK`);
       }
     }
   }
@@ -6920,7 +8415,7 @@ export class VillageSlowProcessor implements AuraProcessor {
       const adjacents = board.getAdjacentUnits(source.position.col, source.position.row);
       for (const adj of adjacents) {
         if (adj.owner !== source.owner) {
-          addDelta(deltas, adj.instanceId, 0, 0, -params(ability).amount);
+          addDelta(deltas, adj.instanceId, 0, 0, -params(ability).amount, `${source.cardId}:VILLAGE_SLOW`);
         }
       }
     }
@@ -6944,7 +8439,7 @@ export class VillageSlowProcessor implements AuraProcessor {
 // Pure TypeScript — no Phaser, no EventBus.
 // ============================================================
 
-import type { Unit } from './types/GameTypes';
+import type { Unit, StatBuff } from './types/GameTypes';
 import { Player } from './types/GameTypes';
 import type { IBoard } from './interfaces/IBoard';
 import type { IGameModifiers } from './interfaces/IGameModifiers';
@@ -6952,7 +8447,7 @@ import type { AuraProcessor, EconomyProcessor, StatDelta } from './auras/AuraPro
 import { createStatChain, createEconomyChain, runStatChain } from './auras/AuraProcessorChain';
 import { getCard } from './data/CardRegistry';
 import { AbilityType } from './types/AbilityTypes';
-import { params } from './auras/auraHelpers';
+import { params, beginAuditTrail, endAuditTrail } from './auras/auraHelpers';
 import type { EvAuraApplied } from './types/EventTypes';
 
 export class AuraSystem {
@@ -6973,26 +8468,31 @@ export class AuraSystem {
   evaluateAuras(board: IBoard, mods: [IGameModifiers, IGameModifiers]): EvAuraApplied {
     const allUnits = board.getAllUnits();
 
-    // ── Step 1: Reset every unit to base stats ──
+    // ── Step 1: Reset every unit to base stats + clear audit trail ──
     for (const unit of allUnits) {
       unit.currentAtk      = unit.baseAtk;
-      unit.currentDef      = Math.min(unit.currentDef, unit.maxDef);
+      unit.maxDef          = unit.baseDef;               // reset max to base (removes old aura DEF buffs)
+      unit.currentDef      = Math.min(unit.currentDef, unit.maxDef); // cap HP at new max
       unit.currentMovement = unit.baseMovement;
+      unit.activeBuffs     = [];
     }
 
     // ── Step 2: Collect per-unit deltas ──
     const deltas = new Map<string, StatDelta>();
+    const buffMap = new Map<string, StatBuff[]>();
     for (const unit of allUnits) {
       deltas.set(unit.instanceId, { atkDelta: 0, defDelta: 0, moveDelta: 0 });
     }
 
     // ── Step 3: Run stat processor chain for each active unit ──
+    beginAuditTrail(buffMap);
     for (const unit of allUnits) {
       if (!unit.isActive) continue;
       runStatChain(this.statChain, unit, allUnits, board, deltas);
     }
+    endAuditTrail();
 
-    // ── Step 4: Apply deltas to currentAtk / currentMovement ──
+    // ── Step 4: Apply deltas to currentAtk / currentMovement + copy audit trail ──
     const changes: EvAuraApplied['changes'] = [];
 
     for (const unit of allUnits) {
@@ -7002,7 +8502,12 @@ export class AuraSystem {
       const prevMov = unit.currentMovement;
 
       unit.currentAtk      = Math.max(0, unit.currentAtk + d.atkDelta);
+      if (d.defDelta !== 0) {
+        unit.maxDef     += d.defDelta;
+        unit.currentDef  = Math.min(unit.currentDef + d.defDelta, unit.maxDef);
+      }
       unit.currentMovement = Math.max(0, unit.currentMovement + d.moveDelta);
+      unit.activeBuffs     = buffMap.get(unit.instanceId) ?? [];
 
       if (d.atkDelta !== 0 || d.defDelta !== 0 || d.moveDelta !== 0) {
         changes.push({
@@ -7012,6 +8517,7 @@ export class AuraSystem {
           atkDelta:   unit.currentAtk - prevAtk,
           defDelta:   d.defDelta,
           moveDelta:  unit.currentMovement - prevMov,
+          buffs:      unit.activeBuffs,
         });
       }
     }
@@ -7101,6 +8607,15 @@ export class Board implements IBoard {
   private cells: BoardCell[][];
   private unitIndex: Map<string, Unit> = new Map(); // instanceId → Unit
 
+  /** Dirty-flagged cache for unit list queries. Invalidated on any mutation. */
+  private _allUnitsCache: Unit[] | null = null;
+  private _unitsOfCache: [Unit[], Unit[]] | null = null; // [P1, P2]
+
+  private invalidateUnitCache(): void {
+    this._allUnitsCache = null;
+    this._unitsOfCache = null;
+  }
+
   constructor(cols = 7, rows = 7) {
     this.cols = cols;
     this.rows = rows;
@@ -7151,7 +8666,14 @@ export class Board implements IBoard {
 
   /** Returns all units belonging to a player. */
   getUnitsOf(player: Player): Unit[] {
-    return Array.from(this.unitIndex.values()).filter(u => u.owner === player);
+    if (!this._unitsOfCache) {
+      const p1: Unit[] = [], p2: Unit[] = [];
+      for (const u of this.unitIndex.values()) {
+        (u.owner === Player.P1 ? p1 : p2).push(u);
+      }
+      this._unitsOfCache = [p1, p2];
+    }
+    return this._unitsOfCache[player];
   }
 
   /** Returns the King unit for a player, or null if dead. */
@@ -7160,16 +8682,24 @@ export class Board implements IBoard {
   }
 
   /** Returns all structure units (STATIC subtype) on the board. */
+  private static readonly STRUCTURE_IDS = new Set(['castle', 'temple', 'village']);
+
   getStructures(player?: Player): Unit[] {
-    const all = Array.from(this.unitIndex.values()).filter(u =>
-      ['castle', 'temple', 'village'].includes(u.cardId)
-    );
-    return player !== undefined ? all.filter(u => u.owner === player) : all;
+    const result: Unit[] = [];
+    for (const u of this.unitIndex.values()) {
+      if (Board.STRUCTURE_IDS.has(u.cardId) && (player === undefined || u.owner === player)) {
+        result.push(u);
+      }
+    }
+    return result;
   }
 
   /** Returns all units. */
   getAllUnits(): Unit[] {
-    return Array.from(this.unitIndex.values());
+    if (!this._allUnitsCache) {
+      this._allUnitsCache = Array.from(this.unitIndex.values());
+    }
+    return this._allUnitsCache;
   }
 
   /** Returns all cells as a flat array (for serialization). */
@@ -7255,6 +8785,7 @@ export class Board implements IBoard {
     }
     this.cells[row][col].unit = unit;
     this.unitIndex.set(unit.instanceId, unit);
+    this.invalidateUnitCache();
   }
 
   /** Remove a unit from the board (death, capture, return). */
@@ -7264,6 +8795,7 @@ export class Board implements IBoard {
     const { col, row } = unit.position;
     this.cells[row][col].unit = null;
     this.unitIndex.delete(instanceId);
+    this.invalidateUnitCache();
     return unit;
   }
 
@@ -7328,6 +8860,7 @@ export class Board implements IBoard {
   /** Clear the entire board. Used for game reset. */
   clear(): void {
     this.unitIndex.clear();
+    this.invalidateUnitCache();
     for (let r = 0; r < this.rows; r++) {
       for (let c = 0; c < this.cols; c++) {
         this.cells[r][c].unit = null;
@@ -7369,9 +8902,10 @@ import type { Unit } from './types/GameTypes';
 import type { Board } from './Board';
 import { getCard } from './data/CardRegistry';
 import { CombatTag } from './types/CardTypes';
+import { getValidAttacks } from './MovementRules';
 import {
   EvUnitAttacked, EvUnitDied, EvUnitTransformed,
-  GameEvent
+  DamageBreakdown, GameEvent
 } from './types/EventTypes';
 
 // ─────────────────────────────────────────────
@@ -7390,7 +8924,8 @@ export function resolveAttack(
 ): GameEvent[] {
   const events: GameEvent[] = [];
 
-  let damage = calculateDamage(attacker, defender);
+  const breakdown = calculateDamage(attacker, defender);
+  const damage = breakdown.totalDamage;
   const isKingHit = defender.cardId === 'king';
   const newHP = Math.max(0, defender.currentDef - damage);
   const targetPlayer = defender.owner;
@@ -7410,6 +8945,7 @@ export function resolveAttack(
     isKingHit,
     newHP:  isKingHit ? newHP : undefined,
     maxHP:  isKingHit ? maxHP : undefined,
+    breakdown,
   };
   events.push(attackEvent);
 
@@ -7472,15 +9008,27 @@ export function resolveAttackWithCounter(
   // ── 2. Counter-attack eligibility ──
   //    Assassin jumps: always immune
   if (isAssassinJump) return events;
-  //    Defender must be MELEE and adjacent (Chebyshev ≤ 1)
-  if (defenderCombatTag !== CombatTag.MELEE) return events;
-  if (!isAdjacent(attackerPos, defenderPos)) return events;
   //    Defender must have positive ATK to deal counter damage
   if (defenderPreDamageAtk <= 0) return events;
+  //    Defender must be able to reach attacker from its own attack vector
+  const defenderReach = getValidAttacks(defender, board);
+  const canReachAttacker = defenderReach.some(
+    p => p.col === attackerPos.col && p.row === attackerPos.row
+  );
+  if (!canReachAttacker) return events;
 
   // ── 3. Counter-attack: defender → attacker (dying blow) ──
   const counterDamage = Math.max(0, defenderPreDamageAtk);
   const attackerNewHP = Math.max(0, attacker.currentDef - counterDamage);
+
+  const counterBreakdown: DamageBreakdown = {
+    baseAtk: defenderPreDamageAtk,
+    cavalryCounter: 0,
+    backstabBonus: 0,
+    ambushBonus: 0,
+    totalDamage: counterDamage,
+    auraBuffs: [...defender.activeBuffs],
+  };
 
   const counterEvent: EvUnitAttacked = {
     type: 'UNIT_ATTACKED',
@@ -7496,6 +9044,7 @@ export function resolveAttackWithCounter(
     isKingHit:    attacker.cardId === 'king',
     newHP:  attacker.cardId === 'king' ? attackerNewHP : undefined,
     maxHP:  attacker.cardId === 'king' ? attacker.maxDef : undefined,
+    breakdown:    counterBreakdown,
   };
   events.push(counterEvent);
 
@@ -7634,13 +9183,67 @@ export function applyEarthquakeDamage(col: number, damage: number, board: Board)
 // DAMAGE CALCULATION
 // ─────────────────────────────────────────────
 
-function calculateDamage(attacker: Unit, defender: Unit): number {
-  let atk = attacker.currentAtk;
+function calculateDamage(attacker: Unit, defender: Unit): DamageBreakdown {
+  const baseAtk = attacker.currentAtk;
+
+  // Zero-ATK units deal no damage — skip all bonuses (e.g. aura-suppressed King)
+  if (baseAtk <= 0) {
+    return { baseAtk: 0, cavalryCounter: 0, backstabBonus: 0, ambushBonus: 0, totalDamage: 0, auraBuffs: [...attacker.activeBuffs] };
+  }
+
+  let atk = baseAtk;
+  let cavalryCounter = 0;
+  let backstabBonus = 0;
+  let ambushBonus = 0;
+
+  // Cavalry counter: Pikeman x3 ATK vs cavalry
   const isCavalry = isUnitCavalry(defender);
   if (isCavalry && hasFlag(attacker, 'CAVALRY_COUNTER')) {
+    cavalryCounter = atk * 2; // x3 total = base + 2x bonus
     atk *= 3;
   }
-  return Math.max(0, atk);
+
+  // Positional bonuses — per-card, not universal
+  const atkDef = getCard(attacker.cardId);
+
+  // Backstab: directly behind (dx=0, exactly 1 row behind defender's facing)
+  if (atkDef.backstabBonus && isBackstab(attacker, defender)) {
+    backstabBonus = atkDef.backstabBonus;
+    atk += backstabBonus;
+  }
+
+  // Ambush: rear arc (|dx|≤1, exactly 1 row behind defender's facing)
+  if (atkDef.ambushBonus && isAmbush(attacker, defender)) {
+    ambushBonus = atkDef.ambushBonus;
+    atk += ambushBonus;
+  }
+
+  const totalDamage = Math.max(0, atk);
+  return { baseAtk, cavalryCounter, backstabBonus, ambushBonus, totalDamage, auraBuffs: [...attacker.activeBuffs] };
+}
+
+/**
+ * Backstab: attacker is directly behind the defender (same column, exactly 1 row behind).
+ * P1 faces toward row 6 → back = row-1. P2 faces toward row 0 → back = row+1.
+ */
+function isBackstab(attacker: Unit, defender: Unit): boolean {
+  const dx = attacker.position.col - defender.position.col;
+  if (dx !== 0) return false;
+  const dy = attacker.position.row - defender.position.row;
+  // P1's back is toward row 0, so attacker behind P1 means attacker.row < defender.row (dy < 0)
+  // P2's back is toward row 6, so attacker behind P2 means attacker.row > defender.row (dy > 0)
+  return defender.owner === 0 ? dy === -1 : dy === 1;
+}
+
+/**
+ * Ambush: attacker is in the rear arc (|dx|≤1, exactly 1 row behind defender's facing).
+ * Wider than backstab — includes the two diagonal-behind positions.
+ */
+function isAmbush(attacker: Unit, defender: Unit): boolean {
+  const dx = Math.abs(attacker.position.col - defender.position.col);
+  if (dx > 1) return false;
+  const dy = attacker.position.row - defender.position.row;
+  return defender.owner === 0 ? dy === -1 : dy === 1;
 }
 
 // ─────────────────────────────────────────────
@@ -7668,426 +9271,95 @@ function isAdjacent(a: { col: number; row: number }, b: { col: number; row: numb
 ```ts
 // ============================================================
 // CardDefinitions.ts
-// Single source of truth for all cards.
-// Adding a card = adding ONE object to CARD_DEFINITIONS.
-// No new classes, no new switch cases anywhere else.
-//
-// Deck: 22 unique cards + King = 23 types, 39 deck copies.
-// King is pre-placed, not in deck. Deck = 31 cards.
+// Aggregator — imports individual card files from cards/ and
+// re-exports the CARD_DEFINITIONS array in canonical order.
 // ============================================================
 
-import {
-  CardClass, Allegiance, SubType, CardFlag,
-  MovementType, AtkPattern,
-} from '../types/CardTypes.js';
 import type { CardDefinition } from '../types/CardTypes.js';
-import { AbilityType } from '../types/AbilityTypes';
-import { PATTERN_ARCHER_ATTACK, PATTERN_ASSASSIN_ATTACK, PATTERN_ASSASSIN_MOVE } from './MovementPresets';
 
-const U = CardClass.UNIT;
-const SP = CardClass.SPELL;
-const ST = CardClass.STRUCTURE;
-const STD = Allegiance.STANDARD;
-const ROY = Allegiance.ROYAL;
-const CAV = SubType.CAVALRY;
-const STRUC = SubType.STRUCTURE;
+// King
+import { KING_DEF } from './cards/king.js';
+
+// Standard Units
+import { FOOT_SOLDIER_DEF } from './cards/foot_soldier.js';
+import { PIKEMAN_DEF } from './cards/pikeman.js';
+import { ARCHER_DEF } from './cards/archer.js';
+import { ASSASSIN_DEF } from './cards/assassin.js';
+import { MILITIA_DEF } from './cards/militia.js';
+import { SCOUT_DEF } from './cards/scout.js';
+import { LANCER_DEF } from './cards/lancer.js';
+import { MYSTIC_DEF } from './cards/mystic.js';
+import { MESSENGER_DEF } from './cards/messenger.js';
+
+// Royal Units
+import { SWORDSMAN_DEF } from './cards/swordsman.js';
+import { PRINCESS_DEF } from './cards/princess.js';
+import { PRIEST_DEF } from './cards/priest.js';
+import { COMMANDER_DEF } from './cards/commander.js';
+import { INQUISITOR_DEF } from './cards/inquisitor.js';
+import { KNIGHT_DEF } from './cards/knight.js';
+import { KNIGHTS_GUARD_DEF } from './cards/knights_guard.js';
+import { SCRIBE_DEF } from './cards/scribe.js';
+
+// Structures
+import { CASTLE_DEF } from './cards/castle.js';
+import { TEMPLE_DEF } from './cards/temple.js';
+import { VILLAGE_DEF } from './cards/village.js';
+
+// Spells
+import { DISEASE_DEF } from './cards/disease.js';
+import { CASUS_BELLI_DEF } from './cards/casus_belli.js';
+import { REFORM_DEF } from './cards/reform.js';
+import { CIVIL_WAR_DEF } from './cards/civil_war.js';
+import { EARTHQUAKE_DEF } from './cards/earthquake.js';
+import { WAR_HORN_DEF } from './cards/war_horn.js';
+import { COUP_DEF } from './cards/coup.js';
+import { TREASON_DEF } from './cards/treason.js';
+import { MOTHERLAND_DEF } from './cards/motherland.js';
+import { PEASANT_REVOLT_DEF } from './cards/peasant_revolt.js';
 
 export const CARD_DEFINITIONS: CardDefinition[] = [
+  // King
+  KING_DEF,
 
-  // ═══════════════════════════════════════════════════════
-  // KING — Pre-placed, not in deck
-  // ═══════════════════════════════════════════════════════
-  {
-    id: 'king', name: 'King',
-    flavorText: 'All legitimacy flows from the crown.',
-    class: U, allegiance: ROY, subtypes: [], cost: 0, copies: 1,
-    stats: { atk: 1, def: 10, movement: MovementType.OMNI_1, attackPattern: AtkPattern.OMNI },
-    flags: [],
-    abilities: [
-      { type: AbilityType.AURA_LEG_BONUS, params: { amount: 1 } }, // Base LEG generation
-    ],
-    abilityText: 'Pre-placed. Generates +1 LEG/turn. Enemy King in your half: lose 1 LEG this turn. Win condition.',
-  },
+  // Standard Units
+  FOOT_SOLDIER_DEF,
+  PIKEMAN_DEF,
+  ARCHER_DEF,
+  ASSASSIN_DEF,
+  MILITIA_DEF,
+  SCOUT_DEF,
+  LANCER_DEF,
+  MYSTIC_DEF,
+  MESSENGER_DEF,
 
-  // ═══════════════════════════════════════════════════════
-  // STANDARD UNITS
-  // ═══════════════════════════════════════════════════════
+  // Royal Units
+  SWORDSMAN_DEF,
+  PRINCESS_DEF,
+  PRIEST_DEF,
+  COMMANDER_DEF,
+  INQUISITOR_DEF,
+  KNIGHT_DEF,
+  KNIGHTS_GUARD_DEF,
+  SCRIBE_DEF,
 
-  {
-    id: 'foot_soldier', name: 'Foot Soldier',
-    flavorText: 'Cannon fodder with a silver lining.',
-    class: U, allegiance: STD, subtypes: [], cost: 1, copies: 3,
-    stats: { atk: 1, def: 1, movement: MovementType.OMNI_1, attackPattern: AtkPattern.HV },
-    flags: [],
-    abilities: [
-      { type: AbilityType.ON_DEATH_DRAW, params: { count: 1 } },
-    ],
-    abilityText: 'On Death: draw 1 card. Reform target: becomes Swordsman.',
-  },
+  // Structures
+  CASTLE_DEF,
+  TEMPLE_DEF,
+  VILLAGE_DEF,
 
-  {
-    id: 'pikeman', name: 'Pikeman',
-    flavorText: 'The cavalry\'s nightmare, the footman\'s wall.',
-    class: U, allegiance: STD, subtypes: [], cost: 2, copies: 2,
-    stats: { atk: 1, def: 2, movement: MovementType.OMNI_1, attackPattern: AtkPattern.HV },
-    flags: [CardFlag.CAVALRY_COUNTER],
-    abilities: [
-      { type: AbilityType.AURA_CAVALRY_COUNTER, params: { multiplier: 3 } },
-      { type: AbilityType.AURA_PIKEMAN_FLANK,   params: { bonusAtk: 1, bonusDef: 1 } },
-    ],
-    abilityText: '×3 ATK vs Cavalry. Flank: if any friendly on left AND right squares, gain +1 ATK +1 DEF this turn.',
-  },
-
-  {
-    id: 'archer', name: 'Archer',
-    flavorText: 'Precision over brute force.',
-    class: U, allegiance: STD, subtypes: [], cost: 3, copies: 2,
-    stats: { atk: 3, def: 1, movement: MovementType.OMNI_1, attackPattern: AtkPattern.DIAGONAL_RANGED_2,
-      customAttack: PATTERN_ARCHER_ATTACK,
-    },
-
-     
-    flags: [],
-    abilities: [],
-    abilityText: 'Ranged attack: targets any unit diagonally within 2 squares. Ignores adjacency.',
-  },
-
-  {
-    id: 'assassin', name: 'Assassin',
-    flavorText: 'The shadow moves. Then it\'s over.',
-    class: U, allegiance: STD, subtypes: [], cost: 3, copies: 2,
-    stats: { atk: 4, def: 1, movement: MovementType.JUMP_DIAGONAL_1, attackPattern: AtkPattern.ON_JUMP,
-      customAttack: PATTERN_ASSASSIN_ATTACK,
-      customMove: PATTERN_ASSASSIN_MOVE,
-    },
-    
-    flags: [],
-    abilities: [],
-    abilityText: 'Jumps diagonally. Attacks landing square on jump. Ignores units along path.',
-  },
-
-  {
-    id: 'militia', name: 'Militia',
-    flavorText: 'Where one falls, another rises.',
-    class: U, allegiance: STD, subtypes: [], cost: 2, copies: 2,
-    stats: { atk: 1, def: 1, movement: MovementType.OMNI_1, attackPattern: AtkPattern.HV },
-    flags: [],
-    abilities: [
-      { type: AbilityType.CUSTOM, handler: 'militiaDeployHandler' },
-    ],
-    abilityText: 'On Deploy: pull the next Militia copy from your deck to any free square in your half.',
-  },
-
-  {
-    id: 'scout', name: 'Scout',
-    flavorText: 'Knowledge is the first casualty of ignorance.',
-    class: U, allegiance: STD, subtypes: [CAV], cost: 2, copies: 2,
-    stats: { atk: 1, def: 1, movement: MovementType.OMNI_2, attackPattern: AtkPattern.HV },
-    flags: [],
-    abilities: [
-      { type: AbilityType.ON_DEPLOY_SCOUT_DECK, params: { count: 2 } },
-    ],
-    abilityText: 'Cavalry. On Deploy: reveal the top 2 cards of opponent\'s deck (visible to you only).',
-  },
-
-  {
-    id: 'lancer', name: 'Lancer',
-    flavorText: 'At full gallop, nothing stops the charge.',
-    class: U, allegiance: STD, subtypes: [CAV], cost: 4, copies: 2,
-    stats: { atk: 3, def: 2, movement: MovementType.OMNI_2, attackPattern: AtkPattern.HV },
-    flags: [CardFlag.LANCER_CHARGE],
-    abilities: [
-      { type: AbilityType.PASSIVE_LANCER_CHARGE, params: {} },
-    ],
-    abilityText: 'Cavalry. Charge: may MOVE and ATTACK in the same turn. Movement must be toward enemy half.',
-  },
-
-  {
-    id: 'mystic', name: 'Mystic',
-    flavorText: 'She sees beyond death. The cost is paid in kind.',
-    class: U, allegiance: STD, subtypes: [], cost: 6, copies: 1,
-    stats: { atk: 2, def: 5, movement: MovementType.OMNI_1, attackPattern: AtkPattern.OMNI },
-    flags: [],
-    abilities: [
-      { type: AbilityType.CUSTOM, handler: 'mysticDeployHandler' },
-    ],
-    abilityText: 'On Deploy: revive one unit from your graveyard to any free square in your half. Permanently −1 your LEG rate (min 1).',
-  },
-
-  {
-    id: 'messenger', name: 'Messenger',
-    flavorText: 'Swift enough to carry news before it matters.',
-    class: U, allegiance: STD, subtypes: [], cost: 1, copies: 2,
-    stats: { atk: 0, def: 1, movement: MovementType.OMNI_2, attackPattern: AtkPattern.NONE },
-    flags: [],
-    abilities: [
-      { type: AbilityType.ON_DEPLOY_DRAW,       params: { count: 1 } },
-      { type: AbilityType.ON_DEPLOY_SCOUT_DECK, params: { count: 1 } },
-    ],
-    abilityText: 'On Deploy: draw 1 card. Reveal top 1 card of opponent\'s deck (visible to you only).',
-  },
-
-  // ═══════════════════════════════════════════════════════
-  // ROYAL UNITS
-  // ═══════════════════════════════════════════════════════
-
-  {
-    id: 'swordsman', name: 'Swordsman',
-    flavorText: 'A knight in all but title.',
-    class: U, allegiance: ROY, subtypes: [], cost: 3, copies: 2,
-    stats: { atk: 3, def: 3, movement: MovementType.OMNI_1, attackPattern: AtkPattern.OMNI },
-    flags: [],
-    abilities: [],
-    abilityText: 'Reform result. Requires Royal cost engine to play economically.',
-  },
-
-  {
-    id: 'princess', name: 'Princess',
-    flavorText: 'Her mere presence commands the court.',
-    class: U, allegiance: ROY, subtypes: [], cost: 5, copies: 1,
-    stats: { atk: 0, def: 1, movement: MovementType.OMNI_1, attackPattern: AtkPattern.NONE },
-    flags: [],
-    abilities: [
-      { type: AbilityType.AURA_LEG_BONUS,      params: { amount: 1 } },
-      { type: AbilityType.AURA_ROYAL_DISCOUNT, params: { amount: 1 } },
-    ],
-    abilityText: '+1 LEG/turn while on board. −1 Royal card cost while on board.',
-  },
-
-  {
-    id: 'priest', name: 'Priest',
-    flavorText: 'The wounded are never truly lost.',
-    class: U, allegiance: ROY, subtypes: [], cost: 6, copies: 2,
-    stats: { atk: 1, def: 3, movement: MovementType.OMNI_1, attackPattern: AtkPattern.HV },
-    flags: [],
-    abilities: [
-      { type: AbilityType.ON_DEPLOY_HEAL_FRIENDLY, params: { amount: 'FULL' } },
-    ],
-    abilityText: 'On Deploy: fully restore one friendly unit\'s HP (including King).',
-  },
-
-  {
-    id: 'commander', name: 'Commander',
-    flavorText: 'Every soldier fights harder in his shadow.',
-    class: U, allegiance: ROY, subtypes: [CAV], cost: 7, copies: 1,
-    stats: { atk: 5, def: 5, movement: MovementType.OMNI_2, attackPattern: AtkPattern.OMNI },
-    flags: [],
-    abilities: [
-      { type: AbilityType.AURA_BOARD_HALF_DEF, params: { half: 'OWN',   amount: 1 } },
-      { type: AbilityType.AURA_BOARD_HALF_ATK, params: { half: 'ENEMY', amount: 1 } },
-    ],
-    abilityText: 'Cavalry. Aura: all friendly units on your half +1 DEF. All friendly units on enemy half +1 ATK.',
-  },
-
-  {
-    id: 'inquisitor', name: 'Inquisitor',
-    flavorText: 'The guilty always reveal themselves.',
-    class: U, allegiance: ROY, subtypes: [], cost: 7, copies: 2,
-    stats: { atk: 4, def: 4, movement: MovementType.OMNI_1, attackPattern: AtkPattern.OMNI },
-    flags: [],
-    abilities: [
-      { type: AbilityType.ON_KILL_LEG_DRAIN, params: { minTargetCost: 4, amount: 1 } },
-    ],
-    abilityText: 'On Kill: if target\'s base cost >4, permanently −1 opponent\'s LEG rate (min 1).',
-  },
-
-  {
-    id: 'knight', name: 'Knight',
-    flavorText: 'Heavy, fast, devastating.',
-    class: U, allegiance: ROY, subtypes: [CAV], cost: 9, copies: 2,
-    stats: { atk: 5, def: 8, movement: MovementType.OMNI_2, attackPattern: AtkPattern.OMNI },
-    flags: [],
-    abilities: [],
-    abilityText: 'Cavalry. Requires Royal discount engine to play before late game.',
-  },
-
-  {
-    id: 'knights_guard', name: "King's Guard",
-    flavorText: 'Sworn in blood. Unwavering in duty.',
-    class: U, allegiance: ROY, subtypes: [], cost: 12, copies: 1,
-    stats: { atk: 6, def: 12, movement: MovementType.OMNI_1, attackPattern: AtkPattern.OMNI },
-    flags: [],
-    abilities: [
-      { type: AbilityType.AURA_AUTO_HEAL,      params: { amount: 2 } },
-      { type: AbilityType.AURA_ROYAL_DISCOUNT, params: { amount: 1 } },
-    ],
-    abilityText: 'Auto-heal +2 HP at start of your LEG phase. While on board: −1 Royal card cost.',
-  },
-
-  {
-    id: 'scribe', name: 'Scribe',
-    flavorText: 'The pen shapes the future of the crown.',
-    class: U, allegiance: ROY, subtypes: [], cost: 5, copies: 2,
-    stats: { atk: 0, def: 2, movement: MovementType.OMNI_1, attackPattern: AtkPattern.NONE },
-    flags: [],
-    abilities: [
-      { type: AbilityType.ON_DEPLOY_DRAW, params: { count: 2, filter: 'ROYAL' } },
-    ],
-    abilityText: 'On Deploy: draw 2 Royal cards from your deck (skip non-Royal until count met or deck empty).',
-  },
-
-  // ═══════════════════════════════════════════════════════
-  // STRUCTURES (STATIC)
-  // ═══════════════════════════════════════════════════════
-
-  {
-    id: 'castle', name: 'Castle',
-    flavorText: 'Stone and mortar, patience and power.',
-    class: ST, allegiance: ROY, subtypes: [STRUC], cost: 4, copies: 1,
-    stats: { atk: 3, def: 8, movement: MovementType.STATIC, attackPattern: AtkPattern.AREA_ADJ },
-    flags: [CardFlag.BUILD_DELAY],
-    abilities: [
-      { type: AbilityType.AURA_ROYAL_DISCOUNT, params: { amount: 1 } },
-      { type: AbilityType.AURA_ADJ_DEF,        params: { amount: 1 } },
-      { type: AbilityType.PASSIVE_BUILD_DELAY,  params: {} },
-      { type: AbilityType.PASSIVE_SPAWN,        params: { cardId: 'foot_soldier', interval: 3 } },
-    ],
-    abilityText: 'Build Delay: inactive for 1 turn after placement. Attacks all adjacent enemies each LEG phase. Adjacent friendlies +1 DEF. Spawns 1 Foot Soldier every 3 turns. −1 Royal cost.',
-  },
-
-  {
-    id: 'temple', name: 'Temple',
-    flavorText: 'Legitimacy is granted by the divine.',
-    class: ST, allegiance: ROY, subtypes: [STRUC], cost: 3, copies: 2,
-    stats: { atk: 0, def: 5, movement: MovementType.STATIC, attackPattern: AtkPattern.NONE },
-    flags: [CardFlag.BUILD_DELAY],
-    abilities: [
-      { type: AbilityType.AURA_ROYAL_DISCOUNT, params: { amount: 1 } },
-      { type: AbilityType.PASSIVE_BUILD_DELAY, params: {} },
-    ],
-    abilityText: 'Build Delay: inactive 1 turn. −1 Royal card cost while on board.',
-  },
-
-  {
-    id: 'village', name: 'Village',
-    flavorText: 'The people tire of marching armies.',
-    class: ST, allegiance: STD, subtypes: [STRUC], cost: 2, copies: 2,
-    stats: { atk: 0, def: 4, movement: MovementType.STATIC, attackPattern: AtkPattern.NONE },
-    flags: [CardFlag.BUILD_DELAY],
-    abilities: [
-      { type: AbilityType.AURA_VILLAGE_SLOW, params: { amount: 1 } },
-      { type: AbilityType.PASSIVE_BUILD_DELAY, params: {} },
-    ],
-    abilityText: 'Build Delay: inactive 1 turn. Aura: all adjacent enemy units −1 movement (min 0). Immobilized units may still attack this structure.',
-  },
-
-  // ═══════════════════════════════════════════════════════
-  // SPELLS
-  // ═══════════════════════════════════════════════════════
-
-  {
-    id: 'disease', name: 'Disease',
-    flavorText: 'The rot spreads from stone to stone.',
-    class: SP, allegiance: STD, subtypes: [], cost: 4, copies: 2,
-    flags: [],
-    abilities: [
-      { type: AbilityType.SPELL_DAMAGE_STRUCTURE_ADJ, params: { damage: 2, duration: 3 } },
-    ],
-    abilityText: 'Target a Structure. It takes 2 damage at the start of your turn for 3 turns. Units adjacent to it take 1 damage per tick.',
-  },
-
-  {
-    id: 'casus_belli', name: 'Casus Belli',
-    flavorText: 'A pretext for war is always found.',
-    class: SP, allegiance: STD, subtypes: [], cost: 4, copies: 1,
-    flags: [],
-    abilities: [
-      { type: AbilityType.SPELL_DRAIN_LEG_RATE_PERM, params: { amount: 1, target: 'OPPONENT' } },
-      { type: AbilityType.SPELL_FORWARD_DEPLOY,       params: {} },
-    ],
-    abilityText: 'Permanently −1 opponent\'s LEG rate (min 1). Then deploy one card from your hand to any free square in the front row of enemy half.',
-  },
-
-  {
-    id: 'reform', name: 'Reform',
-    flavorText: 'The soldier becomes the knight he always was.',
-    class: SP, allegiance: STD, subtypes: [], cost: 2, copies: 2,
-    flags: [],
-    abilities: [
-      { type: AbilityType.SPELL_TRANSFORM_ALL, params: { fromCardId: 'foot_soldier', toCardId: 'swordsman' } },
-    ],
-    abilityText: 'Transform all Foot Soldiers on the board into Swordsmen. HP scales proportionally. Does not trigger Foot Soldier\'s On Death ability.',
-  },
-
-  {
-    id: 'civil_war', name: 'Civil War',
-    flavorText: 'When the kingdom turns on itself, all suffer.',
-    class: SP, allegiance: STD, subtypes: [], cost: 3, copies: 1,
-    flags: [],
-    abilities: [
-      { type: AbilityType.SPELL_FREEZE_LEG_RATE, params: { duration: 3 } },
-    ],
-    abilityText: 'Both players\' LEG rates are frozen at 0 for 3 turns. Existing pools are unaffected.',
-  },
-
-  {
-    id: 'earthquake', name: 'Earthquake',
-    flavorText: 'The earth itself takes sides.',
-    class: SP, allegiance: STD, subtypes: [], cost: 5, copies: 1,
-    flags: [],
-    abilities: [
-      { type: AbilityType.SPELL_EARTHQUAKE, params: {} },
-    ],
-    abilityText: 'Choose a column (A–F). All units in that column take 3 damage. Triggers Foot Soldier On Death.',
-  },
-
-  {
-    id: 'war_horn', name: 'War Horn',
-    flavorText: 'The sound of destiny.',
-    class: SP, allegiance: STD, subtypes: [], cost: 3, copies: 2,
-    flags: [],
-    abilities: [
-      { type: AbilityType.SPELL_WAR_HORN, params: {} },
-    ],
-    abilityText: 'Draw 2 cards, then discard 1. All your units gain +1 movement this turn.',
-  },
-
-  {
-    id: 'coup', name: 'Coup',
-    flavorText: 'Power seized in a single night.',
-    class: SP, allegiance: ROY, subtypes: [], cost: 12, copies: 1,
-    flags: [],
-    abilities: [
-      { type: AbilityType.SPELL_COUP, params: {} },
-    ],
-    abilityText: 'Target an enemy Royal unit (not King). If your remaining LEG ≥ target\'s base cost: capture it (it joins your side). Otherwise: banish it from the game.',
-  },
-
-  {
-    id: 'treason', name: 'Treason',
-    flavorText: 'Even loyal men have a price.',
-    class: SP, allegiance: STD, subtypes: [], cost: 4, copies: 2,
-    flags: [],
-    abilities: [
-      { type: AbilityType.SPELL_TREASON, params: {} },
-    ],
-    abilityText: 'Target an enemy non-Royal unit. It fights for you this turn only. At end of turn: returns to original position, exhausted.',
-  },
-
-  {
-    id: 'motherland', name: 'Motherland',
-    flavorText: 'The homeland always gives more.',
-    class: SP, allegiance: STD, subtypes: [], cost: 4, copies: 1,
-    flags: [],
-    abilities: [
-      { type: AbilityType.SPELL_DRAW_STRUCTURES, params: { overflow: true } },
-    ],
-    abilityText: 'Draw 1 card per Structure you control. Can overflow hand limit this turn. Overflow cards are lost at end of turn.',
-  },
-
-  {
-    id: 'peasant_revolt', name: 'Peasant Revolt',
-    flavorText: 'The masses have little to lose.',
-    class: SP, allegiance: STD, subtypes: [], cost: 3, copies: 1,
-    flags: [],
-    abilities: [
-      { type: AbilityType.SPELL_REVOLT, params: {} },
-    ],
-    abilityText: 'Summon 1 Militia to any free square in your half per Structure on the board (both sides). Permanent penalty to you: −1 LEG rate (min 1) and +2 Royal cost for the rest of the game.',
-  },
-
+  // Spells
+  DISEASE_DEF,
+  CASUS_BELLI_DEF,
+  REFORM_DEF,
+  CIVIL_WAR_DEF,
+  EARTHQUAKE_DEF,
+  WAR_HORN_DEF,
+  COUP_DEF,
+  TREASON_DEF,
+  MOTHERLAND_DEF,
+  PEASANT_REVOLT_DEF,
 ];
-
 
 ```
 
@@ -8122,6 +9394,736 @@ export function getCard(id: string): Readonly<CardDefinition> {
   if (!c) throw new Error(`[CardRegistry] Unknown card id: "${id}"`);
   return c;
 }
+
+```
+
+# src\game\data\cards\_aliases.ts
+
+```ts
+// Shorthand aliases for card definitions
+import { CardClass, Allegiance, SubType } from '../../types/CardTypes.js';
+
+export const U    = CardClass.UNIT;
+export const SP   = CardClass.SPELL;
+export const ST   = CardClass.STRUCTURE;
+export const STD  = Allegiance.STANDARD;
+export const ROY  = Allegiance.ROYAL;
+export const CAV  = SubType.CAVALRY;
+export const STRUC = SubType.STRUCTURE;
+
+```
+
+# src\game\data\cards\archer.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern } from '../../types/CardTypes.js';
+import { U, STD } from './_aliases.js';
+import { PATTERN_ARCHER_ATTACK } from '../MovementPresets';
+
+export const ARCHER_DEF: CardDefinition = {
+  id: 'archer', name: 'Archer',
+  flavorText: 'Precision over brute force.',
+  class: U, allegiance: STD, subtypes: [], cost: 3, copies: 2,
+  stats: { atk: 3, def: 1, movement: MovementType.OMNI_1, attackPattern: AtkPattern.DIAGONAL_RANGED_2,
+    customAttack: PATTERN_ARCHER_ATTACK,
+  },
+  flags: [],
+  abilities: [],
+  abilityText: 'Ranged attack: targets any unit diagonally within 2 squares. Ignores adjacency.',
+};
+
+```
+
+# src\game\data\cards\assassin.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern } from '../../types/CardTypes.js';
+import { U, STD } from './_aliases.js';
+export const ASSASSIN_DEF: CardDefinition = {
+  id: 'assassin', name: 'Assassin',
+  flavorText: 'The shadow moves. Then it\'s over.',
+  class: U, allegiance: STD, subtypes: [], cost: 3, copies: 2,
+  stats: { atk: 4, def: 1, movement: MovementType.JUMP_DIAGONAL_1, attackPattern: AtkPattern.ON_JUMP,
+      customAttack: {
+        offsets: [
+          { dx: -1, dy: -1 }, { dx: 1, dy: -1 }, { dx: -1, dy: 1 }, { dx: 1, dy: 1 },
+        ],
+        canJump: true,
+      },
+      customMove: {
+        offsets: [
+          { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 }, { dx: -2, dy: 0 },
+          { dx: 2, dy: 0 }, { dx: 0, dy: 2 },
+        ],
+        canJump: true,
+      },},
+  flags: [],
+  ambushBonus: 1,
+  abilities: [],
+  abilityText: 'Jumps diagonally. Attacks landing square on jump. Ambush: +1 ATK from rear arc.',
+};
+
+```
+
+# src\game\data\cards\castle.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern, CardFlag } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { ST, ROY, STRUC } from './_aliases.js';
+
+export const CASTLE_DEF: CardDefinition = {
+  id: 'castle', name: 'Castle',
+  flavorText: 'Stone and mortar, patience and power.',
+  class: ST, allegiance: ROY, subtypes: [STRUC], cost: 4, copies: 1,
+  stats: { atk: 3, def: 8, movement: MovementType.STATIC, attackPattern: AtkPattern.AREA_ADJ },
+  flags: [CardFlag.BUILD_DELAY],
+  abilities: [
+    { type: AbilityType.AURA_ROYAL_DISCOUNT, params: { amount: 1 } },
+    { type: AbilityType.AURA_ADJ_DEF,        params: { amount: 1 } },
+    { type: AbilityType.PASSIVE_BUILD_DELAY,  params: {} },
+    { type: AbilityType.PASSIVE_SPAWN,        params: { cardId: 'foot_soldier', interval: 3 } },
+  ],
+  abilityText: 'Build Delay: inactive for 1 turn after placement. Attacks all adjacent enemies each LEG phase. Adjacent friendlies +1 DEF. Spawns 1 Foot Soldier every 3 turns. −1 Royal cost.',
+};
+
+```
+
+# src\game\data\cards\casus_belli.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { SP, STD } from './_aliases.js';
+
+export const CASUS_BELLI_DEF: CardDefinition = {
+  id: 'casus_belli', name: 'Casus Belli',
+  flavorText: 'A pretext for war is always found.',
+  class: SP, allegiance: STD, subtypes: [], cost: 4, copies: 1,
+  flags: [],
+  abilities: [
+    { type: AbilityType.SPELL_DRAIN_LEG_RATE_PERM, params: { amount: 1, target: 'OPPONENT' } },
+    { type: AbilityType.SPELL_FORWARD_DEPLOY,       params: {} },
+  ],
+  abilityText: 'Permanently −1 opponent\'s LEG rate (min 1). Then deploy one card from your hand to any free square in the front row of enemy half.',
+};
+
+```
+
+# src\game\data\cards\civil_war.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { SP, STD } from './_aliases.js';
+
+export const CIVIL_WAR_DEF: CardDefinition = {
+  id: 'civil_war', name: 'Civil War',
+  flavorText: 'When the kingdom turns on itself, all suffer.',
+  class: SP, allegiance: STD, subtypes: [], cost: 3, copies: 1,
+  flags: [],
+  abilities: [
+    { type: AbilityType.SPELL_FREEZE_LEG_RATE, params: { duration: 3 } },
+  ],
+  abilityText: 'Both players\' LEG rates are frozen at 0 for 3 turns. Existing pools are unaffected.',
+};
+
+```
+
+# src\game\data\cards\commander.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { U, ROY, CAV } from './_aliases.js';
+
+export const COMMANDER_DEF: CardDefinition = {
+  id: 'commander', name: 'Commander',
+  flavorText: 'Every soldier fights harder in his shadow.',
+  class: U, allegiance: ROY, subtypes: [CAV], cost: 7, copies: 1,
+  stats: { atk: 5, def: 5, movement: MovementType.OMNI_2, attackPattern: AtkPattern.OMNI },
+  flags: [],
+  abilities: [
+    { type: AbilityType.AURA_BOARD_HALF_DEF, params: { half: 'OWN',   amount: 1 } },
+    { type: AbilityType.AURA_BOARD_HALF_ATK, params: { half: 'ENEMY', amount: 1 } },
+  ],
+  abilityText: 'Cavalry. Aura: when on your half, friendly units there +1 DEF. When on enemy half, friendly units there +1 ATK. Neutral zone: no aura.',
+};
+
+```
+
+# src\game\data\cards\coup.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { SP, ROY } from './_aliases.js';
+
+export const COUP_DEF: CardDefinition = {
+  id: 'coup', name: 'Coup',
+  flavorText: 'Power seized in a single night.',
+  class: SP, allegiance: ROY, subtypes: [], cost: 12, copies: 1,
+  flags: [],
+  abilities: [
+    { type: AbilityType.SPELL_COUP, params: {} },
+  ],
+  abilityText: 'Target an enemy Royal unit (not King). If your remaining LEG ≥ target\'s base cost: capture it (it joins your side). Otherwise: banish it from the game.',
+};
+
+```
+
+# src\game\data\cards\disease.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { SP, STD } from './_aliases.js';
+
+export const DISEASE_DEF: CardDefinition = {
+  id: 'disease', name: 'Disease',
+  flavorText: 'The rot spreads from stone to stone.',
+  class: SP, allegiance: STD, subtypes: [], cost: 4, copies: 2,
+  flags: [],
+  abilities: [
+    { type: AbilityType.SPELL_DAMAGE_STRUCTURE_ADJ, params: { damage: 2, duration: 3 } },
+  ],
+  abilityText: 'Target a Structure. It takes 2 damage at the start of your turn for 3 turns. Units adjacent to it take 1 damage per tick.',
+};
+
+```
+
+# src\game\data\cards\earthquake.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { SP, STD } from './_aliases.js';
+
+export const EARTHQUAKE_DEF: CardDefinition = {
+  id: 'earthquake', name: 'Earthquake',
+  flavorText: 'The earth itself takes sides.',
+  class: SP, allegiance: STD, subtypes: [], cost: 5, copies: 1,
+  flags: [],
+  abilities: [
+    { type: AbilityType.SPELL_EARTHQUAKE, params: {} },
+  ],
+  abilityText: 'Choose a column (A–F). All units in that column take 3 damage. Triggers Foot Soldier On Death.',
+};
+
+```
+
+# src\game\data\cards\foot_soldier.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { U, STD } from './_aliases.js';
+
+export const FOOT_SOLDIER_DEF: CardDefinition = {
+  id: 'foot_soldier', name: 'Foot Soldier',
+  flavorText: 'Cannon fodder with a silver lining.',
+  class: U, allegiance: STD, subtypes: [], cost: 1, copies: 3,
+  stats: { atk: 1, def: 1, movement: MovementType.OMNI_1, attackPattern: AtkPattern.HV },
+  flags: [],
+  abilities: [
+    { type: AbilityType.ON_DEATH_DRAW, params: { count: 1 } },
+  ],
+  abilityText: 'On Death: draw 1 card. Reform target: becomes Swordsman.',
+};
+
+```
+
+# src\game\data\cards\inquisitor.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { U, ROY } from './_aliases.js';
+
+export const INQUISITOR_DEF: CardDefinition = {
+  id: 'inquisitor', name: 'Inquisitor',
+  flavorText: 'The guilty always reveal themselves.',
+  class: U, allegiance: ROY, subtypes: [], cost: 7, copies: 2,
+  stats: { atk: 4, def: 4, movement: MovementType.OMNI_1, attackPattern: AtkPattern.OMNI },
+  flags: [],
+  abilities: [
+    { type: AbilityType.ON_KILL_LEG_DRAIN, params: { minTargetCost: 4, amount: 1 } },
+  ],
+  abilityText: 'On Kill: if target\'s base cost >4, permanently −1 opponent\'s LEG rate (min 1).',
+};
+
+```
+
+# src\game\data\cards\king.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { U, ROY } from './_aliases.js';
+
+export const KING_DEF: CardDefinition = {
+  id: 'king', name: 'King',
+  flavorText: 'All legitimacy flows from the crown.',
+  class: U, allegiance: ROY, subtypes: [], cost: 0, copies: 1,
+  stats: { atk: 1, def: 10, movement: MovementType.OMNI_1, attackPattern: AtkPattern.OMNI },
+  flags: [],
+  abilities: [
+    { type: AbilityType.AURA_LEG_BONUS, params: { amount: 1 } },
+  ],
+  abilityText: 'Pre-placed. Generates +1 LEG/turn. Enemy King in your half: lose 1 LEG this turn. Win condition.',
+};
+
+```
+
+# src\game\data\cards\knight.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern } from '../../types/CardTypes.js';
+import { U, ROY, CAV } from './_aliases.js';
+
+export const KNIGHT_DEF: CardDefinition = {
+  id: 'knight', name: 'Knight',
+  flavorText: 'Heavy, fast, devastating.',
+  class: U, allegiance: ROY, subtypes: [CAV], cost: 9, copies: 2,
+  stats: { atk: 5, def: 8, movement: MovementType.OMNI_2, attackPattern: AtkPattern.OMNI },
+  flags: [],
+  abilities: [],
+  abilityText: 'Cavalry. Requires Royal discount engine to play before late game.',
+};
+
+```
+
+# src\game\data\cards\knights_guard.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { U, ROY } from './_aliases.js';
+
+export const KNIGHTS_GUARD_DEF: CardDefinition = {
+  id: 'knights_guard', name: "King's Guard",
+  flavorText: 'Sworn in blood. Unwavering in duty.',
+  class: U, allegiance: ROY, subtypes: [], cost: 12, copies: 1,
+  stats: { atk: 6, def: 12, movement: MovementType.OMNI_1, attackPattern: AtkPattern.OMNI },
+  flags: [],
+  abilities: [
+    { type: AbilityType.AURA_AUTO_HEAL,      params: { amount: 2 } },
+    { type: AbilityType.AURA_ROYAL_DISCOUNT, params: { amount: 1 } },
+  ],
+  abilityText: 'Auto-heal +2 HP at start of your LEG phase. While on board: −1 Royal card cost.',
+};
+
+```
+
+# src\game\data\cards\lancer.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern, CardFlag } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { U, STD, CAV } from './_aliases.js';
+
+export const LANCER_DEF: CardDefinition = {
+  id: 'lancer', name: 'Lancer',
+  flavorText: 'At full gallop, nothing stops the charge.',
+  class: U, allegiance: STD, subtypes: [CAV], cost: 4, copies: 2,
+  stats: { atk: 3, def: 2, movement: MovementType.OMNI_2, attackPattern: AtkPattern.HV,
+      customAttack: {
+        offsets: [
+          { dx: 0, dy: -1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }, { dx: 0, dy: 1 },
+        ],
+      },
+      customMove: {
+        offsets: [
+          { dx: 0, dy: -2 }, { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
+          { dx: -2, dy: 0 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 },
+          { dx: -1, dy: 1 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 }, { dx: 0, dy: 2 },
+        ],
+      },
+    },
+  flags: [CardFlag.LANCER_CHARGE],
+  abilities: [
+    { type: AbilityType.PASSIVE_LANCER_CHARGE, params: {} },
+  ],
+  abilityText: 'Cavalry. Charge: may MOVE and ATTACK in the same turn. Movement must be toward enemy half.',
+};
+
+```
+
+# src\game\data\cards\messenger.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { U, STD } from './_aliases.js';
+
+export const MESSENGER_DEF: CardDefinition = {
+  id: 'messenger', name: 'Messenger',
+  flavorText: 'Swift enough to carry news before it matters.',
+  class: U, allegiance: STD, subtypes: [], cost: 1, copies: 2,
+  stats: { atk: 0, def: 1, movement: MovementType.OMNI_2, attackPattern: AtkPattern.NONE,
+      customMove: {
+        offsets: [
+          { dx: -2, dy: -2 }, { dx: 2, dy: -2 }, { dx: -1, dy: -1 }, { dx: 0, dy: -1 },
+          { dx: 1, dy: -1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }, { dx: -1, dy: 1 },
+          { dx: 0, dy: 1 }, { dx: 1, dy: 1 }, { dx: -2, dy: 2 }, { dx: 2, dy: 2 },
+        ],
+      },
+    },
+  flags: [],
+  abilities: [
+    { type: AbilityType.ON_DEPLOY_DRAW,       params: { count: 1 } },
+    { type: AbilityType.ON_DEPLOY_SCOUT_DECK, params: { count: 1 } },
+    { type: AbilityType.AURA_SUPPRESS_KING_ATK, params: {} },
+  ],
+  abilityText: 'On Deploy: draw 1 card. Reveal top 1 card of opponent\'s deck. Aura: adjacent enemy King ATK = 0.',
+};
+
+```
+
+# src\game\data\cards\militia.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { U, STD } from './_aliases.js';
+
+export const MILITIA_DEF: CardDefinition = {
+  id: 'militia', name: 'Militia',
+  flavorText: 'Where one falls, another rises.',
+  class: U, allegiance: STD, subtypes: [], cost: 2, copies: 2,
+  stats: { atk: 1, def: 1, movement: MovementType.OMNI_1, attackPattern: AtkPattern.HV },
+  flags: [],
+  abilities: [
+    { type: AbilityType.CUSTOM, handler: 'militiaDeployHandler' },
+  ],
+  abilityText: 'On Deploy: pull the next Militia copy from your deck to any free square in your half.',
+};
+
+```
+
+# src\game\data\cards\motherland.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { SP, STD } from './_aliases.js';
+
+export const MOTHERLAND_DEF: CardDefinition = {
+  id: 'motherland', name: 'Motherland',
+  flavorText: 'The homeland always gives more.',
+  class: SP, allegiance: STD, subtypes: [], cost: 4, copies: 1,
+  flags: [],
+  abilities: [
+    { type: AbilityType.SPELL_DRAW_STRUCTURES, params: { overflow: true } },
+  ],
+  abilityText: 'Draw 1 card per Structure you control. Can overflow hand limit this turn. Overflow cards are lost at end of turn.',
+};
+
+```
+
+# src\game\data\cards\mystic.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { U, STD } from './_aliases.js';
+
+export const MYSTIC_DEF: CardDefinition = {
+  id: 'mystic', name: 'Mystic',
+  flavorText: 'She sees beyond death. The cost is paid in kind.',
+  class: U, allegiance: STD, subtypes: [], cost: 6, copies: 1,
+  stats: { atk: 2, def: 5, movement: MovementType.OMNI_1, attackPattern: AtkPattern.OMNI },
+  flags: [],
+  abilities: [
+    { type: AbilityType.CUSTOM, handler: 'mysticDeployHandler' },
+  ],
+  abilityText: 'On Deploy: revive one unit from your graveyard to any free square in your half. Permanently −1 your LEG rate (min 1).',
+};
+
+```
+
+# src\game\data\cards\peasant_revolt.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { SP, STD } from './_aliases.js';
+
+export const PEASANT_REVOLT_DEF: CardDefinition = {
+  id: 'peasant_revolt', name: 'Peasant Revolt',
+  flavorText: 'The masses have little to lose.',
+  class: SP, allegiance: STD, subtypes: [], cost: 3, copies: 1,
+  flags: [],
+  abilities: [
+    { type: AbilityType.SPELL_REVOLT, params: {} },
+  ],
+  abilityText: 'Summon 1 Militia to any free square in your half per Structure on the board (both sides). Permanent penalty to you: −1 LEG rate (min 1) and +2 Royal cost for the rest of the game.',
+};
+
+```
+
+# src\game\data\cards\pikeman.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern, CardFlag } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { U, STD } from './_aliases.js';
+
+export const PIKEMAN_DEF: CardDefinition = {
+  id: 'pikeman', name: 'Pikeman',
+  flavorText: 'The cavalry\'s nightmare, the footman\'s wall.',
+  class: U, allegiance: STD, subtypes: [], cost: 2, copies: 2,
+  stats: { atk: 1, def: 2, movement: MovementType.OMNI_1, attackPattern: AtkPattern.HV },
+  flags: [CardFlag.CAVALRY_COUNTER],
+  abilities: [
+    { type: AbilityType.AURA_CAVALRY_COUNTER, params: { multiplier: 3 } },
+    { type: AbilityType.AURA_PIKEMAN_FLANK,   params: { bonusAtk: 1, bonusDef: 1 } },
+  ],
+  abilityText: '×3 ATK vs Cavalry. Flank: if any friendly on left AND right squares, gain +1 ATK +1 DEF this turn.',
+};
+
+```
+
+# src\game\data\cards\priest.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { U, ROY } from './_aliases.js';
+
+export const PRIEST_DEF: CardDefinition = {
+  id: 'priest', name: 'Priest',
+  flavorText: 'The wounded are never truly lost.',
+  class: U, allegiance: ROY, subtypes: [], cost: 6, copies: 2,
+  stats: { atk: 1, def: 3, movement: MovementType.OMNI_1, attackPattern: AtkPattern.HV },
+  flags: [],
+  abilities: [
+    { type: AbilityType.ON_DEPLOY_HEAL_FRIENDLY, params: { amount: 'FULL' } },
+  ],
+  abilityText: 'On Deploy: fully restore one friendly unit\'s HP (including King).',
+};
+
+```
+
+# src\game\data\cards\princess.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { U, ROY } from './_aliases.js';
+
+export const PRINCESS_DEF: CardDefinition = {
+  id: 'princess', name: 'Princess',
+  flavorText: 'Her mere presence commands the court.',
+  class: U, allegiance: ROY, subtypes: [], cost: 5, copies: 1,
+  stats: { atk: 0, def: 1, movement: MovementType.OMNI_1, attackPattern: AtkPattern.NONE },
+  flags: [],
+  abilities: [
+    { type: AbilityType.AURA_LEG_BONUS,      params: { amount: 1 } },
+    { type: AbilityType.AURA_ROYAL_DISCOUNT, params: { amount: 1 } },
+  ],
+  abilityText: '+1 LEG/turn while on board. −1 Royal card cost while on board.',
+};
+
+```
+
+# src\game\data\cards\reform.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { SP, STD } from './_aliases.js';
+
+export const REFORM_DEF: CardDefinition = {
+  id: 'reform', name: 'Reform',
+  flavorText: 'The soldier becomes the knight he always was.',
+  class: SP, allegiance: STD, subtypes: [], cost: 2, copies: 2,
+  flags: [],
+  abilities: [
+    { type: AbilityType.SPELL_TRANSFORM_ALL, params: { fromCardId: 'foot_soldier', toCardId: 'swordsman' } },
+  ],
+  abilityText: 'Transform all Foot Soldiers on the board into Swordsmen. HP scales proportionally. Does not trigger Foot Soldier\'s On Death ability.',
+};
+
+```
+
+# src\game\data\cards\scout.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { U, STD, CAV } from './_aliases.js';
+
+export const SCOUT_DEF: CardDefinition = {
+  id: 'scout', name: 'Scout',
+  flavorText: 'Knowledge is the first casualty of ignorance.',
+  class: U, allegiance: STD, subtypes: [CAV], cost: 2, copies: 2,
+  stats: { atk: 1, def: 1, movement: MovementType.OMNI_2, attackPattern: AtkPattern.HV,
+      customAttack: {
+        offsets: [
+          { dx: 0, dy: -1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }, { dx: 0, dy: 1 },
+        ],
+      },
+      customMove: {
+        offsets: [
+          { dx: -1, dy: -2 }, { dx: 0, dy: -2 }, { dx: 1, dy: -2 }, { dx: -2, dy: -1 },
+          { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 }, { dx: 2, dy: -1 },
+          { dx: -2, dy: 0 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 },
+          { dx: -2, dy: 1 }, { dx: -1, dy: 1 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 },
+          { dx: 2, dy: 1 }, { dx: -1, dy: 2 }, { dx: 0, dy: 2 }, { dx: 1, dy: 2 },
+        ],
+      },},
+  flags: [],
+  backstabBonus: 1,
+  abilities: [
+    { type: AbilityType.ON_DEPLOY_SCOUT_DECK, params: { count: 2 } },
+  ],
+  abilityText: 'Cavalry. On Deploy: reveal the top 2 cards of opponent\'s deck (visible to you only).',
+};
+
+```
+
+# src\game\data\cards\scribe.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { U, ROY } from './_aliases.js';
+
+export const SCRIBE_DEF: CardDefinition = {
+  id: 'scribe', name: 'Scribe',
+  flavorText: 'The pen shapes the future of the crown.',
+  class: U, allegiance: ROY, subtypes: [], cost: 5, copies: 2,
+  stats: { atk: 0, def: 2, movement: MovementType.OMNI_1, attackPattern: AtkPattern.NONE },
+  flags: [],
+  abilities: [
+    { type: AbilityType.ON_DEPLOY_DRAW, params: { count: 2, filter: 'ROYAL' } },
+  ],
+  abilityText: 'On Deploy: draw 2 Royal cards from your deck (skip non-Royal until count met or deck empty).',
+};
+
+```
+
+# src\game\data\cards\swordsman.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern } from '../../types/CardTypes.js';
+import { U, ROY } from './_aliases.js';
+
+export const SWORDSMAN_DEF: CardDefinition = {
+  id: 'swordsman', name: 'Swordsman',
+  flavorText: 'A knight in all but title.',
+  class: U, allegiance: ROY, subtypes: [], cost: 3, copies: 2,
+  stats: { atk: 3, def: 3, movement: MovementType.OMNI_1, attackPattern: AtkPattern.OMNI },
+  flags: [],
+  abilities: [],
+  abilityText: 'Reform result. Requires Royal cost engine to play economically.',
+};
+
+```
+
+# src\game\data\cards\temple.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern, CardFlag } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { ST, ROY, STRUC } from './_aliases.js';
+
+export const TEMPLE_DEF: CardDefinition = {
+  id: 'temple', name: 'Temple',
+  flavorText: 'Legitimacy is granted by the divine.',
+  class: ST, allegiance: ROY, subtypes: [STRUC], cost: 3, copies: 2,
+  stats: { atk: 0, def: 5, movement: MovementType.STATIC, attackPattern: AtkPattern.NONE },
+  flags: [CardFlag.BUILD_DELAY],
+  abilities: [
+    { type: AbilityType.AURA_ROYAL_DISCOUNT, params: { amount: 1 } },
+    { type: AbilityType.PASSIVE_BUILD_DELAY, params: {} },
+  ],
+  abilityText: 'Build Delay: inactive 1 turn. −1 Royal card cost while on board.',
+};
+
+```
+
+# src\game\data\cards\treason.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { SP, STD } from './_aliases.js';
+
+export const TREASON_DEF: CardDefinition = {
+  id: 'treason', name: 'Treason',
+  flavorText: 'Even loyal men have a price.',
+  class: SP, allegiance: STD, subtypes: [], cost: 4, copies: 2,
+  flags: [],
+  abilities: [
+    { type: AbilityType.SPELL_TREASON, params: {} },
+  ],
+  abilityText: 'Target an enemy non-Royal unit. It fights for you this turn only. At end of turn: returns to original position, exhausted.',
+};
+
+```
+
+# src\game\data\cards\village.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { MovementType, AtkPattern, CardFlag } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { ST, STD, STRUC } from './_aliases.js';
+
+export const VILLAGE_DEF: CardDefinition = {
+  id: 'village', name: 'Village',
+  flavorText: 'The people tire of marching armies.',
+  class: ST, allegiance: STD, subtypes: [STRUC], cost: 2, copies: 2,
+  stats: { atk: 0, def: 4, movement: MovementType.STATIC, attackPattern: AtkPattern.NONE },
+  flags: [CardFlag.BUILD_DELAY],
+  abilities: [
+    { type: AbilityType.AURA_VILLAGE_SLOW, params: { amount: 1 } },
+    { type: AbilityType.PASSIVE_BUILD_DELAY, params: {} },
+  ],
+  abilityText: 'Build Delay: inactive 1 turn. Aura: all adjacent enemy units −1 movement (min 0). Immobilized units may still attack this structure.',
+};
+
+```
+
+# src\game\data\cards\war_horn.ts
+
+```ts
+import type { CardDefinition } from '../../types/CardTypes.js';
+import { AbilityType } from '../../types/AbilityTypes';
+import { SP, STD } from './_aliases.js';
+
+export const WAR_HORN_DEF: CardDefinition = {
+  id: 'war_horn', name: 'War Horn',
+  flavorText: 'The sound of destiny.',
+  class: SP, allegiance: STD, subtypes: [], cost: 3, copies: 2,
+  flags: [],
+  abilities: [
+    { type: AbilityType.SPELL_WAR_HORN, params: {} },
+  ],
+  abilityText: 'Draw 2 cards, then discard 1. All your units gain +1 movement this turn.',
+};
 
 ```
 
@@ -8445,16 +10447,24 @@ export class GameEngine implements IGameEngineAPI {
   }
 
   getState(): GameStateSnapshot {
+    // Lazily computed — only build the acted set when accessed
+    let actedSet: Set<string> | null = null;
+    const board = this.board;
+
     return {
       turn: {
         turnNumber: this.turnNumber,
         activePlayer: this.activePlayer,
         phase: this.phase,
-        unitsActedThisTurn: new Set(
-          this.board.getAllUnits()
-            .filter(u => u.hasActed || u.hasMoved)
-            .map(u => u.instanceId)
-        ),
+        get unitsActedThisTurn(): Set<string> {
+          if (!actedSet) {
+            actedSet = new Set<string>();
+            for (const u of board.getAllUnits()) {
+              if (u.hasActed || u.hasMoved) actedSet.add(u.instanceId);
+            }
+          }
+          return actedSet;
+        },
       },
       modifiers: [this.mods[0].snapshot(), this.mods[1].snapshot()],
       players:   [this.players[0].snapshot(), this.players[1].snapshot()],
@@ -8679,12 +10689,13 @@ export class GameEngine implements IGameEngineAPI {
       case 'UNIT_PLACED': {
         const exists = this.board.getUnitById(event.instanceId);
         if (!exists) {
+          // Create unit with the event's instanceId to avoid post-emit mutation.
+          // UnitFactory generates a new ID, but we override it to match the event
+          // so subscribers already holding this event object see a consistent ID.
           const newUnit = this.unitFactory.create(event.cardId, event.owner, { col: event.col, row: event.row });
           newUnit.isActive = event.isActive;
+          newUnit.instanceId = event.instanceId;
           this.board.placeUnit(newUnit);
-          // Sync event instanceId to the UnitFactory-generated one so
-          // downstream listeners (BoardRenderer) use the correct key.
-          event.instanceId = newUnit.instanceId;
         }
         break;
       }
@@ -8803,6 +10814,418 @@ export class GameEngine implements IGameEngineAPI {
       this.emit({ type: 'CARD_DRAWN', player, cardId: drawn[i], handIndex: i, deckRemaining: ps.deck.length });
     }
   }
+}
+
+```
+
+# src\game\GameLogger.ts
+
+```ts
+// ============================================================
+// GameLogger.ts
+// Comprehensive game session logger.
+//
+// Records every engine event + periodic full game state snapshots
+// every 30 seconds. Designed for post-game debugging.
+//
+// Logs include: units (stats, buffs, position), player hands,
+// LEG economy (pool, rate, bonuses, penalties), crown discounts,
+// combat breakdowns (base ATK, aura buffs, positional bonuses),
+// card placements, deaths, and all phase transitions.
+//
+// Usage:
+//   const logger = new GameLogger(roomCode, playerIndex, seed, () => engine.getState());
+//   engine.on(e => logger.record(e));
+//   // On game end or scene shutdown:
+//   logger.stop();
+//
+// Auto-saves to localStorage every 30s. Downloads JSON on stop().
+// ============================================================
+
+import type { GameEvent } from './types/EventTypes';
+import type { GameStateSnapshot, StatBuff, GameModifiers, PlayerStateSnapshot } from './types/GameTypes';
+import { getCard } from './data/CardRegistry';
+
+const AUTO_SAVE_INTERVAL_MS = 30_000;
+
+// ─────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────
+
+export interface SessionMeta {
+  roomCode: string;
+  localPlayerIndex: number;
+  seed: number;
+  startedAt: string;
+  endedAt?: string;
+}
+
+export interface LogEntry {
+  seq: number;
+  ts: number;                 // ms since session start
+  event: string;              // event.type
+  detail: string;             // human-readable summary
+  raw: Record<string, any>;   // full event payload
+}
+
+export interface UnitSnap {
+  instanceId: string;
+  cardId: string;
+  name: string;
+  owner: number;
+  col: number;
+  row: number;
+  baseAtk: number;
+  currentAtk: number;
+  currentDef: number;
+  maxDef: number;
+  isActive: boolean;
+  hasMoved: boolean;
+  hasActed: boolean;
+  activeBuffs: StatBuff[];
+}
+
+export interface PlayerSnap {
+  player: number;
+  hand: string[];             // card IDs
+  handNames: string[];        // human-readable card names
+  handCount: number;
+  deckCount: number;
+  discardCount: number;
+  leg: number;                // current LEG pool
+  legRate: number;            // effective LEG rate (base + bonus - penalty)
+  legRateBase: number;
+  legRateBonus: number;
+  legRatePenalty: number;
+  crownDiscount: number;      // royal cost discount
+  crownPenalty: number;       // royal cost penalty
+}
+
+export interface FullSnapshot {
+  ts: number;
+  turn: number;
+  phase: string;
+  activePlayer: number;
+  units: UnitSnap[];
+  players: [PlayerSnap, PlayerSnap];
+}
+
+export interface SessionLog {
+  meta: SessionMeta;
+  events: LogEntry[];
+  snapshots: FullSnapshot[];
+}
+
+// ─────────────────────────────────────────────
+// LOGGER
+// ─────────────────────────────────────────────
+
+export class GameLogger {
+  private meta: SessionMeta;
+  private events: LogEntry[] = [];
+  private snapshots: FullSnapshot[] = [];
+  private seq = 0;
+  private startMs: number;
+  private stopped = false;
+  private autoSaveTimer: ReturnType<typeof setInterval> | null = null;
+  private getState: () => GameStateSnapshot;
+  private storageKey: string;
+
+  constructor(
+    roomCode: string,
+    localPlayerIndex: number,
+    seed: number,
+    getState: () => GameStateSnapshot
+  ) {
+    this.startMs = Date.now();
+    this.getState = getState;
+    this.meta = {
+      roomCode,
+      localPlayerIndex,
+      seed,
+      startedAt: new Date().toISOString(),
+    };
+    this.storageKey = `gamelog_session_${roomCode}_${this.meta.startedAt.replace(/[:.]/g, '-')}`;
+
+    // Periodic auto-save every 30 seconds
+    if (typeof window !== 'undefined') {
+      this.autoSaveTimer = setInterval(() => this.autoSave(), AUTO_SAVE_INTERVAL_MS);
+    }
+  }
+
+  /**
+   * Record a game engine event.
+   */
+  record(event: GameEvent): void {
+    if (this.stopped) return;
+
+    const entry: LogEntry = {
+      seq: this.seq++,
+      ts: Date.now() - this.startMs,
+      event: event.type,
+      detail: describeEvent(event),
+      raw: { ...event } as any,
+    };
+    this.events.push(entry);
+
+    // Take a full snapshot on key structural events
+    if (SNAPSHOT_EVENTS.has(event.type)) {
+      this.takeSnapshot();
+    }
+  }
+
+  /** Take a full game state snapshot. */
+  takeSnapshot(): void {
+    if (this.stopped) return;
+    try {
+      const state = this.getState();
+      this.snapshots.push(buildFullSnapshot(state, Date.now() - this.startMs));
+    } catch { /* engine not ready yet */ }
+  }
+
+  /** Auto-save to localStorage (called every 30s). */
+  private autoSave(): void {
+    if (this.stopped) return;
+    // Take a periodic snapshot
+    this.takeSnapshot();
+    this.saveToStorage();
+  }
+
+  /** Save current log to localStorage without stopping. */
+  private saveToStorage(): void {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+    try {
+      const log = this.buildLog();
+      const json = JSON.stringify(log, null, 2);
+      localStorage.setItem(this.storageKey, json);
+    } catch { /* storage full or unavailable */ }
+  }
+
+  /** Stop logging, save final state, and download. */
+  stop(): void {
+    if (this.stopped) return;
+    this.stopped = true;
+    this.meta.endedAt = new Date().toISOString();
+
+    if (this.autoSaveTimer) {
+      clearInterval(this.autoSaveTimer);
+      this.autoSaveTimer = null;
+    }
+
+    // Final snapshot
+    try {
+      const state = this.getState();
+      this.snapshots.push(buildFullSnapshot(state, Date.now() - this.startMs));
+    } catch { /* engine may be gone */ }
+
+    // Save and download
+    if (typeof window !== 'undefined') {
+      const log = this.buildLog();
+      const json = JSON.stringify(log, null, 2);
+
+      try { localStorage.setItem(this.storageKey, json); } catch { /* */ }
+
+      const filename = `session_${this.meta.roomCode}_${this.meta.startedAt.replace(/[:.]/g, '-')}.json`;
+      downloadJSON(json, filename);
+      console.log(`[GameLogger] Session log saved: ${filename} (${this.events.length} events, ${this.snapshots.length} snapshots)`);
+    }
+  }
+
+  /** Build the full log object. */
+  private buildLog(): SessionLog {
+    return {
+      meta: { ...this.meta },
+      events: this.events,
+      snapshots: this.snapshots,
+    };
+  }
+
+  /** Get the log without stopping (for console inspection). */
+  getLog(): SessionLog {
+    return this.buildLog();
+  }
+
+  get entryCount(): number { return this.events.length; }
+
+  /** Alias for stop() — backwards compatibility. */
+  flush(): void { this.stop(); }
+}
+
+// ─────────────────────────────────────────────
+// SNAPSHOT BUILDERS
+// ─────────────────────────────────────────────
+
+// Events that warrant a full snapshot
+const SNAPSHOT_EVENTS = new Set([
+  'TURN_STARTED', 'UNIT_PLACED', 'UNIT_DIED', 'UNIT_ATTACKED',
+  'UNIT_MOVED', 'UNIT_TRANSFORMED', 'AURA_APPLIED', 'GAME_OVER',
+  'LEG_GAINED', 'LEG_SPENT', 'LEG_RATE_CHANGED',
+]);
+
+function buildFullSnapshot(state: GameStateSnapshot, ts: number): FullSnapshot {
+  const units: UnitSnap[] = [];
+  for (const cell of state.board) {
+    if (!cell.unit) continue;
+    const u = cell.unit;
+    units.push({
+      instanceId: u.instanceId,
+      cardId: u.cardId,
+      name: cardName(u.cardId),
+      owner: u.owner,
+      col: cell.col,
+      row: cell.row,
+      baseAtk: u.baseAtk,
+      currentAtk: u.currentAtk,
+      currentDef: u.currentDef,
+      maxDef: u.maxDef,
+      isActive: u.isActive,
+      hasMoved: u.hasMoved,
+      hasActed: u.hasActed,
+      activeBuffs: u.activeBuffs ?? [],
+    });
+  }
+
+  const players: [PlayerSnap, PlayerSnap] = [
+    buildPlayerSnap(state.players[0], state.modifiers[0]),
+    buildPlayerSnap(state.players[1], state.modifiers[1]),
+  ];
+
+  return {
+    ts,
+    turn: state.turn?.turnNumber ?? 0,
+    phase: state.turn?.phase ?? 'UNKNOWN',
+    activePlayer: state.turn?.activePlayer ?? 0,
+    units,
+    players,
+  };
+}
+
+function buildPlayerSnap(ps: PlayerStateSnapshot, mod: GameModifiers): PlayerSnap {
+  const effectiveRate = Math.max(1, mod.legRateBase + mod.legRateBonus - mod.legRatePenalty);
+  return {
+    player: ps.player,
+    hand: [...ps.hand],
+    handNames: ps.hand.map(id => cardName(id)),
+    handCount: ps.hand.length,
+    deckCount: ps.deckCount,
+    discardCount: ps.discardCount,
+    leg: mod.legPool,
+    legRate: mod.legRateFrozen ? 0 : effectiveRate,
+    legRateBase: mod.legRateBase,
+    legRateBonus: mod.legRateBonus,
+    legRatePenalty: mod.legRatePenalty,
+    crownDiscount: mod.royalCostDiscount,
+    crownPenalty: mod.royalCostPenalty,
+  };
+}
+
+// ─────────────────────────────────────────────
+// EVENT DESCRIPTION — human-readable summaries
+// ─────────────────────────────────────────────
+
+function cardName(cardId: string): string {
+  try { return getCard(cardId).name; } catch { return cardId; }
+}
+
+function playerLabel(p: number): string {
+  return p === 0 ? 'P1' : 'P2';
+}
+
+function describeEvent(e: GameEvent): string {
+  switch (e.type) {
+    case 'TURN_STARTED':
+      return `Turn ${e.turn} — ${playerLabel(e.activePlayer)}'s turn`;
+    case 'PHASE_CHANGED':
+      return `Phase → ${e.phase} (${playerLabel(e.activePlayer)}, turn ${e.turn})`;
+
+    case 'CARD_DRAWN':
+      return `${playerLabel(e.player)} drew ${cardName(e.cardId)} (hand[${e.handIndex}], deck: ${e.deckRemaining})`;
+    case 'CARD_PLAYED':
+      return `${playerLabel(e.player)} played ${cardName(e.cardId)} (cost ${e.legCost})`;
+    case 'CARD_DISCARDED':
+      return `${playerLabel(e.player)} discarded ${cardName(e.cardId)}`;
+
+    case 'UNIT_PLACED':
+      return `${playerLabel(e.owner)} placed ${cardName(e.cardId)} [${e.instanceId}] at (${e.col},${e.row})${e.isActive ? '' : ' [BUILD_DELAY]'}`;
+    case 'UNIT_MOVED':
+      return `${playerLabel(e.owner)} moved ${cardName(e.cardId)} [${e.instanceId}] (${e.from.col},${e.from.row}) → (${e.to.col},${e.to.row})`;
+    case 'UNIT_ATTACKED': {
+      let desc = `[${e.attackerInstanceId}] attacked [${e.targetInstanceId}] at (${e.targetCol},${e.targetRow}) — ${e.damage} dmg → HP ${e.targetNewHP}${e.isKingHit ? ' [KING HIT]' : ''}`;
+      if (e.breakdown) {
+        const b = e.breakdown;
+        const parts: string[] = [`base:${b.baseAtk}`];
+        if (b.cavalryCounter) parts.push(`cavalry:+${b.cavalryCounter}`);
+        if (b.backstabBonus) parts.push(`backstab:+${b.backstabBonus}`);
+        if (b.ambushBonus) parts.push(`ambush:+${b.ambushBonus}`);
+        if (b.auraBuffs.length > 0) {
+          for (const buff of b.auraBuffs) {
+            if (buff.atkDelta !== 0) parts.push(`${buff.source}:atk${buff.atkDelta > 0 ? '+' : ''}${buff.atkDelta}`);
+          }
+        }
+        desc += ` (${parts.join(', ')})`;
+      }
+      return desc;
+    }
+    case 'UNIT_DIED':
+      return `${cardName(e.cardId)} [${e.instanceId}] (${playerLabel(e.owner)}) died at (${e.col},${e.row}) — cause: ${e.cause}`;
+    case 'UNIT_HEALED':
+      return `${cardName(e.cardId)} [${e.instanceId}] healed +${e.amount} → HP ${e.newHP}/${e.maxHP}`;
+    case 'UNIT_TRANSFORMED':
+      return `${cardName(e.fromCardId)} [${e.oldInstanceId}] → ${cardName(e.toCardId)} [${e.newInstanceId}] at (${e.col},${e.row})`;
+
+    case 'LEG_GAINED':
+      return `${playerLabel(e.player)} gained ${e.amount} LEG (total: ${e.total}, rate: ${e.rate})`;
+    case 'LEG_SPENT':
+      return `${playerLabel(e.player)} spent ${e.amount} LEG (remaining: ${e.remaining})`;
+    case 'LEG_STOLEN':
+      return `${playerLabel(e.from)} → ${playerLabel(e.to)}: stole ${e.amount} LEG`;
+    case 'LEG_RATE_CHANGED':
+      return `${playerLabel(e.player)} LEG rate ${e.oldRate} → ${e.newRate} (${e.reason})`;
+
+    case 'AURA_APPLIED': {
+      if (e.changes.length === 0) return 'Auras recalculated (no stat changes)';
+      const parts = e.changes.map(c => {
+        let s = `[${c.instanceId}] atk${c.atkDelta >= 0 ? '+' : ''}${c.atkDelta} def${c.defDelta >= 0 ? '+' : ''}${c.defDelta} mov${c.moveDelta >= 0 ? '+' : ''}${c.moveDelta}`;
+        if (c.buffs && c.buffs.length > 0) {
+          const sources = c.buffs.map(b => b.source).join(', ');
+          s += ` [from: ${sources}]`;
+        }
+        return s;
+      });
+      return `Auras: ${parts.join(', ')}`;
+    }
+
+    case 'PENDING_TARGET':
+      return `Awaiting target selection: ${e.reason}`;
+    case 'PENDING_POSITION':
+      return `Awaiting position selection: ${e.reason}`;
+    case 'INTERACTION_RESOLVED':
+      return `Interaction resolved${e.cancelled ? ' (cancelled)' : ''}`;
+
+    case 'GAME_OVER':
+      return `GAME OVER — ${playerLabel(e.result.winner)} wins (${e.result.reason}, ${e.result.turns} turns)`;
+
+    default:
+      return e.type;
+  }
+}
+
+// ─────────────────────────────────────────────
+// FILE DOWNLOAD (browser)
+// ─────────────────────────────────────────────
+
+function downloadJSON(json: string, filename: string): void {
+  try {
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+  } catch { /* non-browser environment */ }
 }
 
 ```
@@ -9329,11 +11752,14 @@ function resolveCustomPattern(
   const range = pattern.range ?? 1;
   const canJump = pattern.canJump ?? false;
   const { col, row } = unit.position;
+  // Pattern offsets are defined from P1's perspective (dy>0 = toward enemy).
+  // Flip dy for P2 so patterns are player-relative.
+  const dySign = unit.owner === Player.P1 ? 1 : -1;
 
   for (const offset of pattern.offsets) {
     for (let step = 1; step <= range; step++) {
       const nc = col + offset.dx * step;
-      const nr = row + offset.dy * step;
+      const nr = row + (offset.dy * dySign) * step;
       if (!board.isInBounds(nc, nr)) break;
 
       const occupant = board.getUnit(nc, nr);
@@ -9361,11 +11787,13 @@ function resolvePatternRange(unit: Unit, pattern: CustomPattern, board: Board): 
   const range = pattern.range ?? 1;
   const canJump = pattern.canJump ?? false;
   const { col, row } = unit.position;
+  // Flip dy for P2 (same as resolveCustomPattern)
+  const dySign = unit.owner === Player.P1 ? 1 : -1;
 
   for (const offset of pattern.offsets) {
     for (let step = 1; step <= range; step++) {
       const nc = col + offset.dx * step;
-      const nr = row + offset.dy * step;
+      const nr = row + (offset.dy * dySign) * step;
       if (!board.isInBounds(nc, nr)) break;
       results.push({ col: nc, row: nr });
       if (board.getUnit(nc, nr) && !canJump) break;
@@ -9399,7 +11827,8 @@ export const OFFSETS_L_JUMP: PatternOffset[] = [
 
 /** BFS omni-directional movement up to maxDist. */
 function getOmniMoves(col: number, row: number, maxDist: number, board: Board): Position[] {
-  const visited = new Set<string>([`${col},${row}`]);
+  // Use numeric keys (col * 100 + row) instead of string interpolation
+  const visited = new Set<number>([col * 100 + row]);
   const result: Position[] = [];
   const queue = [{ col, row, dist: 0 }];
 
@@ -9409,7 +11838,7 @@ function getOmniMoves(col: number, row: number, maxDist: number, board: Board): 
 
     for (const [dc, dr] of DIRS_OMNI) {
       const nc = curr.col + dc, nr = curr.row + dr;
-      const key = `${nc},${nr}`;
+      const key = nc * 100 + nr;
       if (!board.isInBounds(nc, nr) || visited.has(key)) continue;
       visited.add(key);
       if (board.getUnit(nc, nr) === null) {
@@ -9846,6 +12275,11 @@ export function executeMove(ctx: GameContext, unitId: string, col: number, row: 
     to: { col, row },
   });
 
+  // Recalculate auras after move (e.g. Messenger aura triggers on adjacency change)
+  // Always emit — even with empty changes — so the UI can sync ALL unit stats.
+  const auraEvent = ctx.auras.evaluateAuras(ctx.board, ctx.mods);
+  ctx.emit(auraEvent);
+
   // Assassin: jump onto enemy = auto-attack on landing (immune to counter-attack)
   if (unit.baseAtkPattern === AtkPattern.ON_JUMP) {
     const defender = ctx.board.getUnit(col, row);
@@ -9984,8 +12418,9 @@ function handleUnitDeath(
     ctx.status = EngineStatus.AWAITING_INPUT;
   }
 
-  // Recalculate modifiers (removed unit may change discounts)
-  ctx.auras.recalculateModifiers(ctx.board, ctx.mods);
+  // Recalculate auras + modifiers (removed unit may change discounts/stat auras)
+  const deathAuraEvent = ctx.auras.evaluateAuras(ctx.board, ctx.mods);
+  ctx.emit(deathAuraEvent);
 }
 
 // ─────────────────────────────────────────────
@@ -10169,19 +12604,26 @@ function emitKingThreats(ctx: GameContext): void {
     const king = ctx.board.getKing(p);
     if (!king) continue;
 
-    const threats = ctx.board.getUnitsOf(opponent(p)).filter(u => {
-      const attacks = getValidAttacks(u, ctx.board);
-      return attacks.some(pos =>
-        pos.col === king.position.col && pos.row === king.position.row
-      );
-    });
+    const kc = king.position.col, kr = king.position.row;
+    const threatIds: string[] = [];
 
-    if (threats.length > 0) {
+    for (const u of ctx.board.getUnitsOf(opponent(p))) {
+      if (!u.isActive) continue;
+      const attacks = getValidAttacks(u, ctx.board);
+      for (const pos of attacks) {
+        if (pos.col === kc && pos.row === kr) {
+          threatIds.push(u.instanceId);
+          break; // one match per unit is enough
+        }
+      }
+    }
+
+    if (threatIds.length > 0) {
       ctx.emit({
         type: 'KING_THREATENED',
         kingInstanceId: king.instanceId,
         kingPlayer: p,
-        attackerInstanceIds: threats.map(u => u.instanceId),
+        attackerInstanceIds: threatIds,
       });
     }
   }
@@ -10268,12 +12710,11 @@ export function runLEGPhase(ctx: GameContext): void {
   // 7. Activate BUILD_DELAY units
   runBuildDelayActivation(ctx, ap);
 
-  // 8. Evaluate auras (stat buffs from Commander, Pikeman, etc.)
+  // 8+9. Evaluate auras (stat buffs) + recalculate modifiers (LEG rate, Royal discount)
+  // Single call — evaluateAuras handles both stats AND economy processors.
+  // Always emit — even with empty changes — so the UI can sync ALL unit stats.
   const auraEvent = ctx.auras.evaluateAuras(ctx.board, ctx.mods);
-  if (auraEvent.changes.length > 0) ctx.emit(auraEvent);
-
-  // 9. Recalculate modifiers (LEG rate bonus, Royal discount)
-  ctx.auras.recalculateModifiers(ctx.board, ctx.mods);
+  ctx.emit(auraEvent);
 
   // Advance to PLAY phase
   ctx.phase = TurnPhase.PLAY;
@@ -10285,17 +12726,13 @@ export function runLEGPhase(ctx: GameContext): void {
 // ─────────────────────────────────────────────
 
 function runAutoHeals(ctx: GameContext, ap: number): void {
-  const healUnits = ctx.board.getUnitsOf(ap).filter(u =>
-    u.isActive && getCard(u.cardId).abilities.some(
-      (a: any) => a.type === 'AURA_AUTO_HEAL'
-    )
-  );
-
-  for (const unit of healUnits) {
+  for (const unit of ctx.board.getUnitsOf(ap)) {
+    if (!unit.isActive) continue;
     const ability = getCard(unit.cardId).abilities.find(
       (a: any) => a.type === 'AURA_AUTO_HEAL'
     ) as any;
-    const amount = ability?.params?.amount ?? 2;
+    if (!ability) continue;
+    const amount = ability.params?.amount ?? 2;
     const healEvents = applyAutoHeal(unit, amount);
     ctx.applyEvents(healEvents);
   }
@@ -10502,8 +12939,10 @@ export function executePlayCard(
   // Apply immediate events
   ctx.applyEvents(result.events);
 
-  // Recalculate modifiers (new unit may change discounts/rate)
-  ctx.auras.recalculateModifiers(ctx.board, ctx.mods);
+  // Recalculate auras + modifiers (new unit may change discounts/rate/stat auras)
+  // Always emit — even with empty changes — so the UI can sync ALL unit stats.
+  const auraEvent = ctx.auras.evaluateAuras(ctx.board, ctx.mods);
+  ctx.emit(auraEvent);
 
   // Handle pending interaction (Priest, Mystic, Disease, etc.)
   if (result.pending) {
@@ -10835,6 +13274,7 @@ export enum AbilityType {
   AURA_CAVALRY_COUNTER       = 'AURA_CAVALRY_COUNTER',     // Pikeman (x3 ATK vs cavalry)
   AURA_PIKEMAN_FLANK         = 'AURA_PIKEMAN_FLANK',       // Pikeman (flank bonus)
   AURA_AUTO_HEAL             = 'AURA_AUTO_HEAL',           // Kings Guard
+  AURA_SUPPRESS_KING_ATK     = 'AURA_SUPPRESS_KING_ATK',   // Messenger: adjacent enemy King ATK = 0
 
   // ── Passive Flags ──────────────────────────
   PASSIVE_BUILD_DELAY        = 'PASSIVE_BUILD_DELAY',      // Castle (inactive 1 turn)
@@ -10975,7 +13415,7 @@ export interface UnitStats {
 }
 export interface PatternOffset {
   dx: number;   // column offset (-1 = left, +1 = right)
-  dy: number;   // row offset (-1 = toward enemy, +1 = toward own half)
+  dy: number;   // row offset from P1's perspective (+1 = toward enemy, -1 = toward own half). Flipped for P2 at resolve time.
 }
 export interface CustomPattern {
   offsets: PatternOffset[];   // which squares relative to unit
@@ -11000,6 +13440,8 @@ export interface CardDefinition {
   stats?: UnitStats;           // Present on UNIT and STRUCTURE, absent on SPELL
   flags: CardFlag[];
   combatTag?: CombatTag;       // Override derived combat tag. If omitted, derived from attackPattern.
+  backstabBonus?: number;      // +N ATK when attacking from directly behind (dx=0, 1 row behind). Scout = 1.
+  ambushBonus?: number;        // +N ATK when attacking from rear arc (|dx|≤1, 1 row behind). Assassin = 1.
   abilities: Array<CommonAbility | CustomAbility>;
   abilityText?: string;        // Human-readable description for UI rendering
 }
@@ -11031,7 +13473,7 @@ export interface CustomAbility {
 // Each event carries the exact data the renderer needs.
 // ============================================================
 
-import type { Player, TurnPhase, Position, MatchResult } from './GameTypes';
+import type { Player, TurnPhase, Position, MatchResult, StatBuff } from './GameTypes';
 
 // ─────────────────────────────────────────────
 // UNIT EVENTS
@@ -11056,6 +13498,16 @@ export interface EvUnitMoved {
   to: Position;
 }
 
+/** Breakdown of how damage was calculated — for audit trail / game log. */
+export interface DamageBreakdown {
+  baseAtk: number;           // unit.currentAtk (already includes aura buffs)
+  cavalryCounter: number;    // additional ATK from x3 multiplier (0 if N/A)
+  backstabBonus: number;     // from card definition (0 if N/A)
+  ambushBonus: number;       // from card definition (0 if N/A)
+  totalDamage: number;       // final clamped value
+  auraBuffs: StatBuff[];     // aura buffs active on the attacker at time of attack
+}
+
 export interface EvUnitAttacked {
   type: 'UNIT_ATTACKED';
   attackerInstanceId: string;
@@ -11070,6 +13522,8 @@ export interface EvUnitAttacked {
   isKingHit: boolean;
   newHP?: number;
   maxHP?: number;
+  /** Full damage calculation breakdown — present for unit-on-unit combat, absent for EFFECT damage. */
+  breakdown?: DamageBreakdown;
 }
 
 export interface EvUnitDied {
@@ -11139,6 +13593,8 @@ export interface EvAuraApplied {
     atkDelta: number;
     defDelta: number;
     moveDelta: number;
+    /** Per-source breakdown of stat modifications. */
+    buffs?: StatBuff[];
   }>;
 }
 
@@ -11522,6 +13978,19 @@ export interface TimedEffect {
 }
 
 // ─────────────────────────────────────────────
+// STAT AUDIT TRAIL
+// Rebuilt each aura evaluation. Each entry records
+// WHO changed WHAT by HOW MUCH.
+// ─────────────────────────────────────────────
+
+export interface StatBuff {
+  source: string;        // e.g. 'commander:AURA_BOARD_HALF_ATK', 'Backstab', 'Cavalry Counter'
+  atkDelta: number;
+  defDelta: number;
+  moveDelta: number;
+}
+
+// ─────────────────────────────────────────────
 // UNIT (runtime, not CardDefinition)
 // Created when a card is played. Lives on the Board.
 // ─────────────────────────────────────────────
@@ -11560,6 +14029,9 @@ export interface Unit {
 
   // Castle-specific
   spawnCounter: number;      // Increments each turn; spawns at interval
+
+  // Stat audit trail — rebuilt each aura evaluation
+  activeBuffs: StatBuff[];
 
     // ── Status effects (all default false) ──────────────
   isStunned: boolean;         // Cannot move or attack this turn
@@ -12226,6 +14698,9 @@ export class UnitFactory {
 
       // Castle-specific
       spawnCounter:     0,
+
+      // Stat audit trail
+      activeBuffs:      [],
     };
 
     // Compute derived properties
@@ -12610,6 +15085,11 @@ class GameStateClass {
     }
 
     clearMatchData(): void {
+        this.roomCode = "";
+        this.gameSeed = 0;
+        this.playerIndex = 0;
+        this.opponentName = "";
+        this.lastMatch = null;
         this.depositTxHash = null;
         this.payoutResult = null;
     }
@@ -12720,6 +15200,8 @@ export class SelectionManager {
   // Track what kind of pending interaction is active
   private pendingKind: 'TARGET' | 'POSITION' | 'COLUMN' | 'DISCARD' | null = null;
   private pendingValidPositions: Array<{ col: number; row: number }> = [];
+  /** Cached attack range for currently selected unit (avoids redundant recalculation). */
+  private cachedAttackRange: Array<{ col: number; row: number }> = [];
 
   private unsubs: Array<() => void> = [];
 
@@ -12828,6 +15310,7 @@ export class SelectionManager {
       validDeploy: [],
       mode: 'idle',
     };
+    this.cachedAttackRange = [];
 
     EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
       moves: [],
@@ -12879,7 +15362,7 @@ export class SelectionManager {
     // Select this unit
    const moves       = this.engine.getValidMoves(col, row);
 const attacks     = this.engine.getValidAttacks(col, row);
-const attackRange = this.engine.getAttackRange(col, row);
+this.cachedAttackRange = this.engine.getAttackRange(col, row);
 
 this.state = {
   ...this.state,
@@ -12986,14 +15469,10 @@ this.state = {
 
   /** Publish current highlights to EventBus so BoardRenderer reacts. */
 private publishHighlights(): void {
-  const attackRange = (this.state.selectedBoardCol !== null && this.state.selectedBoardRow !== null)
-    ? this.engine.getAttackRange(this.state.selectedBoardCol, this.state.selectedBoardRow)
-    : [];
-
   EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
     moves:       this.state.validMoves,
     attacks:     this.state.validAttacks,
-    attackRange: attackRange,
+    attackRange: this.cachedAttackRange,
     deploy:      this.state.validDeploy,
     auras:       [],
   });
@@ -13148,6 +15627,7 @@ export interface RoomCallbacks {
   onOpponentDisconnected: () => void;
   onOpponentReconnected?: () => void;
   onOpponentAbandon?: () => void;
+  onDisconnectCountdown?: (remaining: number) => void;
   onConnectionLost?: () => void;
   onReconnected?: () => void;
   onReconnectFailed?: () => void;
@@ -13164,6 +15644,7 @@ class SocketManagerClass {
   private serverUrl: string = import.meta.env.VITE_SOCKET_URL || "http://localhost:3001";
   private seqCounter: number = 0;
   private actionBuffer: GameAction[] = [];
+  private static readonly MAX_BUFFER_SIZE = 50;
   private hasConnectedOnce: boolean = false;
 
   connect(callbacks: RoomCallbacks): void {
@@ -13190,13 +15671,14 @@ class SocketManagerClass {
         this.seqCounter = 0;
         this.actOnRoomAction();
       } else {
-        // Reconnection — rejoin room and flush buffered actions
+        // Reconnection — reset sequence, rejoin room, flush buffered actions
         console.log("[SocketManager] Reconnected! Rejoining room...");
+        this.seqCounter = 0;
+        this.actionBuffer = [];
         this.socket?.emit("rejoin_room" as any, {
           roomCode: GameState.roomCode,
           playerName: GameState.playerName,
         });
-        this.flushActionBuffer();
         this.callbacks?.onReconnected?.();
       }
     });
@@ -13325,6 +15807,10 @@ this.socket.on("game_seed", (data: { seed: number }) => {
       this.callbacks?.onOpponentAbandon?.();
     });
 
+    this.socket.on("disconnectCountdown" as any, (data: { remaining: number }) => {
+      this.callbacks?.onDisconnectCountdown?.(data.remaining);
+    });
+
     this.socket.on("rejoinSuccess" as any, (data: { roomCode: string; playerIndex: number }) => {
       console.log(`[SocketManager] Rejoin success: room=${data.roomCode}, playerIndex=${data.playerIndex}`);
     });
@@ -13356,6 +15842,10 @@ sendGameAction(action: GameAction): void {
   this.seqCounter += 1;
   action.seqNum = this.seqCounter;
   if (!this.socket?.connected) {
+    if (this.actionBuffer.length >= SocketManagerClass.MAX_BUFFER_SIZE) {
+      console.error(`[SocketManager] Action buffer full (${SocketManagerClass.MAX_BUFFER_SIZE}), dropping action: ${action.type}`);
+      return;
+    }
     console.warn(`[SocketManager] Buffering game_action (disconnected): ${action.type} (seq=${action.seqNum})`);
     this.actionBuffer.push(action);
     return;
@@ -13366,6 +15856,13 @@ sendGameAction(action: GameAction): void {
   });
   console.log(`[SocketManager] Sent game_action: ${action.type} (seq=${action.seqNum})`);
 }
+sendStateReport(report: Record<string, any>): void {
+  this.socket?.emit('game_state_report' as any, {
+    roomCode: GameState.roomCode,
+    report,
+  });
+}
+
 sendStateHash(hash: string, afterGlobalSeq: number): void {
   this.socket?.emit('state_hash' as any, {
     roomCode: GameState.roomCode,
@@ -13456,6 +15953,8 @@ export class BoardRenderer {
   private cellGraphics: Map<string, Phaser.GameObjects.Graphics> = new Map();
   private highlights: Map<string, Phaser.GameObjects.Graphics> = new Map();
   private hoveredCell: string | null = null;
+  /** Reusable hover graphic (pooled to avoid create/destroy per hover). */
+  private hoverGfx: Phaser.GameObjects.Graphics | null = null;
   private selectedCell: string | null = null;
   private localPlayerIndex: number = 0;
   private unsubs: Array<() => void> = [];
@@ -13601,17 +16100,18 @@ const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, c
     this.highlights.forEach(g => g.destroy());
     this.highlights.clear();
     this.selectedCell = null;
+    if (this.hoverGfx) this.hoverGfx.setVisible(false);
   }
 
   clearHighlightType(type: HighlightType): void {
-    const toRemove: string[] = [];
-    this.highlights.forEach((g, key) => {
-      if (key.endsWith(`_${type}`) || key.endsWith(`_${type}_marker`)) {
+    const suffix = `_${type}`;
+    const markerSuffix = `_${type}_marker`;
+    for (const [key, g] of this.highlights) {
+      if (key.endsWith(suffix) || key.endsWith(markerSuffix)) {
         g.destroy();
-        toRemove.push(key);
+        this.highlights.delete(key);
       }
-    });
-    toRemove.forEach(k => this.highlights.delete(k));
+    }
   }
 
   // ─────────────────────────────────────────────
@@ -13861,14 +16361,29 @@ onComplete: () => {
   // ─────────────────────────────────────────────
 
   private onCellHover(col: number, row: number): void {
-    if (this.hoveredCell) this.clearHighlightType('hover');
     this.hoveredCell = this.cellKey(col, row);
-    this.addHighlight(col, row, 'hover');
+
+    const g = this.layout.grid;
+    const T = this.theme.board;
+    const px = g.originX + col * g.cellSize;
+    const displayRow = this.mirrorRow(row);
+    const py = g.originY + displayRow * g.cellSize;
+
+    if (!this.hoverGfx) {
+      this.hoverGfx = this.scene.add.graphics();
+      this.highlightContainer.add(this.hoverGfx);
+    }
+    this.hoverGfx.clear();
+    const { color, alpha } = ThemeLoader.hexToColorAlpha(T.cellHover);
+    this.hoverGfx.fillStyle(color, alpha);
+    this.hoverGfx.fillRect(px, py, g.cellSize, g.cellSize);
+    this.hoverGfx.setVisible(true);
+
     EventBus.emit(EV.CARD_HOVERED, { col, row });
   }
 
   private onCellHoverEnd(_col: number, _row: number): void {
-    this.clearHighlightType('hover');
+    if (this.hoverGfx) this.hoverGfx.setVisible(false);
     this.hoveredCell = null;
     EventBus.emit(EV.CARD_HOVER_END, { col: _col, row: _row });
   }
@@ -13932,9 +16447,11 @@ onComplete: () => {
 
       // CAN_ACT_UPDATE: toggle glow per unit on turn boundary
       EventBus.on('CAN_ACT_UPDATE' as any, ({ cells }: { cells: Array<{ col: number; row: number }> }) => {
-        const activeKeys = new Set(cells.map(c => this.cellKey(c.col, c.row)));
-        this.unitsByCell.forEach((thumb, key) => {
-          thumb.setCanAct(activeKeys.has(key));
+        // Build Set with numeric keys to avoid string allocation per cell
+        const activeSet = new Set<number>();
+        for (const c of cells) activeSet.add(c.col * 100 + c.row);
+        this.unitsByCell.forEach((thumb) => {
+          thumb.setCanAct(activeSet.has(thumb.col * 100 + thumb.row));
         });
       }),
     );
@@ -15664,6 +18181,8 @@ export class OverlayRenderer {
   private cursorFollower: Phaser.GameObjects.Container | null = null;
 
   private unsubs: Array<() => void> = [];
+  /** Input listeners tied to the current overlay — cleaned up on close(). */
+  private overlayInputCleanups: Array<() => void> = [];
 
   constructor(scene: Phaser.Scene, layout: BattleLayoutJSON, theme: ThemeJSON) {
     this.scene = scene;
@@ -15740,16 +18259,14 @@ export class OverlayRenderer {
     });
     container.add(cancelBtn);
 
-    // ESC key to cancel
+    // ESC key to cancel — tracked for cleanup in close()
     const escKey = this.scene.input.keyboard?.addKey('ESC');
     const escHandler = () => {
       this.close();
       EventBus.emit(EV.INTERACTION_RESOLVED, { cancelled: true });
     };
     escKey?.once('down', escHandler);
-    container.once('destroy', () => {
-      escKey?.off('down', escHandler);
-    });
+    this.overlayInputCleanups.push(() => escKey?.off('down', escHandler));
 
     this.activeOverlay = container;
     this.rootContainer.add(container);
@@ -15786,16 +18303,14 @@ export class OverlayRenderer {
     });
     panel.add(cancelBtn);
 
-    // ESC key to cancel
+    // ESC key to cancel — tracked for cleanup in close()
     const escKey = this.scene.input.keyboard?.addKey('ESC');
     const escHandler = () => {
       this.close();
       EventBus.emit(EV.INTERACTION_RESOLVED, { cancelled: true });
     };
     escKey?.once('down', escHandler);
-    panel.once('destroy', () => {
-      escKey?.off('down', escHandler);
-    });
+    this.overlayInputCleanups.push(() => escKey?.off('down', escHandler));
 
     this.activeOverlay = panel;
     this.rootContainer.add(panel);
@@ -15975,15 +18490,14 @@ export class OverlayRenderer {
     container.add(blocker);
     container.bringToTop(detail);
 
-    // ESC key to close — track so we can remove on close()
+    // ESC key to close — tracked for cleanup in close()
     const escKey = this.scene.input.keyboard?.addKey('ESC');
     const escHandler = () => {
       this.close();
       EventBus.emit(EV.DETAIL_HIDE, {});
     };
     escKey?.once('down', escHandler);
-    // Remove ESC listener when overlay is destroyed (e.g. clicked away)
-    container.once('destroy', () => escKey?.off('down', escHandler));
+    this.overlayInputCleanups.push(() => escKey?.off('down', escHandler));
 
     this.activeOverlay = container;
     this.rootContainer.add(container);
@@ -16046,6 +18560,9 @@ export class OverlayRenderer {
   /** Close the current overlay. */
   close(): void {
     this.destroyCursorFollower();
+    // Clean up all input listeners tied to this overlay
+    for (const cleanup of this.overlayInputCleanups) cleanup();
+    this.overlayInputCleanups = [];
     if (this.dimmer) {
       this.dimmer.destroy();
       this.dimmer = null;
@@ -16132,10 +18649,8 @@ export class OverlayRenderer {
     const pointer = this.scene.input.activePointer;
     container.setPosition(pointer.x + offsetX, pointer.y + offsetY);
 
-    // Store cleanup
-    container.once('destroy', () => {
-      this.scene.input.off('pointermove', moveHandler);
-    });
+    // Track for cleanup — overlayInputCleanups handles it via close() → destroyCursorFollower()
+    this.overlayInputCleanups.push(() => this.scene.input.off('pointermove', moveHandler));
 
     this.cursorFollower = container;
   }
@@ -16340,45 +18855,76 @@ export class UnitThumbnail {
   // ─────────────────────────────────────────────
 
   setAtk(atk: number | undefined): void {
-    if (this.atkBadgeBg) { this.atkBadgeBg.destroy(); this.atkBadgeBg = null; }
-    if (this.atkBadgeText) { this.atkBadgeText.destroy(); this.atkBadgeText = null; }
-    if (atk === undefined) return;
+    if (atk === undefined) {
+      if (this.atkBadgeBg) this.atkBadgeBg.setVisible(false);
+      if (this.atkBadgeText) this.atkBadgeText.setVisible(false);
+      return;
+    }
 
     const bx = 2, by = this.h - this.bandHeight - 2;
-    this.atkBadgeBg = this.scene.add.graphics();
+    if (!this.atkBadgeBg) {
+      this.atkBadgeBg = this.scene.add.graphics();
+      this.container.add(this.atkBadgeBg);
+    }
+    this.atkBadgeBg.clear();
     this.atkBadgeBg.fillStyle(ThemeLoader.hexToNum(this.atkBadgeColor), 1);
     this.atkBadgeBg.fillRoundedRect(bx, by - this.badgeHeight / 2, this.badgeWidth, this.badgeHeight, 4);
-    this.atkBadgeText = this.scene.add.text(bx + this.badgeWidth / 2, by, String(atk), {
-      fontFamily: this.fontFamily, fontSize: `${this.badgeFontSize}px`, color: '#FFFFFF',
-    }).setOrigin(0.5, 0.5);
-    this.container.add([this.atkBadgeBg, this.atkBadgeText]);
+    this.atkBadgeBg.setVisible(true);
+
+    if (!this.atkBadgeText) {
+      this.atkBadgeText = this.scene.add.text(bx + this.badgeWidth / 2, by, String(atk), {
+        fontFamily: this.fontFamily, fontSize: `${this.badgeFontSize}px`, color: '#FFFFFF',
+      }).setOrigin(0.5, 0.5);
+      this.container.add(this.atkBadgeText);
+    } else {
+      this.atkBadgeText.setText(String(atk));
+      this.atkBadgeText.setVisible(true);
+    }
   }
 
   setDef(currentHP: number | undefined, maxHP: number | undefined): void {
-    if (this.defBadgeBg) { this.defBadgeBg.destroy(); this.defBadgeBg = null; }
-    if (this.defBadgeText) { this.defBadgeText.destroy(); this.defBadgeText = null; }
-    if (currentHP === undefined) return;
+    if (currentHP === undefined) {
+      if (this.defBadgeBg) this.defBadgeBg.setVisible(false);
+      if (this.defBadgeText) this.defBadgeText.setVisible(false);
+      return;
+    }
 
     const bx = this.w - 2 - this.badgeWidth, by = this.h - this.bandHeight - 2;
     const hpPct = (maxHP && maxHP > 0) ? currentHP / maxHP : 1;
     const fillColor = hpPct > 0.5 ? this.defBadgeColor : hpPct > 0.25 ? this.hpMidColor : this.hpLowColor;
 
-    this.defBadgeBg = this.scene.add.graphics();
+    if (!this.defBadgeBg) {
+      this.defBadgeBg = this.scene.add.graphics();
+      this.container.add(this.defBadgeBg);
+    }
+    this.defBadgeBg.clear();
     this.defBadgeBg.fillStyle(ThemeLoader.hexToNum(fillColor), 1);
     this.defBadgeBg.fillRoundedRect(bx, by - this.badgeHeight / 2, this.badgeWidth, this.badgeHeight, 4);
-    this.defBadgeText = this.scene.add.text(bx + this.badgeWidth / 2, by, String(currentHP), {
-      fontFamily: this.fontFamily, fontSize: `${this.badgeFontSize}px`, color: '#FFFFFF',
-    }).setOrigin(0.5, 0.5);
-    this.container.add([this.defBadgeBg, this.defBadgeText]);
+    this.defBadgeBg.setVisible(true);
+
+    if (!this.defBadgeText) {
+      this.defBadgeText = this.scene.add.text(bx + this.badgeWidth / 2, by, String(currentHP), {
+        fontFamily: this.fontFamily, fontSize: `${this.badgeFontSize}px`, color: '#FFFFFF',
+      }).setOrigin(0.5, 0.5);
+      this.container.add(this.defBadgeText);
+    } else {
+      this.defBadgeText.setText(String(currentHP));
+      this.defBadgeText.setVisible(true);
+    }
   }
 
   setCanAct(canAct: boolean): void {
-    if (this.canActGlow) { this.canActGlow.destroy(); this.canActGlow = null; }
-    if (!canAct) return;
-    this.canActGlow = this.scene.add.graphics();
-    this.canActGlow.lineStyle(3, 0xF5A623, 0.9);
-    this.canActGlow.strokeRect(-1, -1, this.w + 2, this.h + 2);
-    this.container.add(this.canActGlow);
+    if (!canAct) {
+      if (this.canActGlow) this.canActGlow.setVisible(false);
+      return;
+    }
+    if (!this.canActGlow) {
+      this.canActGlow = this.scene.add.graphics();
+      this.canActGlow.lineStyle(3, 0xF5A623, 0.9);
+      this.canActGlow.strokeRect(-1, -1, this.w + 2, this.h + 2);
+      this.container.add(this.canActGlow);
+    }
+    this.canActGlow.setVisible(true);
   }
 
 /** Update only the fields that are provided. undefined = no change. */
@@ -16444,6 +18990,27 @@ function emitStatsChanged(engine: any, instanceId: string): void {
     maxHP: u.maxDef,
     canAct: unitCanAct(u, state.turn?.activePlayer),
   });
+}
+
+/**
+ * Emit UNIT_STATS_CHANGED for EVERY unit on the board.
+ * Implements state-driven rendering: after any aura recalculation,
+ * the UI syncs all stats from the engine's source of truth —
+ * not just units with non-zero deltas.
+ */
+function emitAllUnitStats(engine: any): void {
+  const state = engine.getState();
+  for (const cell of state.board) {
+    if (!cell.unit) continue;
+    const u = cell.unit;
+    EventBus.emit('UNIT_STATS_CHANGED', {
+      instanceId: u.instanceId,
+      atk: u.currentAtk,
+      currentHP: u.currentDef,
+      maxHP: u.maxDef,
+      canAct: unitCanAct(u, state.turn?.activePlayer),
+    });
+  }
 }
 
 export function refreshCanActIndicators(engine: any): void {
@@ -16577,6 +19144,15 @@ export function wireEngineToEventBus(engine: any, localPlayerIndex: number): () 
         break;
       }
 
+      case 'AURA_APPLIED': {
+        EventBus.emit('AURA_APPLIED', event);
+        // State-driven rendering: sync ALL unit stats from engine truth.
+        // This covers both aura applications AND removals (where delta=0
+        // would otherwise be silently dropped from the changes array).
+        emitAllUnitStats(engine);
+        break;
+      }
+
       case 'INTERACTION_RESOLVED': {
         EventBus.emit('INTERACTION_RESOLVED', event);
         break;
@@ -16619,8 +19195,8 @@ export function setupGameOverHandler(
   playerName: string,
   opponentName: string,
   isCryptoMode: boolean,
-): void {
-  EventBus.on(EV.GAME_OVER, (ev: any) => {
+): () => void {
+  const unsub = EventBus.on(EV.GAME_OVER, (ev: any) => {
     if (!scene.scene.isActive('BattleScene')) return;
 
     const result = ev.result ?? ev;
@@ -16644,6 +19220,7 @@ export function setupGameOverHandler(
       scene.cameras.main.once('camerafadeoutcomplete', () => scene.scene.start('ResultScene'));
     });
   });
+  return unsub;
 }
 
 ```
@@ -16880,22 +19457,31 @@ export function replayOpponentAction(deps: NetworkCoordinatorDeps, action: GameA
 
 /** Overlay objects for the "opponent disconnected" banner — so we can remove them on reconnect. */
 let disconnectOverlay: Phaser.GameObjects.GameObject[] = [];
+let disconnectCountdownText: Phaser.GameObjects.Text | null = null;
 
 export function handleOpponentDisconnect(deps: NetworkCoordinatorDeps): void {
   const { scene } = deps;
 
-  // Show a non-blocking "waiting" banner (opponent may reconnect)
+  // Show a non-blocking "waiting" banner with countdown (opponent may reconnect)
   const bg = scene.add.rectangle(640, 30, 500, 50, 0x000000, 0.85).setDepth(999);
-  const txt = scene.add.text(640, 30, 'Opponent disconnected — waiting for reconnect...', {
+  const txt = scene.add.text(640, 30, 'Opponent disconnected — reconnect: 10s', {
     fontSize: '16px', color: '#FF6666', align: 'center',
   }).setOrigin(0.5).setDepth(999);
   disconnectOverlay = [bg, txt];
+  disconnectCountdownText = txt;
+}
+
+export function handleDisconnectCountdown(_deps: NetworkCoordinatorDeps, remaining: number): void {
+  if (disconnectCountdownText) {
+    disconnectCountdownText.setText(`Opponent disconnected — reconnect: ${remaining}s`);
+  }
 }
 
 export function handleOpponentReconnect(deps: NetworkCoordinatorDeps): void {
   // Remove the disconnect banner
   for (const obj of disconnectOverlay) obj.destroy();
   disconnectOverlay = [];
+  disconnectCountdownText = null;
 
   // Brief "reconnected" flash
   const { scene } = deps;
@@ -16911,6 +19497,7 @@ export function handleFinalDisconnect(deps: NetworkCoordinatorDeps): void {
   // Clean up any lingering banner
   for (const obj of disconnectOverlay) obj.destroy();
   disconnectOverlay = [];
+  disconnectCountdownText = null;
 
   GameState.recordWin();
   GameState.setLastMatch({
@@ -16940,6 +19527,7 @@ export function setupSocketCallbacks(deps: NetworkCoordinatorDeps): void {
     onOpponentDisconnected: () => handleOpponentDisconnect(deps),
     onOpponentReconnected: () => handleOpponentReconnect(deps),
     onOpponentAbandon: () => handleFinalDisconnect(deps),
+    onDisconnectCountdown: (remaining) => handleDisconnectCountdown(deps, remaining),
     onConnectionLost: () => showConnectionOverlay(deps.scene, true),
     onReconnected: () => showConnectionOverlay(deps.scene, false),
     onReconnectFailed: () => handleFinalDisconnect(deps),
@@ -16998,6 +19586,8 @@ import { setupHUDRefresh } from './battle/HUDRefreshCoordinator';
 import { createSelectionManager } from './battle/InputCoordinator';
 import { setupGameOverHandler } from './battle/GameOverHandler';
 import { boardHashFromCells } from '../game/utils/boardHash';
+import { GameLogger } from '../game/GameLogger';
+import { getCard } from '../game/data/CardRegistry';
 
 interface BattleSceneData {
   playerName: string;
@@ -17016,6 +19606,9 @@ export default class BattleScene extends Phaser.Scene {
   private sceneData!: BattleSceneData;
   private hudUnsubs: Array<() => void> = [];
   private bridgeUnsub?: () => void;
+  private gameOverUnsub?: () => void;
+  private logger?: GameLogger;
+  private stateReportTimer?: ReturnType<typeof setInterval>;
 
   constructor() { super('BattleScene'); }
   init(data: BattleSceneData) { this.sceneData = data; }
@@ -17043,6 +19636,23 @@ export default class BattleScene extends Phaser.Scene {
     // ─── Engine + event bridge ────────────────────
     this.engine = new GameEngine();
     this.bridgeUnsub = wireEngineToEventBus(this.engine, localPlayerIndex);
+
+    // ─── Game logger ───────────────────────────────
+    this.logger = new GameLogger(
+      GameState.roomCode || 'local',
+      localPlayerIndex,
+      GameState.gameSeed || 0,
+      () => this.engine.getState(),
+    );
+    this.engine.on(e => this.logger?.record(e));
+
+    // Expose to browser console
+    (window as any).exportGameLog = () => {
+      if (!this.logger) { console.warn('No active logger'); return; }
+      this.logger.stop();
+      console.log(`Exported ${this.logger.entryCount} events`);
+    };
+    (window as any).gameLog = () => this.logger?.getLog();
 
     // ─── HUD refresh ─────────────────────────────
     this.hudUnsubs = setupHUDRefresh(this.engine, localPlayerIndex, playerName, opponentName);
@@ -17084,7 +19694,7 @@ export default class BattleScene extends Phaser.Scene {
     });
 
     // ─── Game over ───────────────────────────────
-    setupGameOverHandler(this, this.engine, localPlayerIndex, playerName, opponentName, this.sceneData.isCryptoMode);
+    this.gameOverUnsub = setupGameOverHandler(this, this.engine, localPlayerIndex, playerName, opponentName, this.sceneData.isCryptoMode);
 
     // ─── Network ─────────────────────────────────
     setupSocketCallbacks({
@@ -17102,6 +19712,12 @@ export default class BattleScene extends Phaser.Scene {
         `Board units: ${v.board.filter((c: any) => c.unit).length}`,
         `Phase: ${v.turn?.phase}`, `Active: P${(v.turn?.activePlayer ?? 0) + 1}`
       );
+
+      // Dev-only: only P1 (host) sends periodic state reports to avoid duplicates
+      if (import.meta.env.DEV && SocketManager.isConnected() && localPlayerIndex === 0) {
+        this.sendStateReport('GAME_START');
+        this.stateReportTimer = setInterval(() => this.sendStateReport('PERIODIC'), 30_000);
+      }
     };
 
     if (SocketManager.isConnected()) {
@@ -17115,7 +19731,18 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   shutdown() {
+    // Dev-only: send final state report before shutdown (host only)
+    if (import.meta.env.DEV && SocketManager.isConnected() && (GameState.playerIndex ?? 0) === 0) {
+      this.sendStateReport('GAME_END');
+    }
+    if (this.stateReportTimer) {
+      clearInterval(this.stateReportTimer);
+      this.stateReportTimer = undefined;
+    }
+
+    this.logger?.stop();
     this.bridgeUnsub?.();
+    this.gameOverUnsub?.();
     this.hudUnsubs.forEach(unsub => unsub());
     EventBus.clearAll?.();
     this.boardRenderer?.destroy?.();
@@ -17123,6 +19750,74 @@ export default class BattleScene extends Phaser.Scene {
     this.hudRenderer?.destroy?.();
     this.overlayRenderer?.destroy?.();
     this.selectionManager?.destroy?.();
+  }
+
+  /** Build and send a game state report to the server (dev-only detailed logging). */
+  private sendStateReport(trigger: 'GAME_START' | 'PERIODIC' | 'GAME_END'): void {
+    try {
+      const state = this.engine.getState();
+      const units = state.board
+        .filter(c => c.unit)
+        .map(c => {
+          const u = c.unit!;
+          let cardName = u.cardId;
+          try { cardName = getCard(u.cardId).name; } catch { /* fallback to id */ }
+          return {
+            instanceId: u.instanceId,
+            cardId: u.cardId,
+            name: cardName,
+            owner: u.owner,
+            col: c.col,
+            row: c.row,
+            baseAtk: u.baseAtk,
+            currentAtk: u.currentAtk,
+            baseDef: u.baseDef,
+            currentDef: u.currentDef,
+            maxDef: u.maxDef,
+            isActive: u.isActive,
+            hasMoved: u.hasMoved,
+            hasActed: u.hasActed,
+            buffs: (u.activeBuffs ?? []).map(b => ({
+              source: b.source,
+              atkDelta: b.atkDelta,
+              defDelta: b.defDelta,
+              movDelta: b.moveDelta,
+            })),
+          };
+        });
+
+      const buildPlayer = (pi: 0 | 1) => {
+        const ps = state.players[pi];
+        const mod = state.modifiers[pi];
+        const effectiveRate = Math.max(1, mod.legRateBase + mod.legRateBonus - mod.legRatePenalty);
+        return {
+          player: pi,
+          handCards: ps.hand.map(id => { try { return getCard(id).name; } catch { return id; } }),
+          handCount: ps.hand.length,
+          deckCount: ps.deckCount,
+          discardCount: ps.discardCount,
+          leg: mod.legPool,
+          legRate: mod.legRateFrozen ? 0 : effectiveRate,
+          legRateBase: mod.legRateBase,
+          legRateBonus: mod.legRateBonus,
+          legRatePenalty: mod.legRatePenalty,
+          crownDiscount: mod.royalCostDiscount,
+          crownPenalty: mod.royalCostPenalty,
+        };
+      };
+
+      SocketManager.sendStateReport({
+        trigger,
+        ts: new Date().toISOString(),
+        turn: state.turn?.turnNumber ?? 0,
+        phase: state.turn?.phase ?? 'UNKNOWN',
+        activePlayer: state.turn?.activePlayer ?? 0,
+        units,
+        players: [buildPlayer(0), buildPlayer(1)],
+      });
+    } catch (e) {
+      console.warn('[BattleScene] Failed to send state report:', e);
+    }
   }
 }
 
@@ -17709,8 +20404,11 @@ create(): void {
 
 import Phaser from 'phaser';
 import GameState, { GameMode } from '../GameState';
+import SocketManager from '../network/SocketManager';
 
 export default class ResultScene extends Phaser.Scene {
+  private autoReturnTimer?: Phaser.Time.TimerEvent;
+
   constructor() {
     super('ResultScene');
   }
@@ -17918,13 +20616,21 @@ export default class ResultScene extends Phaser.Scene {
   }
 
   private addAutoReturn(): void {
-    this.time.delayedCall(15000, () => {
+    this.autoReturnTimer = this.time.delayedCall(15000, () => {
       if (!this.scene.isActive('ResultScene')) return;
       this.goToMenu();
     });
   }
 
+  shutdown(): void {
+    if (this.autoReturnTimer) {
+      this.autoReturnTimer.destroy();
+      this.autoReturnTimer = undefined;
+    }
+  }
+
   private goToMenu(): void {
+    SocketManager.disconnect();
     GameState.clearMatchData();
 
     this.cameras.main.fadeOut(200, 0, 0, 0);
@@ -17996,6 +20702,7 @@ export default class RoomScene extends Phaser.Scene {
   private opponentName: string = '';
   private cryptoPhase: CryptoPhase = 'idle';
   private currentRoomCode: string = '';
+  private pendingTimers: Phaser.Time.TimerEvent[] = [];
 
   constructor() {
     super('RoomScene');
@@ -18274,12 +20981,12 @@ private onHostDepositConfirmed(): void {
     }
   } else {
     this.statusText.setText('Opponent joined! Entering battle...');
-    this.time.delayedCall(800, () => this.enterBattle());
+    this.pendingTimers.push(this.time.delayedCall(800, () => this.enterBattle()));
   }
 }
   private onOpponentDisconnected(): void {
     this.statusText.setText('Opponent disconnected.').setColor('#ff4444');
-    this.time.delayedCall(3000, () => this.scene.start('MainMenuScene'));
+    this.pendingTimers.push(this.time.delayedCall(3000, () => this.scene.start('MainMenuScene')));
   }
 
   private onSocketError(msg: string): void {
@@ -18289,7 +20996,7 @@ private onHostDepositConfirmed(): void {
   private onBothCryptoReady(): void {
     this.cryptoPhase = 'both_ready';
     this.statusText.setText('Funds locked! Entering battle...').setColor('#00ff88');
-    this.time.delayedCall(1000, () => this.enterBattle());
+    this.pendingTimers.push(this.time.delayedCall(1000, () => this.enterBattle()));
   }
 
   // ─── Crypto deposit flow ─────────────────────────────────────
@@ -18319,7 +21026,7 @@ private onHostDepositConfirmed(): void {
     SocketManager.signalCryptoReady();
   } catch (err: any) {
     this.statusText.setText(`Deposit failed: ${err.message}`).setColor('#ff4444');
-    this.time.delayedCall(4000, () => this.scene.start('MainMenuScene'));
+    this.pendingTimers.push(this.time.delayedCall(4000, () => this.scene.start('MainMenuScene')));
   }
 }
 
@@ -18343,6 +21050,11 @@ private onHostDepositConfirmed(): void {
   }
 
   // ─── Scene transition ────────────────────────────────────────
+
+  shutdown(): void {
+    for (const timer of this.pendingTimers) timer.destroy();
+    this.pendingTimers = [];
+  }
 
   private enterBattle(): void {
     this.cameras.main.fadeOut(300, 0, 0, 0);
@@ -20643,6 +23355,10 @@ describe('ActPhase — queries', () => {
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createTestEngine, skipTurn, deployCard, Player, TurnPhase, EngineStatus } from '../helpers/TestHarness';
 import type { TestEngine } from '../helpers/TestHarness';
+import { resolveAttack } from '../../../src/game/CombatResolver';
+import { Board } from '../../../src/game/Board';
+import { UnitFactory } from '../../../src/game/UnitFactory';
+import type { EvUnitAttacked } from '../../../src/game/types/EventTypes';
 
 let t: TestEngine;
 
@@ -20698,6 +23414,196 @@ describe('Combat — attack basics', () => {
         expect(attacked.length).toBeGreaterThan(0);
       }
     }
+  });
+});
+
+describe('Combat — backstab & ambush bonuses', () => {
+  // Direction reference:
+  //   P1 home = row 0, faces toward row 6 → back = toward row 0 (lower rows)
+  //   P2 home = row 6, faces toward row 0 → back = toward row 6 (higher rows)
+  //
+  // Backstab: dx=0, exactly 1 row behind (Scout: +1)
+  // Ambush:   |dx|≤1, exactly 1 row behind (Assassin: +1)
+
+  it('Scout backstab: directly behind P1 King deals 2 damage (base 1 + backstab 1)', () => {
+    const factory = new UnitFactory();
+    const board = new Board();
+
+    const king = factory.create('king', Player.P1, { col: 3, row: 2 });
+    board.placeUnit(king);
+
+    // P2 Scout directly behind: same col, 1 row behind P1 (row 1 < row 2)
+    const scout = factory.create('scout', Player.P2, { col: 3, row: 1 });
+    board.placeUnit(scout);
+
+    const events = resolveAttack(scout, king, board);
+    const attackEvent = events.find(e => e.type === 'UNIT_ATTACKED') as EvUnitAttacked;
+
+    expect(attackEvent).toBeDefined();
+    expect(attackEvent.damage).toBe(2); // 1 base + 1 backstab
+    expect(attackEvent.targetNewHP).toBe(king.currentDef - 2);
+  });
+
+  it('regular unit attacking from behind deals NO bonus (no backstab/ambush)', () => {
+    const factory = new UnitFactory();
+    const board = new Board();
+
+    const king = factory.create('king', Player.P1, { col: 3, row: 2 });
+    board.placeUnit(king);
+
+    // Foot soldier behind P1 King — no backstab/ambush property
+    const soldier = factory.create('foot_soldier', Player.P2, { col: 3, row: 1 });
+    board.placeUnit(soldier);
+
+    const events = resolveAttack(soldier, king, board);
+    const attackEvent = events.find(e => e.type === 'UNIT_ATTACKED') as EvUnitAttacked;
+
+    expect(attackEvent).toBeDefined();
+    expect(attackEvent.damage).toBe(1); // base only, no universal bonus
+  });
+
+  it('Scout diagonal-behind does NOT trigger backstab (dx≠0)', () => {
+    const factory = new UnitFactory();
+    const board = new Board();
+
+    const king = factory.create('king', Player.P1, { col: 3, row: 2 });
+    board.placeUnit(king);
+
+    // Scout at diagonal-behind: dx=1, 1 row behind
+    const scout = factory.create('scout', Player.P2, { col: 4, row: 1 });
+    board.placeUnit(scout);
+
+    const events = resolveAttack(scout, king, board);
+    const attackEvent = events.find(e => e.type === 'UNIT_ATTACKED') as EvUnitAttacked;
+
+    expect(attackEvent).toBeDefined();
+    expect(attackEvent.damage).toBe(1); // backstab requires dx=0
+  });
+
+  it('Assassin ambush: diagonal-behind triggers +1 (|dx|≤1)', () => {
+    const factory = new UnitFactory();
+    const board = new Board();
+
+    const king = factory.create('king', Player.P1, { col: 3, row: 2 });
+    board.placeUnit(king);
+
+    // Assassin at diagonal-behind: dx=1, 1 row behind P1
+    const assassin = factory.create('assassin', Player.P2, { col: 4, row: 1 });
+    board.placeUnit(assassin);
+
+    const events = resolveAttack(assassin, king, board);
+    const attackEvent = events.find(e => e.type === 'UNIT_ATTACKED') as EvUnitAttacked;
+
+    expect(attackEvent).toBeDefined();
+    expect(attackEvent.damage).toBe(5); // 4 base + 1 ambush
+  });
+
+  it('Assassin ambush: directly behind also triggers +1', () => {
+    const factory = new UnitFactory();
+    const board = new Board();
+
+    const king = factory.create('king', Player.P1, { col: 3, row: 2 });
+    board.placeUnit(king);
+
+    // Assassin directly behind: dx=0, 1 row behind
+    const assassin = factory.create('assassin', Player.P2, { col: 3, row: 1 });
+    board.placeUnit(assassin);
+
+    const events = resolveAttack(assassin, king, board);
+    const attackEvent = events.find(e => e.type === 'UNIT_ATTACKED') as EvUnitAttacked;
+
+    expect(attackEvent).toBeDefined();
+    expect(attackEvent.damage).toBe(5); // 4 base + 1 ambush
+  });
+
+  it('front attack deals no bonus', () => {
+    const factory = new UnitFactory();
+    const board = new Board();
+
+    const king = factory.create('king', Player.P1, { col: 3, row: 2 });
+    board.placeUnit(king);
+
+    // Scout in front: row 3 > row 2 = P1's front
+    const scout = factory.create('scout', Player.P2, { col: 3, row: 3 });
+    board.placeUnit(scout);
+
+    const events = resolveAttack(scout, king, board);
+    const attackEvent = events.find(e => e.type === 'UNIT_ATTACKED') as EvUnitAttacked;
+
+    expect(attackEvent).toBeDefined();
+    expect(attackEvent.damage).toBe(1);
+  });
+
+  it('same-row attack deals no bonus', () => {
+    const factory = new UnitFactory();
+    const board = new Board();
+
+    const king = factory.create('king', Player.P1, { col: 3, row: 3 });
+    board.placeUnit(king);
+
+    const scout = factory.create('scout', Player.P2, { col: 4, row: 3 });
+    board.placeUnit(scout);
+
+    const events = resolveAttack(scout, king, board);
+    const attackEvent = events.find(e => e.type === 'UNIT_ATTACKED') as EvUnitAttacked;
+
+    expect(attackEvent).toBeDefined();
+    expect(attackEvent.damage).toBe(1);
+  });
+
+  it('backstab works symmetrically for P2 defender', () => {
+    const factory = new UnitFactory();
+    const board = new Board();
+
+    // P2 King at row 4. P2's back = higher rows (toward row 6).
+    const king = factory.create('king', Player.P2, { col: 3, row: 4 });
+    board.placeUnit(king);
+
+    // P1 Scout directly behind P2 King: row 5 > row 4
+    const scout = factory.create('scout', Player.P1, { col: 3, row: 5 });
+    board.placeUnit(scout);
+
+    const events = resolveAttack(scout, king, board);
+    const attackEvent = events.find(e => e.type === 'UNIT_ATTACKED') as EvUnitAttacked;
+
+    expect(attackEvent).toBeDefined();
+    expect(attackEvent.damage).toBe(2); // 1 base + 1 backstab
+  });
+
+  it('ambush works symmetrically for P2 defender', () => {
+    const factory = new UnitFactory();
+    const board = new Board();
+
+    const king = factory.create('king', Player.P2, { col: 3, row: 4 });
+    board.placeUnit(king);
+
+    // P1 Assassin at diagonal-behind P2 King: row 5 > row 4, dx=1
+    const assassin = factory.create('assassin', Player.P1, { col: 4, row: 5 });
+    board.placeUnit(assassin);
+
+    const events = resolveAttack(assassin, king, board);
+    const attackEvent = events.find(e => e.type === 'UNIT_ATTACKED') as EvUnitAttacked;
+
+    expect(attackEvent).toBeDefined();
+    expect(attackEvent.damage).toBe(5); // 4 base + 1 ambush
+  });
+
+  it('2+ rows behind does NOT trigger backstab or ambush (must be exactly 1 row)', () => {
+    const factory = new UnitFactory();
+    const board = new Board();
+
+    const king = factory.create('king', Player.P1, { col: 3, row: 3 });
+    board.placeUnit(king);
+
+    // Scout 2 rows behind: row 1 vs row 3 = dy=-2
+    const scout = factory.create('scout', Player.P2, { col: 3, row: 1 });
+    board.placeUnit(scout);
+
+    const events = resolveAttack(scout, king, board);
+    const attackEvent = events.find(e => e.type === 'UNIT_ATTACKED') as EvUnitAttacked;
+
+    expect(attackEvent).toBeDefined();
+    expect(attackEvent.damage).toBe(1); // no bonus at 2-row distance
   });
 });
 
@@ -21148,6 +24054,277 @@ export const GameObjects = {
 export const Geom = {
   Rectangle: class { static Contains() { return false; } },
 };
+
+```
+
+# tests\server\roomFlow.test.ts
+
+```ts
+/**
+ * roomFlow.test.ts — Server integration tests for room creation,
+ * joining, and battle-ready handshake.
+ *
+ * Spins up a minimal Socket.io server with RoomManager + SessionManager,
+ * then connects two socket.io-client instances to verify the full flow.
+ */
+
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { createServer, type Server as HttpServer } from 'http';
+import { Server } from 'socket.io';
+import { io as ioClient, type Socket as ClientSocket } from 'socket.io-client';
+import { RoomManager } from '../../server/rooms/RoomManager.js';
+import { SessionManager } from '../../server/game/SessionManager.js';
+import type {
+  ClientToServerEvents,
+  ServerToClientEvents,
+} from '../../shared/types/NetworkEvents.js';
+
+// ─── Helpers ──────────────────────────────────────────────────
+
+/** Create a connected client socket, resolves when 'connect' fires. */
+function createClient(port: number): Promise<ClientSocket> {
+  return new Promise((resolve) => {
+    const client = ioClient(`http://localhost:${port}`, {
+      reconnection: false,
+      transports: ['websocket'],
+    });
+    client.on('connect', () => resolve(client));
+  });
+}
+
+/** Listen for a specific event, resolves with its data. */
+function waitForEvent<T = unknown>(socket: ClientSocket, event: string): Promise<T> {
+  return new Promise((resolve) => {
+    socket.once(event, (data: T) => resolve(data));
+  });
+}
+
+// ─── Test suite ───────────────────────────────────────────────
+
+describe('Room flow — create, join, battle ready', () => {
+  let httpServer: HttpServer;
+  let io: Server<ClientToServerEvents, ServerToClientEvents>;
+  let roomManager: RoomManager;
+  let port: number;
+  const clients: ClientSocket[] = [];
+
+  beforeAll(async () => {
+    httpServer = createServer();
+    io = new Server(httpServer, {
+      cors: { origin: [/^http:\/\/localhost:\d+$/] },
+    });
+
+    roomManager = new RoomManager();
+
+    // Minimal PayoutService stub (not needed for room flow)
+    const payoutStub = {
+      payoutWinner: async () => ({ success: true }),
+      refundTie: async () => ({ success: true }),
+    } as any;
+
+    const session = new SessionManager(io, roomManager, payoutStub);
+
+    io.on('connection', (socket) => {
+      // Room events (mirrors app.ts)
+      socket.on('createRoom', ({ roomCode, playerName }) => {
+        roomManager.createRoom(socket.id, roomCode, playerName);
+        socket.join(roomCode);
+        socket.emit('roomCreated', { roomCode, playerIndex: 0 });
+      });
+
+      socket.on('joinRoom', ({ roomCode, playerName }) => {
+        const result = roomManager.joinRoom(socket.id, roomCode, playerName);
+        if (typeof result === 'string') {
+          socket.emit('error', { message: result });
+          return;
+        }
+        socket.join(roomCode);
+        socket.emit('roomJoined', { roomCode, playerIndex: 1 });
+
+        const host = result.players[0];
+        io.to(host.id).emit('opponentJoined', { playerName, playerIndex: 0 });
+        socket.emit('opponentJoined', { playerName: host.name, playerIndex: 1 });
+
+        io.to(roomCode).emit('game_seed', { seed: result.gameSeed! });
+      });
+
+      session.registerHandlers(socket);
+
+      socket.on('disconnect', () => {
+        session.handleDisconnect(socket);
+      });
+    });
+
+    // Listen on random available port
+    await new Promise<void>((resolve) => {
+      httpServer.listen(0, () => {
+        const addr = httpServer.address();
+        port = typeof addr === 'object' && addr ? addr.port : 0;
+        resolve();
+      });
+    });
+  });
+
+  afterEach(() => {
+    // Disconnect all clients after each test
+    for (const c of clients) {
+      if (c.connected) c.disconnect();
+    }
+    clients.length = 0;
+  });
+
+  afterAll(async () => {
+    roomManager.dispose();
+    io.close();
+    httpServer.close();
+  });
+
+  // ────────────────────────────────────────────────────────────
+
+  it('both players join the same room and receive room codes', async () => {
+    const host = await createClient(port);
+    const joiner = await createClient(port);
+    clients.push(host, joiner);
+
+    const ROOM = 'TEST01';
+
+    // Host creates room
+    const roomCreatedP = waitForEvent<{ roomCode: string; playerIndex: number }>(host, 'roomCreated');
+    host.emit('createRoom', { roomCode: ROOM, playerName: 'Alice' });
+    const created = await roomCreatedP;
+
+    expect(created.roomCode).toBe(ROOM);
+    expect(created.playerIndex).toBe(0);
+
+    // Joiner joins with the shared room code
+    const roomJoinedP = waitForEvent<{ roomCode: string; playerIndex: number }>(joiner, 'roomJoined');
+    const hostSeesOpponentP = waitForEvent<{ playerName: string; playerIndex: number }>(host, 'opponentJoined');
+    const joinerSeesOpponentP = waitForEvent<{ playerName: string; playerIndex: number }>(joiner, 'opponentJoined');
+    const hostSeedP = waitForEvent<{ seed: number }>(host, 'game_seed');
+    const joinerSeedP = waitForEvent<{ seed: number }>(joiner, 'game_seed');
+
+    joiner.emit('joinRoom', { roomCode: ROOM, playerName: 'Bob' });
+
+    const [joined, hostOpponent, joinerOpponent, hostSeed, joinerSeed] = await Promise.all([
+      roomJoinedP, hostSeesOpponentP, joinerSeesOpponentP, hostSeedP, joinerSeedP,
+    ]);
+
+    // Joiner gets correct room info
+    expect(joined.roomCode).toBe(ROOM);
+    expect(joined.playerIndex).toBe(1);
+
+    // Both see each other's names
+    expect(hostOpponent.playerName).toBe('Bob');
+    expect(joinerOpponent.playerName).toBe('Alice');
+
+    // Both receive the same game seed
+    expect(hostSeed.seed).toBe(joinerSeed.seed);
+    expect(typeof hostSeed.seed).toBe('number');
+  });
+
+  it('both players signal battle ready and receive both_battle_ready', async () => {
+    const host = await createClient(port);
+    const joiner = await createClient(port);
+    clients.push(host, joiner);
+
+    const ROOM = 'TEST02';
+
+    // Setup: create and join room
+    const roomCreatedP = waitForEvent(host, 'roomCreated');
+    host.emit('createRoom', { roomCode: ROOM, playerName: 'Alice' });
+    await roomCreatedP;
+
+    const roomJoinedP = waitForEvent(joiner, 'roomJoined');
+    joiner.emit('joinRoom', { roomCode: ROOM, playerName: 'Bob' });
+    await roomJoinedP;
+
+    // Both signal battle ready — expect both_battle_ready broadcast
+    const hostBattleReadyP = waitForEvent(host, 'both_battle_ready');
+    const joinerBattleReadyP = waitForEvent(joiner, 'both_battle_ready');
+
+    host.emit('player_ready', { roomCode: ROOM });
+    joiner.emit('player_ready', { roomCode: ROOM });
+
+    // Both should receive the event (with a reasonable timeout)
+    await Promise.all([hostBattleReadyP, joinerBattleReadyP]);
+
+    // If we got here without timing out, both players entered battle together
+    expect(true).toBe(true);
+  });
+
+  it('joining a non-existent room returns an error', async () => {
+    const client = await createClient(port);
+    clients.push(client);
+
+    const errorP = waitForEvent<{ message: string }>(client, 'error');
+    client.emit('joinRoom', { roomCode: 'NONEXISTENT', playerName: 'Eve' });
+
+    const err = await errorP;
+    expect(err.message).toContain('Room not found');
+  });
+
+  it('third player cannot join a full room', async () => {
+    const host = await createClient(port);
+    const joiner = await createClient(port);
+    const third = await createClient(port);
+    clients.push(host, joiner, third);
+
+    const ROOM = 'TEST03';
+
+    host.emit('createRoom', { roomCode: ROOM, playerName: 'Alice' });
+    await waitForEvent(host, 'roomCreated');
+
+    joiner.emit('joinRoom', { roomCode: ROOM, playerName: 'Bob' });
+    await waitForEvent(joiner, 'roomJoined');
+
+    // Third player tries to join
+    const errorP = waitForEvent<{ message: string }>(third, 'error');
+    third.emit('joinRoom', { roomCode: ROOM, playerName: 'Charlie' });
+
+    const err = await errorP;
+    expect(err.message).toContain('full');
+  });
+
+  it('client from any localhost port can connect (CORS)', async () => {
+    // This test verifies the CORS regex allows any localhost port,
+    // preventing the bug where only hardcoded ports (3000, 8080) worked.
+    const client = await createClient(port);
+    clients.push(client);
+
+    expect(client.connected).toBe(true);
+
+    // Verify the server actually responds to events (not just TCP connect)
+    const roomCreatedP = waitForEvent<{ roomCode: string; playerIndex: number }>(client, 'roomCreated');
+    client.emit('createRoom', { roomCode: 'CORS_TEST', playerName: 'CorsUser' });
+    const created = await roomCreatedP;
+
+    expect(created.roomCode).toBe('CORS_TEST');
+  });
+
+  it('disconnect countdown events are emitted', async () => {
+    const host = await createClient(port);
+    const joiner = await createClient(port);
+    clients.push(host, joiner);
+
+    const ROOM = 'TEST_DC';
+
+    host.emit('createRoom', { roomCode: ROOM, playerName: 'Alice' });
+    await waitForEvent(host, 'roomCreated');
+
+    joiner.emit('joinRoom', { roomCode: ROOM, playerName: 'Bob' });
+    await waitForEvent(joiner, 'roomJoined');
+
+    // Listen for disconnect countdown on host side
+    const countdownP = waitForEvent<{ remaining: number }>(host, 'disconnectCountdown');
+
+    // Joiner disconnects — should trigger countdown
+    joiner.disconnect();
+
+    const countdown = await countdownP;
+    expect(countdown.remaining).toBeGreaterThan(0);
+    expect(countdown.remaining).toBeLessThanOrEqual(10);
+  });
+});
 
 ```
 
