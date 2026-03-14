@@ -65,22 +65,31 @@ export function replayOpponentAction(deps: NetworkCoordinatorDeps, action: GameA
 
 /** Overlay objects for the "opponent disconnected" banner — so we can remove them on reconnect. */
 let disconnectOverlay: Phaser.GameObjects.GameObject[] = [];
+let disconnectCountdownText: Phaser.GameObjects.Text | null = null;
 
 export function handleOpponentDisconnect(deps: NetworkCoordinatorDeps): void {
   const { scene } = deps;
 
-  // Show a non-blocking "waiting" banner (opponent may reconnect)
+  // Show a non-blocking "waiting" banner with countdown (opponent may reconnect)
   const bg = scene.add.rectangle(640, 30, 500, 50, 0x000000, 0.85).setDepth(999);
-  const txt = scene.add.text(640, 30, 'Opponent disconnected — waiting for reconnect...', {
+  const txt = scene.add.text(640, 30, 'Opponent disconnected — reconnect: 10s', {
     fontSize: '16px', color: '#FF6666', align: 'center',
   }).setOrigin(0.5).setDepth(999);
   disconnectOverlay = [bg, txt];
+  disconnectCountdownText = txt;
+}
+
+export function handleDisconnectCountdown(_deps: NetworkCoordinatorDeps, remaining: number): void {
+  if (disconnectCountdownText) {
+    disconnectCountdownText.setText(`Opponent disconnected — reconnect: ${remaining}s`);
+  }
 }
 
 export function handleOpponentReconnect(deps: NetworkCoordinatorDeps): void {
   // Remove the disconnect banner
   for (const obj of disconnectOverlay) obj.destroy();
   disconnectOverlay = [];
+  disconnectCountdownText = null;
 
   // Brief "reconnected" flash
   const { scene } = deps;
@@ -96,6 +105,7 @@ export function handleFinalDisconnect(deps: NetworkCoordinatorDeps): void {
   // Clean up any lingering banner
   for (const obj of disconnectOverlay) obj.destroy();
   disconnectOverlay = [];
+  disconnectCountdownText = null;
 
   GameState.recordWin();
   GameState.setLastMatch({
@@ -125,6 +135,7 @@ export function setupSocketCallbacks(deps: NetworkCoordinatorDeps): void {
     onOpponentDisconnected: () => handleOpponentDisconnect(deps),
     onOpponentReconnected: () => handleOpponentReconnect(deps),
     onOpponentAbandon: () => handleFinalDisconnect(deps),
+    onDisconnectCountdown: (remaining) => handleDisconnectCountdown(deps, remaining),
     onConnectionLost: () => showConnectionOverlay(deps.scene, true),
     onReconnected: () => showConnectionOverlay(deps.scene, false),
     onReconnectFailed: () => handleFinalDisconnect(deps),

@@ -28,6 +28,8 @@ import { setupHUDRefresh } from './battle/HUDRefreshCoordinator';
 import { createSelectionManager } from './battle/InputCoordinator';
 import { setupGameOverHandler } from './battle/GameOverHandler';
 import { boardHashFromCells } from '../game/utils/boardHash';
+import { GameLogger } from '../game/GameLogger';
+import { getCard } from '../game/data/CardRegistry';
 
 interface BattleSceneData {
   playerName: string;
@@ -47,6 +49,8 @@ export default class BattleScene extends Phaser.Scene {
   private hudUnsubs: Array<() => void> = [];
   private bridgeUnsub?: () => void;
   private gameOverUnsub?: () => void;
+  private logger?: GameLogger;
+  private stateReportTimer?: ReturnType<typeof setInterval>;
 
   constructor() { super('BattleScene'); }
   init(data: BattleSceneData) { this.sceneData = data; }
@@ -74,6 +78,23 @@ export default class BattleScene extends Phaser.Scene {
     // ─── Engine + event bridge ────────────────────
     this.engine = new GameEngine();
     this.bridgeUnsub = wireEngineToEventBus(this.engine, localPlayerIndex);
+
+    // ─── Game logger ───────────────────────────────
+    this.logger = new GameLogger(
+      GameState.roomCode || 'local',
+      localPlayerIndex,
+      GameState.gameSeed || 0,
+      () => this.engine.getState(),
+    );
+    this.engine.on(e => this.logger?.record(e));
+
+    // Expose to browser console
+    (window as any).exportGameLog = () => {
+      if (!this.logger) { console.warn('No active logger'); return; }
+      this.logger.stop();
+      console.log(`Exported ${this.logger.entryCount} events`);
+    };
+    (window as any).gameLog = () => this.logger?.getLog();
 
     // ─── HUD refresh ─────────────────────────────
     this.hudUnsubs = setupHUDRefresh(this.engine, localPlayerIndex, playerName, opponentName);
@@ -133,6 +154,12 @@ export default class BattleScene extends Phaser.Scene {
         `Board units: ${v.board.filter((c: any) => c.unit).length}`,
         `Phase: ${v.turn?.phase}`, `Active: P${(v.turn?.activePlayer ?? 0) + 1}`
       );
+
+      // Dev-only: only P1 (host) sends periodic state reports to avoid duplicates
+      if (import.meta.env.DEV && SocketManager.isConnected() && localPlayerIndex === 0) {
+        this.sendStateReport('GAME_START');
+        this.stateReportTimer = setInterval(() => this.sendStateReport('PERIODIC'), 30_000);
+      }
     };
 
     if (SocketManager.isConnected()) {
@@ -146,6 +173,16 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   shutdown() {
+    // Dev-only: send final state report before shutdown (host only)
+    if (import.meta.env.DEV && SocketManager.isConnected() && (GameState.playerIndex ?? 0) === 0) {
+      this.sendStateReport('GAME_END');
+    }
+    if (this.stateReportTimer) {
+      clearInterval(this.stateReportTimer);
+      this.stateReportTimer = undefined;
+    }
+
+    this.logger?.stop();
     this.bridgeUnsub?.();
     this.gameOverUnsub?.();
     this.hudUnsubs.forEach(unsub => unsub());
@@ -155,5 +192,73 @@ export default class BattleScene extends Phaser.Scene {
     this.hudRenderer?.destroy?.();
     this.overlayRenderer?.destroy?.();
     this.selectionManager?.destroy?.();
+  }
+
+  /** Build and send a game state report to the server (dev-only detailed logging). */
+  private sendStateReport(trigger: 'GAME_START' | 'PERIODIC' | 'GAME_END'): void {
+    try {
+      const state = this.engine.getState();
+      const units = state.board
+        .filter(c => c.unit)
+        .map(c => {
+          const u = c.unit!;
+          let cardName = u.cardId;
+          try { cardName = getCard(u.cardId).name; } catch { /* fallback to id */ }
+          return {
+            instanceId: u.instanceId,
+            cardId: u.cardId,
+            name: cardName,
+            owner: u.owner,
+            col: c.col,
+            row: c.row,
+            baseAtk: u.baseAtk,
+            currentAtk: u.currentAtk,
+            baseDef: u.baseDef,
+            currentDef: u.currentDef,
+            maxDef: u.maxDef,
+            isActive: u.isActive,
+            hasMoved: u.hasMoved,
+            hasActed: u.hasActed,
+            buffs: (u.activeBuffs ?? []).map(b => ({
+              source: b.source,
+              atkDelta: b.atkDelta,
+              defDelta: b.defDelta,
+              movDelta: b.moveDelta,
+            })),
+          };
+        });
+
+      const buildPlayer = (pi: 0 | 1) => {
+        const ps = state.players[pi];
+        const mod = state.modifiers[pi];
+        const effectiveRate = Math.max(1, mod.legRateBase + mod.legRateBonus - mod.legRatePenalty);
+        return {
+          player: pi,
+          handCards: ps.hand.map(id => { try { return getCard(id).name; } catch { return id; } }),
+          handCount: ps.hand.length,
+          deckCount: ps.deckCount,
+          discardCount: ps.discardCount,
+          leg: mod.legPool,
+          legRate: mod.legRateFrozen ? 0 : effectiveRate,
+          legRateBase: mod.legRateBase,
+          legRateBonus: mod.legRateBonus,
+          legRatePenalty: mod.legRatePenalty,
+          crownDiscount: mod.royalCostDiscount,
+          crownPenalty: mod.royalCostPenalty,
+        };
+      };
+
+      SocketManager.sendStateReport({
+        trigger,
+        ts: new Date().toISOString(),
+        turn: state.turn?.turnNumber ?? 0,
+        phase: state.turn?.phase ?? 'UNKNOWN',
+        activePlayer: state.turn?.activePlayer ?? 0,
+        units,
+        players: [buildPlayer(0), buildPlayer(1)],
+      });
+    } catch (e) {
+      console.warn('[BattleScene] Failed to send state report:', e);
+    }
   }
 }

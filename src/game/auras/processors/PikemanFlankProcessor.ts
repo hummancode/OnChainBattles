@@ -21,7 +21,7 @@ export class PikemanFlankProcessor implements AuraProcessor {
       const hasRight  = rightUnit !== null && rightUnit.owner === source.owner;
       if (hasLeft && hasRight) {
         const p = params(ability);
-        addDelta(deltas, source.instanceId, p.bonusAtk, p.bonusDef, 0);
+        addDelta(deltas, source.instanceId, p.bonusAtk, p.bonusDef, 0, `${source.cardId}:PIKEMAN_FLANK`);
       }
     }
   }

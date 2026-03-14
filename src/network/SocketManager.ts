@@ -25,6 +25,7 @@ export interface RoomCallbacks {
   onOpponentDisconnected: () => void;
   onOpponentReconnected?: () => void;
   onOpponentAbandon?: () => void;
+  onDisconnectCountdown?: (remaining: number) => void;
   onConnectionLost?: () => void;
   onReconnected?: () => void;
   onReconnectFailed?: () => void;
@@ -204,6 +205,10 @@ this.socket.on("game_seed", (data: { seed: number }) => {
       this.callbacks?.onOpponentAbandon?.();
     });
 
+    this.socket.on("disconnectCountdown" as any, (data: { remaining: number }) => {
+      this.callbacks?.onDisconnectCountdown?.(data.remaining);
+    });
+
     this.socket.on("rejoinSuccess" as any, (data: { roomCode: string; playerIndex: number }) => {
       console.log(`[SocketManager] Rejoin success: room=${data.roomCode}, playerIndex=${data.playerIndex}`);
     });
@@ -249,6 +254,13 @@ sendGameAction(action: GameAction): void {
   });
   console.log(`[SocketManager] Sent game_action: ${action.type} (seq=${action.seqNum})`);
 }
+sendStateReport(report: Record<string, any>): void {
+  this.socket?.emit('game_state_report' as any, {
+    roomCode: GameState.roomCode,
+    report,
+  });
+}
+
 sendStateHash(hash: string, afterGlobalSeq: number): void {
   this.socket?.emit('state_hash' as any, {
     roomCode: GameState.roomCode,

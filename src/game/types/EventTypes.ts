@@ -5,7 +5,7 @@
 // Each event carries the exact data the renderer needs.
 // ============================================================
 
-import type { Player, TurnPhase, Position, MatchResult } from './GameTypes';
+import type { Player, TurnPhase, Position, MatchResult, StatBuff } from './GameTypes';
 
 // ─────────────────────────────────────────────
 // UNIT EVENTS
@@ -30,6 +30,16 @@ export interface EvUnitMoved {
   to: Position;
 }
 
+/** Breakdown of how damage was calculated — for audit trail / game log. */
+export interface DamageBreakdown {
+  baseAtk: number;           // unit.currentAtk (already includes aura buffs)
+  cavalryCounter: number;    // additional ATK from x3 multiplier (0 if N/A)
+  backstabBonus: number;     // from card definition (0 if N/A)
+  ambushBonus: number;       // from card definition (0 if N/A)
+  totalDamage: number;       // final clamped value
+  auraBuffs: StatBuff[];     // aura buffs active on the attacker at time of attack
+}
+
 export interface EvUnitAttacked {
   type: 'UNIT_ATTACKED';
   attackerInstanceId: string;
@@ -44,6 +54,8 @@ export interface EvUnitAttacked {
   isKingHit: boolean;
   newHP?: number;
   maxHP?: number;
+  /** Full damage calculation breakdown — present for unit-on-unit combat, absent for EFFECT damage. */
+  breakdown?: DamageBreakdown;
 }
 
 export interface EvUnitDied {
@@ -113,6 +125,8 @@ export interface EvAuraApplied {
     atkDelta: number;
     defDelta: number;
     moveDelta: number;
+    /** Per-source breakdown of stat modifications. */
+    buffs?: StatBuff[];
   }>;
 }
 

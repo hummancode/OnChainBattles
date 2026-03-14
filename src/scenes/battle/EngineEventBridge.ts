@@ -44,6 +44,27 @@ function emitStatsChanged(engine: any, instanceId: string): void {
   });
 }
 
+/**
+ * Emit UNIT_STATS_CHANGED for EVERY unit on the board.
+ * Implements state-driven rendering: after any aura recalculation,
+ * the UI syncs all stats from the engine's source of truth —
+ * not just units with non-zero deltas.
+ */
+function emitAllUnitStats(engine: any): void {
+  const state = engine.getState();
+  for (const cell of state.board) {
+    if (!cell.unit) continue;
+    const u = cell.unit;
+    EventBus.emit('UNIT_STATS_CHANGED', {
+      instanceId: u.instanceId,
+      atk: u.currentAtk,
+      currentHP: u.currentDef,
+      maxHP: u.maxDef,
+      canAct: unitCanAct(u, state.turn?.activePlayer),
+    });
+  }
+}
+
 export function refreshCanActIndicators(engine: any): void {
   const state = engine.getState();
   const canActCells: Array<{ col: number; row: number }> = [];
@@ -172,6 +193,15 @@ export function wireEngineToEventBus(engine: any, localPlayerIndex: number): () 
         if (pendState.turn?.activePlayer === localPlayerIndex) {
           EventBus.emit(event.type, event);
         }
+        break;
+      }
+
+      case 'AURA_APPLIED': {
+        EventBus.emit('AURA_APPLIED', event);
+        // State-driven rendering: sync ALL unit stats from engine truth.
+        // This covers both aura applications AND removals (where delta=0
+        // would otherwise be silently dropped from the changes array).
+        emitAllUnitStats(engine);
         break;
       }
 

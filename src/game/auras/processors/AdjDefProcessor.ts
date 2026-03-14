@@ -17,7 +17,7 @@ export class AdjDefProcessor implements AuraProcessor {
       const adjacents = board.getAdjacentUnits(source.position.col, source.position.row);
       for (const adj of adjacents) {
         if (adj.owner === source.owner) {
-          addDelta(deltas, adj.instanceId, 0, params(ability).amount, 0);
+          addDelta(deltas, adj.instanceId, 0, params(ability).amount, 0, `${source.cardId}:ADJ_DEF`);
         }
       }
     }

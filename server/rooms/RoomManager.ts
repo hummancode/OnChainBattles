@@ -45,6 +45,7 @@ export class RoomManager {
       globalSeq: 0,
       pendingHashes: new Map(),
       disconnectTimers: new Map(),
+      disconnectIntervals: new Map(),
       createdAt: Date.now(),
     };
     this.rooms.set(roomCode, room);
@@ -123,11 +124,15 @@ export class RoomManager {
   deleteRoom(roomCode: string): void {
     const room = this.rooms.get(roomCode);
     if (room) {
-      // Clear any pending disconnect grace timers to avoid dangling callbacks
+      // Clear any pending disconnect grace timers/intervals to avoid dangling callbacks
       for (const timer of room.disconnectTimers.values()) {
         clearTimeout(timer);
       }
       room.disconnectTimers.clear();
+      for (const interval of room.disconnectIntervals.values()) {
+        clearInterval(interval);
+      }
+      room.disconnectIntervals.clear();
     }
     this.rooms.delete(roomCode);
   }

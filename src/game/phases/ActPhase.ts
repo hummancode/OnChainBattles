@@ -76,6 +76,11 @@ export function executeMove(ctx: GameContext, unitId: string, col: number, row: 
     to: { col, row },
   });
 
+  // Recalculate auras after move (e.g. Messenger aura triggers on adjacency change)
+  // Always emit — even with empty changes — so the UI can sync ALL unit stats.
+  const auraEvent = ctx.auras.evaluateAuras(ctx.board, ctx.mods);
+  ctx.emit(auraEvent);
+
   // Assassin: jump onto enemy = auto-attack on landing (immune to counter-attack)
   if (unit.baseAtkPattern === AtkPattern.ON_JUMP) {
     const defender = ctx.board.getUnit(col, row);
@@ -214,8 +219,9 @@ function handleUnitDeath(
     ctx.status = EngineStatus.AWAITING_INPUT;
   }
 
-  // Recalculate modifiers (removed unit may change discounts)
-  ctx.auras.recalculateModifiers(ctx.board, ctx.mods);
+  // Recalculate auras + modifiers (removed unit may change discounts/stat auras)
+  const deathAuraEvent = ctx.auras.evaluateAuras(ctx.board, ctx.mods);
+  ctx.emit(deathAuraEvent);
 }
 
 // ─────────────────────────────────────────────

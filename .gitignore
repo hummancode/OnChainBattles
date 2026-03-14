@@ -25,5 +25,11 @@
 .env.local
 .env.*.local
 
+# Dev tools (local only, not shipped)
+/dev-tools
+
+# Game session logs (generated during play, for debugging)
+/logs
+
 # Claude Code local settings
 .claude/

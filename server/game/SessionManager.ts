@@ -9,11 +9,13 @@ import type { ClientToServerEvents, ServerToClientEvents } from '../../shared/ty
 import type { RoomManager } from '../rooms/RoomManager.js';
 import type { PayoutService } from './PayoutService.js';
 import { Logger } from '../utils/Logger.js';
+import { GameLogWriter } from './GameLogWriter.js';
 
 type TypedServer = Server<ClientToServerEvents, ServerToClientEvents>;
 type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
 const log = new Logger('Session');
+const IS_DEV = process.env.NODE_ENV !== 'production';
 
 export class SessionManager {
   constructor(
@@ -30,6 +32,16 @@ export class SessionManager {
       log.info(`player_ready: ${room.battleReadyCount}/2 in room ${roomCode}`);
       if (room.battleReadyCount >= 2) {
         this.io.to(roomCode).emit('both_battle_ready');
+
+        // Start server-side game log
+        if (!room.gameLog) {
+          room.gameLog = new GameLogWriter(
+            roomCode,
+            room.gameSeed ?? 0,
+            room.players.map(p => ({ name: p.name, wallet: p.wallet })),
+          );
+        }
+
         for (const queued of room.actionQueue) {
           socket.to(roomCode).emit('opponent_action', queued);
           log.debug(`Flushed queued action: ${queued.type}`);
@@ -105,6 +117,9 @@ export class SessionManager {
       room.globalSeq += 1;
       action.serverSeq = room.globalSeq;
 
+      // Log action before relay
+      room.gameLog?.record(playerIndex, action);
+
       socket.to(roomCode).emit('opponent_action', action);
       log.debug(`Relayed ${action.type} in ${roomCode} (action #${room.actionCount}, serverSeq=${room.globalSeq})`);
     });
@@ -134,6 +149,8 @@ export class SessionManager {
       }
 
       room.gameOverClaims.push({ playerIndex, claimedWinner: winnerIndex });
+      room.gameLog?.record(playerIndex, { type: 'GAME_OVER', claimedWinner: winnerIndex });
+      room.gameLog?.flush();
       log.info(`game_over claim from P${playerIndex + 1}: winner=P${winnerIndex + 1} (${room.gameOverClaims.length}/2 claims)`);
 
       const hasWallets = room.players.some(p => p.wallet !== null);
@@ -197,6 +214,16 @@ export class SessionManager {
       }
     });
 
+    // ── Dev-only: rich game state reports for detailed logging ──
+    if (IS_DEV) {
+      socket.on('game_state_report' as any, ({ roomCode, report }: { roomCode: string; report: Record<string, any> }) => {
+        const room = this.rooms.getRoom(roomCode);
+        if (!room) return;
+        room.gameLog?.recordSnapshot(report);
+        log.debug(`State report (${report.trigger}) in ${roomCode}: turn=${report.turn} phase=${report.phase}`);
+      });
+    }
+
     socket.on('cryptoReady', ({ roomCode }) => {
       const count = this.rooms.incrementCryptoReady(roomCode);
       if (count === 1) {
@@ -209,7 +236,7 @@ export class SessionManager {
     });
   }
 
-  private static readonly GRACE_PERIOD_MS = 30_000;
+  private static readonly GRACE_PERIOD_MS = 10_000;
 
   async handleDisconnect(socket: TypedSocket): Promise<void> {
     const found = this.rooms.findBySocket(socket.id);
@@ -219,13 +246,30 @@ export class SessionManager {
     const disconnected = room.players[playerIndex];
     log.info(`${disconnected.name} disconnected from room: ${roomCode} (grace period: ${SessionManager.GRACE_PERIOD_MS / 1000}s)`);
 
-    // Notify opponent of temporary disconnect
+    // Notify opponent of temporary disconnect with total seconds
+    const totalSec = SessionManager.GRACE_PERIOD_MS / 1000;
     socket.to(roomCode).emit('opponentDisconnected');
+
+    // Countdown interval: emit remaining seconds every 1s
+    let remaining = totalSec;
+    this.io.to(roomCode).emit('disconnectCountdown', { remaining });
+    const countdownInterval = setInterval(() => {
+      remaining--;
+      if (remaining > 0) {
+        this.io.to(roomCode).emit('disconnectCountdown', { remaining });
+      }
+    }, 1000);
+    room.disconnectIntervals.set(playerIndex, countdownInterval);
 
     // Start grace period — if they don't rejoin, finalize disconnect
     const timer = setTimeout(async () => {
+      clearInterval(countdownInterval);
       room.disconnectTimers.delete(playerIndex);
       log.info(`Grace period expired for ${disconnected.name} in ${roomCode} — finalizing disconnect`);
+
+      // Flush game log before cleanup
+      room.gameLog?.record(playerIndex, { type: 'DISCONNECT_ABANDON' });
+      room.gameLog?.flush();
 
       // Notify remaining player that opponent abandoned
       this.io.to(roomCode).emit('opponentAbandon');
@@ -263,12 +307,17 @@ export class SessionManager {
     // Reset sequence counter for reconnected player
     room.lastSeqNum[playerIndex] = 0;
 
-    // Cancel the grace period timer
+    // Cancel the grace period timer and countdown interval
     const timer = room.disconnectTimers.get(playerIndex);
     if (timer) {
       clearTimeout(timer);
       room.disconnectTimers.delete(playerIndex);
       log.info(`Grace timer cancelled for ${playerName} in ${roomCode}`);
+    }
+    const interval = room.disconnectIntervals.get(playerIndex);
+    if (interval) {
+      clearInterval(interval);
+      room.disconnectIntervals.delete(playerIndex);
     }
 
     socket.join(roomCode);

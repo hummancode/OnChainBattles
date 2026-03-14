@@ -23,6 +23,51 @@ export interface GameAction {
 
 // ─── Client → Server Events ─────────────────────────────────
 
+// ─── Game State Report (dev-only, sent by client for server logs) ──
+
+export interface StateReportUnit {
+  instanceId: string;
+  cardId: string;
+  name: string;
+  owner: number;
+  col: number;
+  row: number;
+  baseAtk: number;
+  currentAtk: number;
+  baseDef: number;
+  currentDef: number;
+  maxDef: number;
+  isActive: boolean;
+  hasMoved: boolean;
+  hasActed: boolean;
+  buffs: Array<{ source: string; atkDelta: number; defDelta: number; movDelta: number }>;
+}
+
+export interface StateReportPlayer {
+  player: number;
+  handCards: string[];      // card names
+  handCount: number;
+  deckCount: number;
+  discardCount: number;
+  leg: number;
+  legRate: number;
+  legRateBase: number;
+  legRateBonus: number;
+  legRatePenalty: number;
+  crownDiscount: number;
+  crownPenalty: number;
+}
+
+export interface GameStateReport {
+  trigger: 'GAME_START' | 'PERIODIC' | 'GAME_END';
+  ts: string;                    // ISO timestamp
+  turn: number;
+  phase: string;
+  activePlayer: number;
+  units: StateReportUnit[];
+  players: [StateReportPlayer, StateReportPlayer];
+}
+
 export interface ClientToServerEvents {
   createRoom:     (data: { roomCode: string; playerName: string }) => void;
   joinRoom:       (data: { roomCode: string; playerName: string }) => void;
@@ -33,6 +78,7 @@ export interface ClientToServerEvents {
   game_over:      (data: { roomCode: string; winnerIndex: number }) => void;
   state_hash:     (data: { roomCode: string; hash: string; afterGlobalSeq: number }) => void;
   rejoin_room:    (data: { roomCode: string; playerName: string }) => void;
+  game_state_report: (data: { roomCode: string; report: GameStateReport }) => void;
 }
 
 // ─── Server → Client Events ─────────────────────────────────
@@ -53,6 +99,7 @@ export interface ServerToClientEvents {
   opponentDisconnected: () => void;
   opponentReconnected:  () => void;
   opponentAbandon:      () => void;
+  disconnectCountdown:  (data: { remaining: number }) => void;
   rejoinSuccess:        (data: { roomCode: string; playerIndex: number }) => void;
   hostDepositConfirmed: () => void;
   bothCryptoReady:      () => void;
@@ -93,6 +140,9 @@ export interface Room {
   pendingHashes: Map<number, { playerIndex: number; hash: string }[]>;
   // Reconnection grace
   disconnectTimers: Map<number, ReturnType<typeof setTimeout>>;
+  disconnectIntervals: Map<number, ReturnType<typeof setInterval>>;
   // Room age tracking for stale cleanup
   createdAt: number;
+  // Server-side game log (optional, set when battle starts)
+  gameLog?: any;
 }

@@ -145,11 +145,14 @@ function resolveCustomPattern(
   const range = pattern.range ?? 1;
   const canJump = pattern.canJump ?? false;
   const { col, row } = unit.position;
+  // Pattern offsets are defined from P1's perspective (dy>0 = toward enemy).
+  // Flip dy for P2 so patterns are player-relative.
+  const dySign = unit.owner === Player.P1 ? 1 : -1;
 
   for (const offset of pattern.offsets) {
     for (let step = 1; step <= range; step++) {
       const nc = col + offset.dx * step;
-      const nr = row + offset.dy * step;
+      const nr = row + (offset.dy * dySign) * step;
       if (!board.isInBounds(nc, nr)) break;
 
       const occupant = board.getUnit(nc, nr);
@@ -177,11 +180,13 @@ function resolvePatternRange(unit: Unit, pattern: CustomPattern, board: Board): 
   const range = pattern.range ?? 1;
   const canJump = pattern.canJump ?? false;
   const { col, row } = unit.position;
+  // Flip dy for P2 (same as resolveCustomPattern)
+  const dySign = unit.owner === Player.P1 ? 1 : -1;
 
   for (const offset of pattern.offsets) {
     for (let step = 1; step <= range; step++) {
       const nc = col + offset.dx * step;
-      const nr = row + offset.dy * step;
+      const nr = row + (offset.dy * dySign) * step;
       if (!board.isInBounds(nc, nr)) break;
       results.push({ col: nc, row: nr });
       if (board.getUnit(nc, nr) && !canJump) break;

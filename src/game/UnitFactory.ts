@@ -76,6 +76,9 @@ export class UnitFactory {
 
       // Castle-specific
       spawnCounter:     0,
+
+      // Stat audit trail
+      activeBuffs:      [],
     };
 
     // Compute derived properties

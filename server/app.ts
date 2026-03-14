@@ -19,7 +19,7 @@ const app = express();
 const httpServer = createServer(app);
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
-  : ['http://localhost:3000', 'http://localhost:8080'];
+  : [/^http:\/\/localhost:\d+$/];
 
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   cors: { origin: allowedOrigins },

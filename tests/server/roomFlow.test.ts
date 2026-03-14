@@ -49,7 +49,7 @@ describe('Room flow — create, join, battle ready', () => {
   beforeAll(async () => {
     httpServer = createServer();
     io = new Server(httpServer, {
-      cors: { origin: '*' },
+      cors: { origin: [/^http:\/\/localhost:\d+$/] },
     });
 
     roomManager = new RoomManager();
@@ -87,6 +87,10 @@ describe('Room flow — create, join, battle ready', () => {
       });
 
       session.registerHandlers(socket);
+
+      socket.on('disconnect', () => {
+        session.handleDisconnect(socket);
+      });
     });
 
     // Listen on random available port
@@ -217,5 +221,45 @@ describe('Room flow — create, join, battle ready', () => {
 
     const err = await errorP;
     expect(err.message).toContain('full');
+  });
+
+  it('client from any localhost port can connect (CORS)', async () => {
+    // This test verifies the CORS regex allows any localhost port,
+    // preventing the bug where only hardcoded ports (3000, 8080) worked.
+    const client = await createClient(port);
+    clients.push(client);
+
+    expect(client.connected).toBe(true);
+
+    // Verify the server actually responds to events (not just TCP connect)
+    const roomCreatedP = waitForEvent<{ roomCode: string; playerIndex: number }>(client, 'roomCreated');
+    client.emit('createRoom', { roomCode: 'CORS_TEST', playerName: 'CorsUser' });
+    const created = await roomCreatedP;
+
+    expect(created.roomCode).toBe('CORS_TEST');
+  });
+
+  it('disconnect countdown events are emitted', async () => {
+    const host = await createClient(port);
+    const joiner = await createClient(port);
+    clients.push(host, joiner);
+
+    const ROOM = 'TEST_DC';
+
+    host.emit('createRoom', { roomCode: ROOM, playerName: 'Alice' });
+    await waitForEvent(host, 'roomCreated');
+
+    joiner.emit('joinRoom', { roomCode: ROOM, playerName: 'Bob' });
+    await waitForEvent(joiner, 'roomJoined');
+
+    // Listen for disconnect countdown on host side
+    const countdownP = waitForEvent<{ remaining: number }>(host, 'disconnectCountdown');
+
+    // Joiner disconnects — should trigger countdown
+    joiner.disconnect();
+
+    const countdown = await countdownP;
+    expect(countdown.remaining).toBeGreaterThan(0);
+    expect(countdown.remaining).toBeLessThanOrEqual(10);
   });
 });

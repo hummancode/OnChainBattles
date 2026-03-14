@@ -17,7 +17,7 @@ export class VillageSlowProcessor implements AuraProcessor {
       const adjacents = board.getAdjacentUnits(source.position.col, source.position.row);
       for (const adj of adjacents) {
         if (adj.owner !== source.owner) {
-          addDelta(deltas, adj.instanceId, 0, 0, -params(ability).amount);
+          addDelta(deltas, adj.instanceId, 0, 0, -params(ability).amount, `${source.cardId}:VILLAGE_SLOW`);
         }
       }
     }

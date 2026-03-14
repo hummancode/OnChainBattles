@@ -86,7 +86,7 @@ export interface UnitStats {
 }
 export interface PatternOffset {
   dx: number;   // column offset (-1 = left, +1 = right)
-  dy: number;   // row offset (-1 = toward enemy, +1 = toward own half)
+  dy: number;   // row offset from P1's perspective (+1 = toward enemy, -1 = toward own half). Flipped for P2 at resolve time.
 }
 export interface CustomPattern {
   offsets: PatternOffset[];   // which squares relative to unit
@@ -111,6 +111,8 @@ export interface CardDefinition {
   stats?: UnitStats;           // Present on UNIT and STRUCTURE, absent on SPELL
   flags: CardFlag[];
   combatTag?: CombatTag;       // Override derived combat tag. If omitted, derived from attackPattern.
+  backstabBonus?: number;      // +N ATK when attacking from directly behind (dx=0, 1 row behind). Scout = 1.
+  ambushBonus?: number;        // +N ATK when attacking from rear arc (|dx|≤1, 1 row behind). Assassin = 1.
   abilities: Array<CommonAbility | CustomAbility>;
   abilityText?: string;        // Human-readable description for UI rendering
 }

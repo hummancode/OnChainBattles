@@ -16,6 +16,7 @@
 
 import Phaser from 'phaser';
 import GameState, { GameMode } from '../GameState';
+import SocketManager from '../network/SocketManager';
 
 export default class ResultScene extends Phaser.Scene {
   private autoReturnTimer?: Phaser.Time.TimerEvent;
@@ -241,6 +242,7 @@ export default class ResultScene extends Phaser.Scene {
   }
 
   private goToMenu(): void {
+    SocketManager.disconnect();
     GameState.clearMatchData();
 
     this.cameras.main.fadeOut(200, 0, 0, 0);

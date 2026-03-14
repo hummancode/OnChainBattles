@@ -103,8 +103,10 @@ export function executePlayCard(
   // Apply immediate events
   ctx.applyEvents(result.events);
 
-  // Recalculate modifiers (new unit may change discounts/rate)
-  ctx.auras.recalculateModifiers(ctx.board, ctx.mods);
+  // Recalculate auras + modifiers (new unit may change discounts/rate/stat auras)
+  // Always emit — even with empty changes — so the UI can sync ALL unit stats.
+  const auraEvent = ctx.auras.evaluateAuras(ctx.board, ctx.mods);
+  ctx.emit(auraEvent);
 
   // Handle pending interaction (Priest, Mystic, Disease, etc.)
   if (result.pending) {

@@ -33,6 +33,7 @@ export enum AbilityType {
   AURA_CAVALRY_COUNTER       = 'AURA_CAVALRY_COUNTER',     // Pikeman (x3 ATK vs cavalry)
   AURA_PIKEMAN_FLANK         = 'AURA_PIKEMAN_FLANK',       // Pikeman (flank bonus)
   AURA_AUTO_HEAL             = 'AURA_AUTO_HEAL',           // Kings Guard
+  AURA_SUPPRESS_KING_ATK     = 'AURA_SUPPRESS_KING_ATK',   // Messenger: adjacent enemy King ATK = 0
 
   // ── Passive Flags ──────────────────────────
   PASSIVE_BUILD_DELAY        = 'PASSIVE_BUILD_DELAY',      // Castle (inactive 1 turn)

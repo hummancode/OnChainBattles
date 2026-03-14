@@ -10,7 +10,7 @@
 // Pure TypeScript — no Phaser, no EventBus.
 // ============================================================
 
-import type { Unit } from './types/GameTypes';
+import type { Unit, StatBuff } from './types/GameTypes';
 import { Player } from './types/GameTypes';
 import type { IBoard } from './interfaces/IBoard';
 import type { IGameModifiers } from './interfaces/IGameModifiers';
@@ -18,7 +18,7 @@ import type { AuraProcessor, EconomyProcessor, StatDelta } from './auras/AuraPro
 import { createStatChain, createEconomyChain, runStatChain } from './auras/AuraProcessorChain';
 import { getCard } from './data/CardRegistry';
 import { AbilityType } from './types/AbilityTypes';
-import { params } from './auras/auraHelpers';
+import { params, beginAuditTrail, endAuditTrail } from './auras/auraHelpers';
 import type { EvAuraApplied } from './types/EventTypes';
 
 export class AuraSystem {
@@ -39,26 +39,31 @@ export class AuraSystem {
   evaluateAuras(board: IBoard, mods: [IGameModifiers, IGameModifiers]): EvAuraApplied {
     const allUnits = board.getAllUnits();
 
-    // ── Step 1: Reset every unit to base stats ──
+    // ── Step 1: Reset every unit to base stats + clear audit trail ──
     for (const unit of allUnits) {
       unit.currentAtk      = unit.baseAtk;
-      unit.currentDef      = Math.min(unit.currentDef, unit.maxDef);
+      unit.maxDef          = unit.baseDef;               // reset max to base (removes old aura DEF buffs)
+      unit.currentDef      = Math.min(unit.currentDef, unit.maxDef); // cap HP at new max
       unit.currentMovement = unit.baseMovement;
+      unit.activeBuffs     = [];
     }
 
     // ── Step 2: Collect per-unit deltas ──
     const deltas = new Map<string, StatDelta>();
+    const buffMap = new Map<string, StatBuff[]>();
     for (const unit of allUnits) {
       deltas.set(unit.instanceId, { atkDelta: 0, defDelta: 0, moveDelta: 0 });
     }
 
     // ── Step 3: Run stat processor chain for each active unit ──
+    beginAuditTrail(buffMap);
     for (const unit of allUnits) {
       if (!unit.isActive) continue;
       runStatChain(this.statChain, unit, allUnits, board, deltas);
     }
+    endAuditTrail();
 
-    // ── Step 4: Apply deltas to currentAtk / currentMovement ──
+    // ── Step 4: Apply deltas to currentAtk / currentMovement + copy audit trail ──
     const changes: EvAuraApplied['changes'] = [];
 
     for (const unit of allUnits) {
@@ -68,7 +73,12 @@ export class AuraSystem {
       const prevMov = unit.currentMovement;
 
       unit.currentAtk      = Math.max(0, unit.currentAtk + d.atkDelta);
+      if (d.defDelta !== 0) {
+        unit.maxDef     += d.defDelta;
+        unit.currentDef  = Math.min(unit.currentDef + d.defDelta, unit.maxDef);
+      }
       unit.currentMovement = Math.max(0, unit.currentMovement + d.moveDelta);
+      unit.activeBuffs     = buffMap.get(unit.instanceId) ?? [];
 
       if (d.atkDelta !== 0 || d.defDelta !== 0 || d.moveDelta !== 0) {
         changes.push({
@@ -78,6 +88,7 @@ export class AuraSystem {
           atkDelta:   unit.currentAtk - prevAtk,
           defDelta:   d.defDelta,
           moveDelta:  unit.currentMovement - prevMov,
+          buffs:      unit.activeBuffs,
         });
       }
     }

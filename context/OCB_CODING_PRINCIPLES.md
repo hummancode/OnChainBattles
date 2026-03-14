@@ -151,7 +151,35 @@ export interface AuraProcessor {
 
 **OCB application (COMPLETED):** EngineEventBridge translates GameEngine events → typed EventBus events. Extracted from BattleScene during Phase 4 decomposition.
 
-### 3.6 Typed Observer — The EventBus
+### 3.6 State-Driven Rendering (UI as a Function of State)
+
+**Trigger:** UI must reflect game state changes but manually wiring every edge case leads to missed updates.
+
+**Principle:** The UI layer must never hold its own copy of truth. After any state mutation that could affect displayed values, the rendering layer syncs from the engine's authoritative state — not from delta events that may be incomplete.
+
+**OCB application (COMPLETED):** `EngineEventBridge.emitAllUnitStats()` syncs every board unit's stats from `engine.getState()` after every `AURA_APPLIED` event. Previously, only units with non-zero aura deltas were refreshed, causing stale UI when auras were removed (e.g., Messenger moving away from King left King's ATK visually suppressed).
+
+**Rules:**
+1. **Engine is the single source of truth.** `unit.currentAtk`, `unit.currentDef`, etc. in `GameEngine.getState()` are always authoritative.
+2. **Events signal "something changed", not "here's what changed."** Renderers use events as triggers to re-read state, not as the payload to display.
+3. **Prefer full-sync over selective-sync after state mutations.** The cost of emitting stats for ~10-20 units is negligible vs. the bug surface of tracking which units "might have changed."
+4. **When adding a new game mechanic that modifies unit stats** (auras, buffs, debuffs, transformations), you do NOT need to update rendering code — the state-driven sync handles it automatically.
+
+**Root cause this prevents:** Any "UI not updating" bug where the engine state is correct but the renderer shows stale values. This entire class of bugs is eliminated by syncing from truth rather than from deltas.
+
+```typescript
+// ❌ BEFORE — selective sync, misses removals
+case 'AURA_APPLIED':
+  for (const change of event.changes) {     // Only non-zero deltas!
+    emitStatsChanged(engine, change.instanceId);
+  }
+
+// ✅ AFTER — state-driven sync, always correct
+case 'AURA_APPLIED':
+  emitAllUnitStats(engine);  // Reads ALL units from engine.getState()
+```
+
+### 3.7 Typed Observer — The EventBus
 
 **Trigger:** Broadcasting state changes to multiple listeners.
 
@@ -170,25 +198,25 @@ class TypedEventBus {
 }
 ```
 
-### 3.7 Factory — Centralized Object Creation
+### 3.8 Factory — Centralized Object Creation
 
 **Trigger:** Object construction requires derived fields, defaults, or conditional logic.
 
 **OCB application:** UnitFactory creates units with all derived properties (maxHealth, statusEffects array, ability list) computed in one place.
 
-### 3.8 Interface + Dependency Inversion — For Testability
+### 3.9 Interface + Dependency Inversion — For Testability
 
 **Trigger:** You need to test game logic without a real board/renderer/network.
 
 **OCB application (COMPLETED):** IBoard, IPlayerState, IGameModifiers interfaces exist in `src/game/interfaces/`. Board implements IBoard. MockBoard can implement IBoard for testing.
 
-### 3.9 Null Object — Eliminating Null Checks
+### 3.10 Null Object — Eliminating Null Checks
 
 **Trigger:** A function returns null and every caller must check before using the result.
 
 **OCB application:** TextureHelper returns a valid fallback texture (colored rect), never null. Consumers never check.
 
-### 3.10 Flyweight — Shared Immutable Data
+### 3.11 Flyweight — Shared Immutable Data
 
 **Trigger:** Many objects reference the same definition data, risk of accidental mutation.
 
@@ -204,6 +232,7 @@ Need to queue/replay/undo/serialize?      → Command (pure data objects)
 Multiple processors, order matters?       → Chain of Responsibility
 Two independent dimensions of variation?  → Bridge
 Two systems with incompatible interfaces? → Adapter
+UI must reflect game state after mutation? → State-Driven Rendering (sync from truth)
 Broadcasting state changes?               → Typed Observer (EventBus)
 Complex object construction?              → Factory
 Need to swap real/mock for testing?       → Interface + Dependency Inversion

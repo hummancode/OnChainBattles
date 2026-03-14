@@ -61,6 +61,19 @@ export interface TimedEffect {
 }
 
 // ─────────────────────────────────────────────
+// STAT AUDIT TRAIL
+// Rebuilt each aura evaluation. Each entry records
+// WHO changed WHAT by HOW MUCH.
+// ─────────────────────────────────────────────
+
+export interface StatBuff {
+  source: string;        // e.g. 'commander:AURA_BOARD_HALF_ATK', 'Backstab', 'Cavalry Counter'
+  atkDelta: number;
+  defDelta: number;
+  moveDelta: number;
+}
+
+// ─────────────────────────────────────────────
 // UNIT (runtime, not CardDefinition)
 // Created when a card is played. Lives on the Board.
 // ─────────────────────────────────────────────
@@ -99,6 +112,9 @@ export interface Unit {
 
   // Castle-specific
   spawnCounter: number;      // Increments each turn; spawns at interval
+
+  // Stat audit trail — rebuilt each aura evaluation
+  activeBuffs: StatBuff[];
 
     // ── Status effects (all default false) ──────────────
   isStunned: boolean;         // Cannot move or attack this turn

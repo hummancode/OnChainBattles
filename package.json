@@ -20,7 +20,8 @@
         "server": "tsc -p tsconfig.server.json && node server/dist/server/app.js",
         "test:game": "vitest run",
         "test:game:watch": "vitest",
-        "test:smoke": "vitest run tests/engine/gameLoop.test.ts"
+        "test:smoke": "vitest run tests/engine/gameLoop.test.ts",
+        "dev:editor": "node dev-tools/server.js"
     },
     "devDependencies": {
         "@nomicfoundation/hardhat-ethers": "^4.0.4",

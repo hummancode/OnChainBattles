@@ -16,9 +16,10 @@ import type { Unit } from './types/GameTypes';
 import type { Board } from './Board';
 import { getCard } from './data/CardRegistry';
 import { CombatTag } from './types/CardTypes';
+import { getValidAttacks } from './MovementRules';
 import {
   EvUnitAttacked, EvUnitDied, EvUnitTransformed,
-  GameEvent
+  DamageBreakdown, GameEvent
 } from './types/EventTypes';
 
 // ─────────────────────────────────────────────
@@ -37,7 +38,8 @@ export function resolveAttack(
 ): GameEvent[] {
   const events: GameEvent[] = [];
 
-  let damage = calculateDamage(attacker, defender);
+  const breakdown = calculateDamage(attacker, defender);
+  const damage = breakdown.totalDamage;
   const isKingHit = defender.cardId === 'king';
   const newHP = Math.max(0, defender.currentDef - damage);
   const targetPlayer = defender.owner;
@@ -57,6 +59,7 @@ export function resolveAttack(
     isKingHit,
     newHP:  isKingHit ? newHP : undefined,
     maxHP:  isKingHit ? maxHP : undefined,
+    breakdown,
   };
   events.push(attackEvent);
 
@@ -119,15 +122,27 @@ export function resolveAttackWithCounter(
   // ── 2. Counter-attack eligibility ──
   //    Assassin jumps: always immune
   if (isAssassinJump) return events;
-  //    Defender must be MELEE and adjacent (Chebyshev ≤ 1)
-  if (defenderCombatTag !== CombatTag.MELEE) return events;
-  if (!isAdjacent(attackerPos, defenderPos)) return events;
   //    Defender must have positive ATK to deal counter damage
   if (defenderPreDamageAtk <= 0) return events;
+  //    Defender must be able to reach attacker from its own attack vector
+  const defenderReach = getValidAttacks(defender, board);
+  const canReachAttacker = defenderReach.some(
+    p => p.col === attackerPos.col && p.row === attackerPos.row
+  );
+  if (!canReachAttacker) return events;
 
   // ── 3. Counter-attack: defender → attacker (dying blow) ──
   const counterDamage = Math.max(0, defenderPreDamageAtk);
   const attackerNewHP = Math.max(0, attacker.currentDef - counterDamage);
+
+  const counterBreakdown: DamageBreakdown = {
+    baseAtk: defenderPreDamageAtk,
+    cavalryCounter: 0,
+    backstabBonus: 0,
+    ambushBonus: 0,
+    totalDamage: counterDamage,
+    auraBuffs: [...defender.activeBuffs],
+  };
 
   const counterEvent: EvUnitAttacked = {
     type: 'UNIT_ATTACKED',
@@ -143,6 +158,7 @@ export function resolveAttackWithCounter(
     isKingHit:    attacker.cardId === 'king',
     newHP:  attacker.cardId === 'king' ? attackerNewHP : undefined,
     maxHP:  attacker.cardId === 'king' ? attacker.maxDef : undefined,
+    breakdown:    counterBreakdown,
   };
   events.push(counterEvent);
 
@@ -281,13 +297,67 @@ export function applyEarthquakeDamage(col: number, damage: number, board: Board)
 // DAMAGE CALCULATION
 // ─────────────────────────────────────────────
 
-function calculateDamage(attacker: Unit, defender: Unit): number {
-  let atk = attacker.currentAtk;
+function calculateDamage(attacker: Unit, defender: Unit): DamageBreakdown {
+  const baseAtk = attacker.currentAtk;
+
+  // Zero-ATK units deal no damage — skip all bonuses (e.g. aura-suppressed King)
+  if (baseAtk <= 0) {
+    return { baseAtk: 0, cavalryCounter: 0, backstabBonus: 0, ambushBonus: 0, totalDamage: 0, auraBuffs: [...attacker.activeBuffs] };
+  }
+
+  let atk = baseAtk;
+  let cavalryCounter = 0;
+  let backstabBonus = 0;
+  let ambushBonus = 0;
+
+  // Cavalry counter: Pikeman x3 ATK vs cavalry
   const isCavalry = isUnitCavalry(defender);
   if (isCavalry && hasFlag(attacker, 'CAVALRY_COUNTER')) {
+    cavalryCounter = atk * 2; // x3 total = base + 2x bonus
     atk *= 3;
   }
-  return Math.max(0, atk);
+
+  // Positional bonuses — per-card, not universal
+  const atkDef = getCard(attacker.cardId);
+
+  // Backstab: directly behind (dx=0, exactly 1 row behind defender's facing)
+  if (atkDef.backstabBonus && isBackstab(attacker, defender)) {
+    backstabBonus = atkDef.backstabBonus;
+    atk += backstabBonus;
+  }
+
+  // Ambush: rear arc (|dx|≤1, exactly 1 row behind defender's facing)
+  if (atkDef.ambushBonus && isAmbush(attacker, defender)) {
+    ambushBonus = atkDef.ambushBonus;
+    atk += ambushBonus;
+  }
+
+  const totalDamage = Math.max(0, atk);
+  return { baseAtk, cavalryCounter, backstabBonus, ambushBonus, totalDamage, auraBuffs: [...attacker.activeBuffs] };
+}
+
+/**
+ * Backstab: attacker is directly behind the defender (same column, exactly 1 row behind).
+ * P1 faces toward row 6 → back = row-1. P2 faces toward row 0 → back = row+1.
+ */
+function isBackstab(attacker: Unit, defender: Unit): boolean {
+  const dx = attacker.position.col - defender.position.col;
+  if (dx !== 0) return false;
+  const dy = attacker.position.row - defender.position.row;
+  // P1's back is toward row 0, so attacker behind P1 means attacker.row < defender.row (dy < 0)
+  // P2's back is toward row 6, so attacker behind P2 means attacker.row > defender.row (dy > 0)
+  return defender.owner === 0 ? dy === -1 : dy === 1;
+}
+
+/**
+ * Ambush: attacker is in the rear arc (|dx|≤1, exactly 1 row behind defender's facing).
+ * Wider than backstab — includes the two diagonal-behind positions.
+ */
+function isAmbush(attacker: Unit, defender: Unit): boolean {
+  const dx = Math.abs(attacker.position.col - defender.position.col);
+  if (dx > 1) return false;
+  const dy = attacker.position.row - defender.position.row;
+  return defender.owner === 0 ? dy === -1 : dy === 1;
 }
 
 // ─────────────────────────────────────────────

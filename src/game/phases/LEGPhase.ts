@@ -76,8 +76,9 @@ export function runLEGPhase(ctx: GameContext): void {
 
   // 8+9. Evaluate auras (stat buffs) + recalculate modifiers (LEG rate, Royal discount)
   // Single call — evaluateAuras handles both stats AND economy processors.
+  // Always emit — even with empty changes — so the UI can sync ALL unit stats.
   const auraEvent = ctx.auras.evaluateAuras(ctx.board, ctx.mods);
-  if (auraEvent.changes.length > 0) ctx.emit(auraEvent);
+  ctx.emit(auraEvent);
 
   // Advance to PLAY phase
   ctx.phase = TurnPhase.PLAY;

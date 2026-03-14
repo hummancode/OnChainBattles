@@ -14,6 +14,7 @@ import { BoardHalfDefProcessor } from './processors/BoardHalfDefProcessor';
 import { BoardHalfAtkProcessor } from './processors/BoardHalfAtkProcessor';
 import { VillageSlowProcessor } from './processors/VillageSlowProcessor';
 import { PikemanFlankProcessor } from './processors/PikemanFlankProcessor';
+import { KingSuppressProcessor } from './processors/KingSuppressProcessor';
 
 // Economy processors
 import { RoyalDiscountProcessor } from './processors/RoyalDiscountProcessor';
@@ -27,6 +28,7 @@ export function createStatChain(): AuraProcessor[] {
     new BoardHalfAtkProcessor(),
     new VillageSlowProcessor(),
     new PikemanFlankProcessor(),
+    new KingSuppressProcessor(),
   ];
 }
 

@@ -1,0 +1,64 @@
+{
+  "patches": [
+    {
+      "version": "0.01",
+      "date": "2026-03-12",
+      "summary": "v0.01",
+      "notes": [
+        {
+          "id": "20260312223647028570",
+          "category": "New Content",
+          "text": "From now on, remember the rule defender re-attacking the attacker this only happens if: defender can actually attack from its own attack vector, it re-attacks offender. 2nd, cards now have property of side, front, sides, and back. as default, almost all cards gets +1 attack from behind. Scouts dont for example. And scouts while they they attack enemy ffrom behing, apply plus+1 damage.",
+          "created": "2026-03-12T22:36:47.028640",
+          "edited": null
+        },
+        {
+          "id": "20260312223957660081",
+          "category": "Balance",
+          "text": "Messenger has an aura, when enemy king is adjagent, (neighbor to the messenger) enemy king's attack value is 0, else it reverts back to the value that is supposed to be, on live UI it should be visible.",
+          "created": "2026-03-12T22:39:57.660152",
+          "edited": null
+        },
+        {
+          "id": "20260312224523356293",
+          "category": "Balance",
+          "text": "scribe's draw function works, and draws a royal card in deck if it exists.",
+          "created": "2026-03-12T22:45:23.356364",
+          "edited": null
+        },
+        {
+          "id": "20260312230201345489",
+          "category": "Bug Fix",
+          "text": "❯ On oppoent disconnected let a timer run, lets make it 10 seconds for now; let us see the timer in UI",
+          "created": "2026-03-12T23:02:01.345522",
+          "edited": null
+        }
+      ],
+      "released_at": "2026-03-12T23:02:58.165219"
+    }
+  ],
+  "unreleased": [
+    {
+      "id": "20260314153456714843",
+      "category": "New Content",
+      "text": "cards can be placed on the one side of the board as always, however new requirement: u can place on that square if a friendly unit/card exists.",
+      "created": "2026-03-14T15:34:56.714909",
+      "edited": null
+    },
+    {
+      "id": "20260314155314283792",
+      "category": "Mechanics",
+      "text": "let lancer can attack only on the direction it moved, y+ => attack on that direction only. x+ => only on x+ can do attack. Lets remove the property of the lancer that i can only go forward.",
+      "created": "2026-03-14T15:53:14.283844",
+      "edited": null
+    },
+    {
+      "id": "20260314160907195736",
+      "category": "New Content",
+      "text": "About row placement for units; let available places for units to be placed clear in UI. My solution when i click a  card in UI, a green frame appears on top it: As this stage, let the rows/squares card can be placed be highligten.",
+      "created": "2026-03-14T16:09:07.195786",
+      "edited": null
+    }
+  ],
+  "revoked": []
+}
