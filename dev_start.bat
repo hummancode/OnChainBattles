@@ -63,9 +63,10 @@ echo   Check Fuji contract:
 echo   https://testnet.snowtrace.io/address/0xa145f82DC5b285B970BE71F48Cf5173E722cF515
 echo.
 echo  Press any key to open the game in browser...
+echo  (Chrome launches with DevTools debugging on port 9222)
 pause >nul
 
-start http://localhost:8080
+start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="%TEMP%\ocb-chrome-debug" http://localhost:8080
 
 echo.
 echo  Dev environment running. Close the server windows to stop.

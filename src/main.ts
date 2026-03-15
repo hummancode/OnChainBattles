@@ -1,10 +1,15 @@
 import './game/abilities/registerAll';
 import Phaser from 'phaser';
-import PreLoadScene    from './scenes/PreloadScene';
-import MainMenuScene   from './scenes/MainMenuScene';
-import RoomScene       from './scenes/RoomScene';
-import BattleScene     from './scenes/BattleScene';
-import ResultScene     from './scenes/ResultScene';
+import PreLoadScene       from './scenes/PreloadScene';
+import LoginScene         from './scenes/LoginScene';
+import HubScene           from './scenes/HubScene';
+import DeckBuilderScene   from './scenes/DeckBuilderScene';
+import RoomBrowserScene   from './scenes/RoomBrowserScene';
+import LobbyScene         from './scenes/LobbyScene';
+import MainMenuScene      from './scenes/MainMenuScene';
+import RoomScene          from './scenes/RoomScene';
+import BattleScene        from './scenes/BattleScene';
+import ResultScene        from './scenes/ResultScene';
 
 const config: Phaser.Types.Core.GameConfig = {
     type: Phaser.WEBGL, 
@@ -21,6 +26,11 @@ const config: Phaser.Types.Core.GameConfig = {
     },
     scene: [
         PreLoadScene,
+        LoginScene,
+        HubScene,
+        DeckBuilderScene,
+        RoomBrowserScene,
+        LobbyScene,
         MainMenuScene,
         RoomScene,
         BattleScene,

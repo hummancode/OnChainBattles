@@ -105,9 +105,9 @@ export default class PreLoadScene extends Phaser.Scene {
   }
 
 create(): void {
-    console.log('[PreloadScene] All assets loaded. Starting MainMenuScene.');
+    console.log('[PreloadScene] All assets loaded. Starting LoginScene.');
     MipmapHelper.enableAll(this);
-    this.scene.start('MainMenuScene');
+    this.scene.start('LoginScene');
   }
 
   /** Generate mipmaps for a texture (drastically improves downscale quality). */

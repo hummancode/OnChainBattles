@@ -14,6 +14,7 @@
 import Phaser from 'phaser';
 import GameState, { RoomAction, GameMode } from '../GameState';
 import WalletManager from '../web3/WalletManager';
+import { AuthManager } from '../auth/AuthManager';
 import { DOMInputManager } from '../ui/DOMInputManager';
 import { MenuButton } from '../ui/MenuButton';
 import { ToastNotification } from '../ui/ToastNotification';
@@ -154,6 +155,17 @@ export default class MainMenuScene extends Phaser.Scene {
         onPointerDown: () => this.onPlayCrypto(),
       },
     );
+
+    // ── Auth status display ──────────────────────────────────
+    if (AuthManager.isLoggedIn()) {
+      const player = AuthManager.getPlayer()!;
+      this.add.text(CX, LAYOUT.cryptoBtn.y + 40,
+        `Logged in: ${player.displayName} (${player.wallet.slice(0, 6)}...${player.wallet.slice(-4)})`, {
+        fontSize: '12px',
+        fontFamily: '"Courier New", monospace',
+        color: '#4fc3f7',
+      }).setOrigin(0.5);
+    }
 
     // ── Last match banner (conditional) ─────────────────────
     this.renderLastMatchBanner();

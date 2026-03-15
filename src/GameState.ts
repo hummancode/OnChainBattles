@@ -22,11 +22,9 @@ export interface BoardGameResult {
     payout: number;
 }
 
-export interface PayoutResult {
-    success: boolean;
-    txHash?: string;
-    error?: string;
-}
+// Re-export from shared types for backward compat
+export type { PayoutResult } from '../shared/types/NetworkEvents';
+import type { PayoutResult } from '../shared/types/NetworkEvents';
 
 class GameStateClass {
     // ─── Player ───────────────────────────────────────────────
@@ -53,6 +51,15 @@ class GameStateClass {
     // ─── Crypto ───────────────────────────────────────────────
     depositTxHash: string | null = null;
     payoutResult: PayoutResult | null = null;
+
+    // ─── Auth (populated by AuthManager after login) ─────────
+    authToken: string = '';
+    authenticatedPlayerId: number = 0;
+    displayName: string = '';
+
+    // ─── Deck (populated by deck selection flow) ─────────────
+    activeDeckId: number | null = null;
+    activeDeckCardIds: string[] = [];
 
     // ─── Setters ──────────────────────────────────────────────
     setPlayerName(name: string): void {
@@ -131,6 +138,37 @@ class GameStateClass {
         this.lastMatch = null;
         this.depositTxHash = null;
         this.payoutResult = null;
+    }
+
+    // ─── Auth ─────────────────────────────────────────────────
+    setAuthData(token: string, playerId: number, name: string): void {
+        this.authToken = token;
+        this.authenticatedPlayerId = playerId;
+        this.displayName = name;
+        this.playerName = name;
+        console.log(`[GameState] Auth: ${name} (#${playerId})`);
+    }
+
+    isAuthenticated(): boolean {
+        return this.authenticatedPlayerId > 0 && this.authToken.length > 0;
+    }
+
+    clearAuth(): void {
+        this.authToken = '';
+        this.authenticatedPlayerId = 0;
+        this.displayName = '';
+        console.log('[GameState] Auth cleared.');
+    }
+
+    // ─── Deck ─────────────────────────────────────────────────
+    setActiveDeck(deckId: number | null, cardIds: string[]): void {
+        this.activeDeckId = deckId;
+        this.activeDeckCardIds = [...cardIds];
+        console.log(`[GameState] Active deck: #${deckId} (${cardIds.length} cards)`);
+    }
+
+    hasActiveDeck(): boolean {
+        return this.activeDeckCardIds.length > 0;
     }
 
     // ─── Debug ────────────────────────────────────────────────

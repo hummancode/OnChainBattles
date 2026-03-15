@@ -20,6 +20,7 @@ import SocketManager from '../network/SocketManager';
 
 export default class ResultScene extends Phaser.Scene {
   private autoReturnTimer?: Phaser.Time.TimerEvent;
+  private transitioning = false;
 
   constructor() {
     super('ResultScene');
@@ -208,22 +209,28 @@ export default class ResultScene extends Phaser.Scene {
   private addNavigationButtons(width: number, height: number): void {
     const btnY = height - 80;
 
-    // Play Again
-    const playAgainBtn = this.add.text(width / 2 - 100, btnY, '[ PLAY AGAIN ]', {
+    // Hub
+    const hubBtn = this.add.text(width / 2 - 160, btnY, '[ HUB ]', {
+      fontSize: '24px', color: '#4FC3F7',
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    hubBtn.on('pointerover', () => hubBtn.setColor('#FFFFFF'));
+    hubBtn.on('pointerout', () => hubBtn.setColor('#4FC3F7'));
+    hubBtn.on('pointerdown', () => this.goToHub());
+
+    // Rematch
+    const rematchBtn = this.add.text(width / 2, btnY, '[ REMATCH ]', {
       fontSize: '26px', color: '#00FF88',
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    rematchBtn.on('pointerover', () => rematchBtn.setColor('#FFFFFF'));
+    rematchBtn.on('pointerout', () => rematchBtn.setColor('#00FF88'));
+    rematchBtn.on('pointerdown', () => this.goToRematch());
 
-    playAgainBtn.on('pointerover', () => playAgainBtn.setColor('#FFFFFF'));
-    playAgainBtn.on('pointerout', () => playAgainBtn.setColor('#00FF88'));
-    playAgainBtn.on('pointerdown', () => this.goToMenu());
-
-    // Menu
-    const menuBtn = this.add.text(width / 2 + 120, btnY, '[ MENU ]', {
-      fontSize: '22px', color: '#AAAAAA',
+    // Legacy menu
+    const menuBtn = this.add.text(width / 2 + 160, btnY, '[ LEGACY ]', {
+      fontSize: '18px', color: '#777777',
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-
     menuBtn.on('pointerover', () => menuBtn.setColor('#FFFFFF'));
-    menuBtn.on('pointerout', () => menuBtn.setColor('#AAAAAA'));
+    menuBtn.on('pointerout', () => menuBtn.setColor('#777777'));
     menuBtn.on('pointerdown', () => this.goToMenu());
   }
 
@@ -241,12 +248,40 @@ export default class ResultScene extends Phaser.Scene {
     }
   }
 
-  private goToMenu(): void {
+  private goToHub(): void {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    this.autoReturnTimer?.destroy();
     SocketManager.disconnect();
-    GameState.clearMatchData();
-
+    // Don't clear match data yet — HubScene reads lastMatch for banner
     this.cameras.main.fadeOut(200, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
+      GameState.clearMatchData();
+      this.scene.start('HubScene');
+    });
+  }
+
+  private goToRematch(): void {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    this.autoReturnTimer?.destroy();
+    SocketManager.disconnect();
+    this.cameras.main.fadeOut(200, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      GameState.clearMatchData();
+      // Go to HubScene which will let user host a new game
+      this.scene.start('HubScene');
+    });
+  }
+
+  private goToMenu(): void {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    this.autoReturnTimer?.destroy();
+    SocketManager.disconnect();
+    this.cameras.main.fadeOut(200, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      GameState.clearMatchData();
       this.scene.start('MainMenuScene');
     });
   }

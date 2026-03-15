@@ -14,7 +14,7 @@ export function setupGameOverHandler(
   localPlayerIndex: number,
   playerName: string,
   opponentName: string,
-  isCryptoMode: boolean,
+  _isCryptoMode: boolean,
 ): () => void {
   const unsub = EventBus.on(EV.GAME_OVER, (ev: any) => {
     if (!scene.scene.isActive('BattleScene')) return;
@@ -33,7 +33,7 @@ export function setupGameOverHandler(
       payout: playerWon ? GameState.currentStake * 2 * 0.95 : 0,
     });
 
-    if (isCryptoMode) SocketManager.sendGameOver(localPlayerIndex, playerWon);
+    SocketManager.sendGameOver(localPlayerIndex, playerWon, turnCount);
 
     scene.time.delayedCall(1500, () => {
       scene.cameras.main.fadeOut(300, 0, 0, 0);

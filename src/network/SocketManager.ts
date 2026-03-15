@@ -1,21 +1,20 @@
 // ─── SocketManager.ts ─────────────────────────────────────────
-// Handles all Socket.io multiplayer logic
-// Equivalent to PhotonManager.cs in Unity
+// Handles all Socket.io multiplayer logic.
+//
+// Two connection modes:
+//   connect(callbacks)   — legacy flow: auto-creates/joins room
+//   connectOnly(cbs?)    — lobby flow: connect without auto-action
+//
+// Both modes share the same socket + event registrations.
+// Switching from connectOnly → connect is safe (reuses socket).
 
 import { io, Socket } from "socket.io-client";
 import GameState, { RoomAction } from "../GameState.ts";
-export interface GameAction {
-  type: 'PLAY_CARD' | 'MOVE_UNIT' | 'ATTACK_UNIT' | 'END_PLAY_PHASE' | 'END_ACT_PHASE' | 'SELECT_POSITION' | 'SELECT_TARGET' | 'CANCEL_PENDING';
-  handIndex?: number;
-  col?: number;
-  row?: number;
-  fromCol?: number;
-  fromRow?: number;
-  targetCol?: number;
-  targetRow?: number;
-  seqNum?: number;
-  serverSeq?: number;
-}
+import type { GameAction, PayoutResult } from "../../shared/types/NetworkEvents.js";
+
+// Re-export so existing importers don't break
+export type { GameAction };
+
 // ─── Event Callbacks ──────────────────────────────────────────
 export interface RoomCallbacks {
   onRoomCreated: (code: string) => void;
@@ -32,9 +31,20 @@ export interface RoomCallbacks {
   onError: (message: string) => void;
   onBothCryptoReady?: () => void;
   onBothBattleReady?: () => void;
-  onPayoutResult?: (result: { success: boolean; txHash?: string; error?: string }) => void;
+  onPayoutResult?: (result: PayoutResult) => void;
   onHostDepositConfirmed?: () => void;
+  // Deck validation callbacks (optional)
+  onDeckAccepted?: (data: { cardCount: number }) => void;
+  onDeckRejected?: (data: { errors: string[] }) => void;
+  onBothDecksReady?: () => void;
 }
+
+const RECONNECT_OPTS = {
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+};
 
 class SocketManagerClass {
   private socket: Socket | null = null;
@@ -44,36 +54,33 @@ class SocketManagerClass {
   private actionBuffer: GameAction[] = [];
   private static readonly MAX_BUFFER_SIZE = 50;
   private hasConnectedOnce: boolean = false;
+  private eventsRegistered: boolean = false;
 
+  // ─── Connection Modes ──────────────────────────────────────
+
+  /** Legacy flow: connect + auto-create/join room based on GameState. */
   connect(callbacks: RoomCallbacks): void {
     this.callbacks = callbacks;
 
     if (this.socket?.connected) {
-      console.log("[SocketManager] Already connected.");
+      console.log("[SocketManager] Already connected — routing room action.");
       this.actOnRoomAction();
       return;
     }
 
-    console.log("[SocketManager] Connecting to server...");
-    this.socket = io(this.serverUrl, {
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-    });
+    this.ensureSocket();
 
-    this.socket.on("connect", () => {
+    this.socket!.on("connect", () => {
       console.log("[SocketManager] Connected to server.");
       if (!this.hasConnectedOnce) {
         this.hasConnectedOnce = true;
         this.seqCounter = 0;
         this.actOnRoomAction();
       } else {
-        // Reconnection — reset sequence, rejoin room, flush buffered actions
         console.log("[SocketManager] Reconnected! Rejoining room...");
         this.seqCounter = 0;
         this.actionBuffer = [];
-        this.socket?.emit("rejoin_room" as any, {
+        this.socket?.emit("rejoin_room", {
           roomCode: GameState.roomCode,
           playerName: GameState.playerName,
         });
@@ -81,32 +88,58 @@ class SocketManagerClass {
       }
     });
 
-    this.socket.on("disconnect", () => {
+    this.socket!.on("disconnect", () => {
       console.log("[SocketManager] Disconnected from server.");
       if (this.hasConnectedOnce) {
         this.callbacks?.onConnectionLost?.();
       }
     });
 
-    this.socket.io.on("reconnect_failed", () => {
+    this.socket!.io.on("reconnect_failed", () => {
       console.warn("[SocketManager] All reconnection attempts failed.");
       this.callbacks?.onReconnectFailed?.();
     });
+  }
 
+  /**
+   * Lobby flow: connect WITHOUT auto-creating/joining a room.
+   * Safe to call before connect() — if socket exists, reuses it.
+   */
+  connectOnly(callbacks?: Partial<RoomCallbacks>): void {
+    if (callbacks) {
+      this.callbacks = {
+        onRoomCreated: () => {},
+        onRoomJoined: () => {},
+        onOpponentJoined: () => {},
+        onOpponentAction: () => {},
+        onOpponentDisconnected: () => {},
+        onError: (msg) => console.warn('[SocketManager] Error:', msg),
+        ...callbacks,
+      } as RoomCallbacks;
+    }
+
+    if (this.socket?.connected) {
+      console.log('[SocketManager] Already connected (connectOnly).');
+      return;
+    }
+
+    this.ensureSocket();
+
+    // Use once to avoid stacking on repeated connectOnly() calls
+    this.socket!.once('connect', () => {
+      console.log('[SocketManager] Connected (lobby mode).');
+    });
+  }
+
+  /** Create socket if none exists, register shared events. */
+  private ensureSocket(): void {
+    if (!this.socket) {
+      this.socket = io(this.serverUrl, RECONNECT_OPTS);
+    }
     this.registerEvents();
   }
 
-  private flushActionBuffer(): void {
-    if (this.actionBuffer.length === 0) return;
-    console.log(`[SocketManager] Flushing ${this.actionBuffer.length} buffered actions`);
-    for (const action of this.actionBuffer) {
-      this.socket?.emit('game_action', {
-        roomCode: GameState.roomCode,
-        action,
-      });
-    }
-    this.actionBuffer = [];
-  }
+  // ─── Room Actions (legacy flow) ────────────────────────────
 
   private actOnRoomAction(): void {
     if (GameState.roomAction === RoomAction.Create) {
@@ -134,9 +167,9 @@ class SocketManagerClass {
     });
   }
 
-  // Register wallet address with server (needed for payout)
+  // ─── Outgoing Events ──────────────────────────────────────
+
   registerWallet(walletAddress: string, message: string, signature: string): void {
-    console.log(`[SocketManager] Registering wallet: ${walletAddress}`);
     this.socket?.emit("registerWallet", {
       roomCode: GameState.roomCode,
       walletAddress,
@@ -145,144 +178,74 @@ class SocketManagerClass {
     });
   }
 
-  // Signal to server that escrow deposit is confirmed
   signalCryptoReady(): void {
-    console.log("[SocketManager] Signaling crypto ready");
-    this.socket?.emit("cryptoReady", {
-      roomCode: GameState.roomCode,
-    });
+    this.socket?.emit("cryptoReady", { roomCode: GameState.roomCode });
   }
 
-  // Signal to server that BattleScene is loaded and ready
   signalBattleReady(): void {
-    console.log("[SocketManager] Signaling battle ready");
-    this.socket?.emit("player_ready", {
-      roomCode: GameState.roomCode,
-    });
+    this.socket?.emit("player_ready", { roomCode: GameState.roomCode });
   }
 
-  private registerEvents(): void {
-    if (!this.socket) return;
-
-  this.socket.on("roomCreated", (data: { roomCode: string; playerIndex: number }) => {
-  console.log(`[SocketManager] Room created: ${data.roomCode}, playerIndex: ${data.playerIndex ?? 0}`);
-  GameState.setPlayerIndex(data.playerIndex ?? 0);
-  this.callbacks?.onRoomCreated(data.roomCode);
-});
-this.socket.on("hostDepositConfirmed", () => {
-  console.log("[SocketManager] Host deposit confirmed — my turn to deposit");
-  this.callbacks?.onHostDepositConfirmed?.();
-});
-    this.socket.on("roomJoined", (data: { roomCode: string; playerIndex: number }) => {
-  console.log(`[SocketManager] Room joined: ${data.roomCode}, playerIndex: ${data.playerIndex ?? 1}`);
-  GameState.setPlayerIndex(data.playerIndex ?? 1);
-  this.callbacks?.onRoomJoined(data.roomCode);
-});
-    this.socket.on("opponentJoined", (data: { playerName: string; playerIndex?: number }) => {
-  console.log(`[SocketManager] Opponent joined: ${data.playerName}`);
-  this.callbacks?.onOpponentJoined(data.playerName);
-});
-this.socket.on("opponent_action", (action: GameAction) => {
-  console.log('[SocketManager] Received opponent_action:', action.type);
-  this.callbacks?.onOpponentAction(action);
-});
-this.socket.on("game_seed", (data: { seed: number }) => {
-  console.log(`[SocketManager] Game seed received: ${data.seed}`);
-  GameState.setGameSeed(data.seed);
-});
-    this.socket.on("opponentDisconnected", () => {
-      console.log("[SocketManager] Opponent disconnected.");
-      this.callbacks?.onOpponentDisconnected();
-    });
-
-    this.socket.on("opponentReconnected" as any, () => {
-      console.log("[SocketManager] Opponent reconnected!");
-      this.callbacks?.onOpponentReconnected?.();
-    });
-
-    this.socket.on("opponentAbandon" as any, () => {
-      console.log("[SocketManager] Opponent abandon (grace period expired).");
-      this.callbacks?.onOpponentAbandon?.();
-    });
-
-    this.socket.on("disconnectCountdown" as any, (data: { remaining: number }) => {
-      this.callbacks?.onDisconnectCountdown?.(data.remaining);
-    });
-
-    this.socket.on("rejoinSuccess" as any, (data: { roomCode: string; playerIndex: number }) => {
-      console.log(`[SocketManager] Rejoin success: room=${data.roomCode}, playerIndex=${data.playerIndex}`);
-    });
-
-    this.socket.on("error", (data: { message: string }) => {
-      console.error(`[SocketManager] Error: ${data.message}`);
-      this.callbacks?.onError(data.message);
-    });
-
-    // Battle ready handshake
-    this.socket.on("both_battle_ready", () => {
-      console.log("[SocketManager] Both players battle ready!");
-      this.callbacks?.onBothBattleReady?.();
-    });
-
-    // Crypto events
-    this.socket.on("bothCryptoReady", () => {
-      console.log("[SocketManager] Both players crypto ready!");
-      this.callbacks?.onBothCryptoReady?.();
-    });
-
-this.socket.on('payout_result', (data: { success: boolean; txHash?: string; error?: string }) => {
-  console.log('[SocketManager] Payout result:', data);
-  GameState.payoutResult = data;
-  this.callbacks?.onPayoutResult?.(data);
-});
-  }
-sendGameAction(action: GameAction): void {
-  this.seqCounter += 1;
-  action.seqNum = this.seqCounter;
-  if (!this.socket?.connected) {
-    if (this.actionBuffer.length >= SocketManagerClass.MAX_BUFFER_SIZE) {
-      console.error(`[SocketManager] Action buffer full (${SocketManagerClass.MAX_BUFFER_SIZE}), dropping action: ${action.type}`);
+  sendGameAction(action: GameAction): void {
+    this.seqCounter += 1;
+    action.seqNum = this.seqCounter;
+    if (!this.socket?.connected) {
+      if (this.actionBuffer.length >= SocketManagerClass.MAX_BUFFER_SIZE) {
+        console.error(`[SocketManager] Action buffer full, dropping: ${action.type}`);
+        return;
+      }
+      console.warn(`[SocketManager] Buffering game_action: ${action.type} (seq=${action.seqNum})`);
+      this.actionBuffer.push(action);
       return;
     }
-    console.warn(`[SocketManager] Buffering game_action (disconnected): ${action.type} (seq=${action.seqNum})`);
-    this.actionBuffer.push(action);
-    return;
+    this.socket.emit('game_action', { roomCode: GameState.roomCode, action });
   }
-  this.socket.emit('game_action', {
-    roomCode: GameState.roomCode,
-    action,
-  });
-  console.log(`[SocketManager] Sent game_action: ${action.type} (seq=${action.seqNum})`);
-}
-sendStateReport(report: Record<string, any>): void {
-  this.socket?.emit('game_state_report' as any, {
-    roomCode: GameState.roomCode,
-    report,
-  });
-}
 
-sendStateHash(hash: string, afterGlobalSeq: number): void {
-  this.socket?.emit('state_hash' as any, {
-    roomCode: GameState.roomCode,
-    hash,
-    afterGlobalSeq,
-  });
-}
+  sendStateReport(report: Record<string, any>): void {
+    this.socket?.emit('game_state_report', {
+      roomCode: GameState.roomCode,
+      report,
+    });
+  }
 
-sendGameOver(localPlayerIndex: number, localPlayerWon: boolean): void {
-  console.log(`[SocketManager] Sending game_over, won: ${localPlayerWon}`);
-  this.socket?.emit('game_over', {
-    roomCode: GameState.roomCode,
-    winnerIndex: localPlayerWon ? localPlayerIndex : (localPlayerIndex === 0 ? 1 : 0),
-  });
-}
-// ADD this method to SocketManagerClass, before disconnect():
-setCallbacks(callbacks: RoomCallbacks): void {
-  this.callbacks = callbacks;
-  console.log('[SocketManager] Callbacks updated.');
-}
+  sendStateHash(hash: string, afterGlobalSeq: number): void {
+    this.socket?.emit('state_hash', {
+      roomCode: GameState.roomCode,
+      hash,
+      afterGlobalSeq,
+    });
+  }
+
+  sendGameOver(localPlayerIndex: number, localPlayerWon: boolean, totalTurns?: number): void {
+    console.log(`[SocketManager] Sending game_over, won: ${localPlayerWon}, turns: ${totalTurns ?? 0}`);
+    this.socket?.emit('game_over', {
+      roomCode: GameState.roomCode,
+      winnerIndex: localPlayerWon ? localPlayerIndex : (localPlayerIndex === 0 ? 1 : 0),
+      totalTurns: totalTurns ?? 0,
+    });
+  }
+
+  registerPlayer(token: string): void {
+    this.socket?.emit('registerPlayer', { token });
+  }
+
+  submitDeck(roomCode: string, deckIds: string[]): void {
+    this.socket?.emit('submitDeck', { roomCode, deckIds });
+  }
+
+  // ─── State Management ─────────────────────────────────────
+
+  setCallbacks(callbacks: RoomCallbacks): void {
+    this.callbacks = callbacks;
+  }
+
   isConnected(): boolean {
     return this.socket?.connected ?? false;
+  }
+
+  /** Expose raw socket for LobbySocketManager to attach lobby: events. */
+  getSocket(): Socket | null {
+    return this.socket;
   }
 
   /** One-shot listener for both_battle_ready (used by BattleScene). */
@@ -294,9 +257,101 @@ setCallbacks(callbacks: RoomCallbacks): void {
     this.socket?.disconnect();
     this.socket = null;
     this.hasConnectedOnce = false;
+    this.eventsRegistered = false;
     this.actionBuffer = [];
     this.seqCounter = 0;
     console.log("[SocketManager] Manually disconnected.");
+  }
+
+  // ─── Shared Event Registration ────────────────────────────
+
+  private registerEvents(): void {
+    if (!this.socket || this.eventsRegistered) return;
+    this.eventsRegistered = true;
+
+    const s = this.socket;
+
+    // Room lifecycle
+    s.on("roomCreated", (data) => {
+      GameState.setRoomCode(data.roomCode);
+      GameState.setPlayerIndex(data.playerIndex ?? 0);
+      this.callbacks?.onRoomCreated(data.roomCode);
+    });
+
+    s.on("roomJoined", (data) => {
+      GameState.setPlayerIndex(data.playerIndex ?? 1);
+      this.callbacks?.onRoomJoined(data.roomCode);
+    });
+
+    s.on("opponentJoined", (data) => {
+      this.callbacks?.onOpponentJoined(data.playerName);
+    });
+
+    s.on("opponent_action", (action) => {
+      this.callbacks?.onOpponentAction(action);
+    });
+
+    s.on("game_seed", (data) => {
+      GameState.setGameSeed(data.seed);
+    });
+
+    // Connection events
+    s.on("opponentDisconnected", () => {
+      this.callbacks?.onOpponentDisconnected();
+    });
+
+    s.on("opponentReconnected", () => {
+      this.callbacks?.onOpponentReconnected?.();
+    });
+
+    s.on("opponentAbandon", () => {
+      this.callbacks?.onOpponentAbandon?.();
+    });
+
+    s.on("disconnectCountdown", (data) => {
+      this.callbacks?.onDisconnectCountdown?.(data.remaining);
+    });
+
+    s.on("rejoinSuccess", (data) => {
+      console.log(`[SocketManager] Rejoin success: room=${data.roomCode}`);
+    });
+
+    s.on("error", (data) => {
+      console.error(`[SocketManager] Error: ${data.message}`);
+      this.callbacks?.onError(data.message);
+    });
+
+    // Battle ready
+    s.on("both_battle_ready", () => {
+      this.callbacks?.onBothBattleReady?.();
+    });
+
+    // Crypto
+    s.on("hostDepositConfirmed", () => {
+      this.callbacks?.onHostDepositConfirmed?.();
+    });
+
+    s.on("bothCryptoReady", () => {
+      this.callbacks?.onBothCryptoReady?.();
+    });
+
+    s.on("payout_result", (data) => {
+      GameState.payoutResult = data;
+      this.callbacks?.onPayoutResult?.(data);
+    });
+
+    // Deck validation
+    s.on("deckAccepted", (data) => {
+      this.callbacks?.onDeckAccepted?.(data);
+    });
+
+    s.on("deckRejected", (data) => {
+      this.callbacks?.onDeckRejected?.(data);
+    });
+
+    s.on("bothDecksReady", () => {
+      this.callbacks?.onBothDecksReady?.();
+    });
   }
 }
 

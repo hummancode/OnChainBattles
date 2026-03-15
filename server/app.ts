@@ -4,6 +4,7 @@
 // ============================================================
 
 import express from 'express';
+import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
@@ -12,10 +13,23 @@ import type { ClientToServerEvents, ServerToClientEvents } from '../shared/types
 import { RoomManager } from './rooms/RoomManager.js';
 import { PayoutService } from './game/PayoutService.js';
 import { SessionManager } from './game/SessionManager.js';
+import { getDB, closeDB } from './db/database.js';
+import { runMigrations } from './db/migrations.js';
+import { apiRouter } from './api/index.js';
+import { LobbyManager } from './lobby/LobbyManager.js';
+import { RoomJanitor } from './lobby/RoomJanitor.js';
 
 dotenv.config();
 
 const app = express();
+app.use(cors({ origin: '*' }));
+app.use(express.json());
+app.use('/api', apiRouter);
+
+// ── Database ──
+getDB();
+runMigrations();
+
 const httpServer = createServer(app);
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
@@ -28,6 +42,9 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 const roomManager = new RoomManager();
 const payout = new PayoutService(process.env.FUJI_PRIVATE_KEY!);
 const session = new SessionManager(io, roomManager, payout);
+const lobby = new LobbyManager(io, roomManager);
+const janitor = new RoomJanitor(roomManager);
+janitor.start();
 
 // ── Per-socket rate limiter ──
 const RATE_WINDOW_MS = 1_000;
@@ -126,12 +143,29 @@ io.on('connection', (socket) => {
   // ── Game session events ──
   session.registerHandlers(socket);
 
+  // ── Lobby events ──
+  lobby.registerHandlers(socket);
+
   // ── Disconnect ──
   socket.on('disconnect', () => {
+    lobby.handleLobbyDisconnect(socket);
     session.handleDisconnect(socket);
   });
 });
 
-httpServer.listen(3001, () => {
-  console.log('[Server] Socket.io running on port 3001');
+// Public room list (no auth required)
+app.get('/api/rooms', (_req, res) => {
+  res.json({ rooms: roomManager.getPublicRooms() });
 });
+
+httpServer.listen(3001, () => {
+  console.log('[Server] Socket.io + REST API + Lobby running on port 3001');
+});
+
+function shutdown() {
+  janitor.stop();
+  closeDB();
+  process.exit(0);
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

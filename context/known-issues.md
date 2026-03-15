@@ -11,6 +11,19 @@
 - **Files**: GameTypes.ts, UnitFactory.ts, auraHelpers.ts, AuraSystem.ts, CombatResolver.ts, EventTypes.ts, GameLogger.ts, all 6 stat processors.
 - **Principle**: Every stat modification must be traceable to its source. No silent deltas.
 
+## Fixed (15 March 2026)
+
+### Lobby → BattleScene transition: game never started (Kings not placed)
+- **Root cause**: `GameState.roomCode` was never set in the lobby flow. `LobbyScene.enterBattle()` transitioned to BattleScene without setting roomCode. BattleScene called `SocketManager.signalBattleReady()` which emits `player_ready` with `roomCode: ""`. Server couldn't find the room, so `both_battle_ready` never fired, `startGame()` never called.
+- **Fix**: (1) `LobbyScene.enterBattle()` now calls `GameState.setRoomCode(this.roomCode)` before scene transition. (2) `SocketManager.roomCreated` handler now also calls `GameState.setRoomCode(data.roomCode)` for lobby legacy events.
+- **Files**: LobbyScene.ts, SocketManager.ts
+- **Test**: `tests/server/lobbyFlow.test.ts` — 7 tests covering lobby→battle transition requirements
+
+### SocketManager rewrite: removed 10+ `as any` casts, fixed state machine
+- **Problems**: `connectOnly()` → `connect()` transition broken (eventsRegistered flag stale), duplicate socket creation, missing deck validation event listeners, all lobby/reconnect events cast to `as any`.
+- **Fix**: Full SocketManager rewrite with `ensureSocket()` pattern, shared event registration, all typed events, deck validation callbacks added.
+- **Files**: SocketManager.ts
+
 ## Fixed (14 March 2026 — round 2)
 
 ### Commander DEF aura never applied to troops

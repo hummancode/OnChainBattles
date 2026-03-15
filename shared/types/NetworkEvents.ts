@@ -69,16 +69,35 @@ export interface GameStateReport {
 }
 
 export interface ClientToServerEvents {
+  // Existing room events
   createRoom:     (data: { roomCode: string; playerName: string }) => void;
   joinRoom:       (data: { roomCode: string; playerName: string }) => void;
   registerWallet: (data: { roomCode: string; walletAddress: string; message: string; signature: string }) => void;
   cryptoReady:    (data: { roomCode: string }) => void;
   player_ready:   (data: { roomCode: string }) => void;
   game_action:    (data: { roomCode: string; action: GameAction }) => void;
-  game_over:      (data: { roomCode: string; winnerIndex: number }) => void;
+  game_over:      (data: { roomCode: string; winnerIndex: number; totalTurns?: number }) => void;
   state_hash:     (data: { roomCode: string; hash: string; afterGlobalSeq: number }) => void;
   rejoin_room:    (data: { roomCode: string; playerName: string }) => void;
   game_state_report: (data: { roomCode: string; report: GameStateReport }) => void;
+
+  // Auth/Deck events
+  registerPlayer: (data: { token: string }) => void;
+  submitDeck:     (data: { roomCode: string; deckIds: string[] }) => void;
+
+  // Lobby events
+  'lobby:create':         (data: { playerName: string; settings?: Partial<RoomSettings> }) => void;
+  'lobby:join':           (data: { roomCode: string; playerName: string; password?: string }) => void;
+  'lobby:leave':          (data: { roomCode: string }) => void;
+  'lobby:chat':           (data: { roomCode: string; text: string }) => void;
+  'lobby:ready':          (data: { roomCode: string }) => void;
+  'lobby:kick':           (data: { roomCode: string; targetPlayerName: string }) => void;
+  'lobby:settings':       (data: { roomCode: string; settings: Partial<RoomSettings> }) => void;
+  'lobby:start_game':     (data: { roomCode: string }) => void;
+  'lobby:crypto_ready':   (data: { roomCode: string }) => void;
+  'lobby:deck_submitted': (data: { roomCode: string; deckIds: string[] }) => void;
+  'lobby:list':           () => void;
+  'lobby:request_state':  (data: { roomCode: string }) => void;
 }
 
 // ─── Server → Client Events ─────────────────────────────────
@@ -90,6 +109,7 @@ export interface PayoutResult {
 }
 
 export interface ServerToClientEvents {
+  // Existing room events
   roomCreated:          (data: { roomCode: string; playerIndex: number }) => void;
   roomJoined:           (data: { roomCode: string; playerIndex: number }) => void;
   opponentJoined:       (data: { playerName: string; playerIndex: number }) => void;
@@ -105,6 +125,90 @@ export interface ServerToClientEvents {
   bothCryptoReady:      () => void;
   payout_result:        (data: PayoutResult) => void;
   error:                (data: { message: string }) => void;
+
+  // Deck validation events
+  deckAccepted:   (data: { cardCount: number }) => void;
+  deckRejected:   (data: { errors: string[] }) => void;
+  bothDecksReady: () => void;
+
+  // Lobby events
+  'lobby:created':            (data: { code: string }) => void;
+  'lobby:joined':             (data: { code: string }) => void;
+  'lobby:state':              (data: LobbyState) => void;
+  'lobby:room_list':          (data: { rooms: PublicRoomListing[] }) => void;
+  'lobby:chat_message':       (data: ChatMessage) => void;
+  'lobby:system_message':     (data: { text: string; timestamp: number }) => void;
+  'lobby:kicked':             (data: { reason: string }) => void;
+  'lobby:game_starting':      (data: GameStartingData) => void;
+  'lobby:error':              (data: { message: string }) => void;
+  'lobby:deposit_phase':      (data: { stakeAmount: number }) => void;
+  'lobby:opponent_deposited': () => void;
+  'lobby:both_deposited':     () => void;
+  'lobby:submit_decks':       () => void;
+  'lobby:password_required':  (data: { roomCode: string }) => void;
+}
+
+// ─── Room Settings (lobby) ──────────────────────────────────
+
+export interface RoomSettings {
+  isPublic: boolean;
+  isCrypto: boolean;
+  maxPlayers: number;
+  roomName: string;
+  stakeAmount: number;
+  password: string | null;
+}
+
+// ─── Chat ───────────────────────────────────────────────────
+
+export interface ChatMessage {
+  sender: string;
+  text: string;
+  timestamp: number;
+}
+
+// ─── Room Status ────────────────────────────────────────────
+
+export type RoomStatus = 'waiting' | 'full' | 'depositing' | 'starting' | 'in_progress' | 'finished';
+
+// ─── Lobby State (sent to players inside a room) ────────────
+
+export interface LobbyPlayerInfo {
+  name: string;
+  playerId: number | null;
+  ready: boolean;
+  isHost: boolean;
+  hasDeck: boolean;
+}
+
+export interface LobbyState {
+  code: string;
+  settings: RoomSettings;
+  status: RoomStatus;
+  players: LobbyPlayerInfo[];
+  chat: ChatMessage[];
+}
+
+export interface PublicRoomListing {
+  code: string;
+  roomName: string;
+  hostName: string;
+  playerCount: number;
+  maxPlayers: number;
+  isCrypto: boolean;
+  stakeAmount: number;
+  hasPassword: boolean;
+  status: RoomStatus;
+  createdAt: number;
+}
+
+export interface GameStartingData {
+  seed: number;
+  players: Array<{
+    name: string;
+    playerIndex: number;
+    isHost: boolean;
+  }>;
 }
 
 // ─── Room Player (server-side) ──────────────────────────────
@@ -113,6 +217,10 @@ export interface RoomPlayer {
   id: string;
   name: string;
   wallet: string | null;
+  // Auth/Deck extensions (optional — backward compatible)
+  playerId?: number | null;
+  deckIds?: string[] | null;
+  ready?: boolean;
 }
 
 export interface GameOverClaim {
@@ -145,4 +253,10 @@ export interface Room {
   createdAt: number;
   // Server-side game log (optional, set when battle starts)
   gameLog?: any;
+  // Lobby extensions (optional — backward compatible with legacy RoomScene flow)
+  hostSocketId?: string;
+  hostPlayerId?: number | null;
+  status?: RoomStatus;
+  settings?: RoomSettings;
+  chat?: ChatMessage[];
 }

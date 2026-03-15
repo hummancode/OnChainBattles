@@ -4,7 +4,7 @@
 // ============================================================
 
 import { randomInt } from 'crypto';
-import type { Room } from '../../shared/types/NetworkEvents.js';
+import type { Room, RoomPlayer, PublicRoomListing, LobbyState } from '../../shared/types/NetworkEvents.js';
 import { Logger } from '../utils/Logger.js';
 
 const log = new Logger('RoomManager');
@@ -124,7 +124,6 @@ export class RoomManager {
   deleteRoom(roomCode: string): void {
     const room = this.rooms.get(roomCode);
     if (room) {
-      // Clear any pending disconnect grace timers/intervals to avoid dangling callbacks
       for (const timer of room.disconnectTimers.values()) {
         clearTimeout(timer);
       }
@@ -135,5 +134,115 @@ export class RoomManager {
       room.disconnectIntervals.clear();
     }
     this.rooms.delete(roomCode);
+  }
+
+  /** Insert a pre-built room (used by LobbyManager). */
+  setRoom(roomCode: string, room: Room): void {
+    this.rooms.set(roomCode, room);
+  }
+
+  // ─── Auth / Deck Extensions ──────────────────────────────
+
+  /** Associate a DB player ID with a socket in a room. */
+  setPlayerAuth(socketId: string, roomCode: string, playerId: number): void {
+    const player = this.findPlayer(socketId, roomCode);
+    if (player) player.playerId = playerId;
+  }
+
+  /** Store validated deck IDs for a player. */
+  setPlayerDeck(socketId: string, roomCode: string, deckIds: string[]): boolean {
+    const player = this.findPlayer(socketId, roomCode);
+    if (!player) return false;
+    player.deckIds = deckIds;
+    return true;
+  }
+
+  /** Check if all players in a room have submitted decks. */
+  allDecksReady(roomCode: string): boolean {
+    const room = this.rooms.get(roomCode);
+    if (!room || room.players.length < 2) return false;
+    return room.players.every(p => !!p.deckIds);
+  }
+
+  // ─── Lobby Extensions ────────────────────────────────────
+
+  /** Get all waiting public rooms for the room browser. */
+  getPublicRooms(): PublicRoomListing[] {
+    const result: PublicRoomListing[] = [];
+    for (const [code, room] of this.rooms) {
+      if (room.settings?.isPublic && room.status === 'waiting') {
+        result.push({
+          code,
+          roomName: room.settings.roomName,
+          hostName: room.players[0]?.name ?? 'Unknown',
+          playerCount: room.players.length,
+          maxPlayers: room.settings.maxPlayers,
+          isCrypto: room.settings.isCrypto,
+          stakeAmount: room.settings.stakeAmount,
+          hasPassword: !!room.settings.password,
+          status: room.status,
+          createdAt: room.createdAt ?? Date.now(),
+        });
+      }
+    }
+    return result.sort((a, b) => b.createdAt - a.createdAt).slice(0, 50);
+  }
+
+  /** Build lobby state for players inside a room. */
+  getLobbyState(roomCode: string): LobbyState | null {
+    const room = this.rooms.get(roomCode);
+    if (!room || !room.settings) return null;
+    // Strip password from broadcast — only expose hasPassword flag
+    const { password: _pw, ...safeSettings } = room.settings;
+    return {
+      code: roomCode,
+      settings: { ...safeSettings, password: null },
+      status: room.status ?? 'waiting',
+      players: room.players.map(p => ({
+        name: p.name,
+        playerId: p.playerId ?? null,
+        ready: p.ready ?? false,
+        isHost: p.id === room.hostSocketId,
+        hasDeck: !!p.deckIds,
+      })),
+      chat: (room.chat ?? []).slice(-50),
+    };
+  }
+
+  /** Generate a unique 6-digit room code. */
+  generateUniqueCode(): string {
+    let code: string;
+    let attempts = 0;
+    do {
+      code = Math.floor(100000 + Math.random() * 900000).toString();
+      attempts++;
+    } while (this.rooms.has(code) && attempts < 100);
+    return code;
+  }
+
+  /** Remove a player from all rooms (prevent multi-room). Returns codes left. */
+  removeFromAllRooms(socketId: string): string[] {
+    const leftCodes: string[] = [];
+    for (const [code, room] of this.rooms) {
+      const idx = room.players.findIndex(p => p.id === socketId);
+      if (idx !== -1) {
+        room.players.splice(idx, 1);
+        leftCodes.push(code);
+        if (room.players.length === 0) {
+          this.rooms.delete(code);
+        } else if (room.hostSocketId === socketId) {
+          room.hostSocketId = room.players[0].id;
+          room.hostPlayerId = room.players[0].playerId ?? null;
+        }
+      }
+    }
+    return leftCodes;
+  }
+
+  // ─── Private Helpers ─────────────────────────────────────
+
+  private findPlayer(socketId: string, roomCode: string): RoomPlayer | undefined {
+    const room = this.rooms.get(roomCode);
+    return room?.players.find(p => p.id === socketId);
   }
 }

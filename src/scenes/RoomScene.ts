@@ -16,6 +16,8 @@ import GameState, { GameMode, RoomAction } from '../GameState';
 import SocketManager from '../network/SocketManager';
 import EscrowManager, { STAKE_AVAX } from '../web3/EscrowManager';
 import WalletManager from '../web3/WalletManager';
+import { AuthManager } from '../auth/AuthManager';
+import { DeckLoader } from '../config/DeckLoader';
 import { MenuButton } from '../ui/MenuButton';
 import { ToastNotification } from '../ui/ToastNotification';
 import { ShareHelper } from '../ui/ShareHelper';
@@ -280,9 +282,13 @@ private onHostDepositConfirmed(): void {
     this.statusText.setText('Waiting for opponent...');
     this.subStatusText.setText('Share the code or link below');
 
-    // Show copy/share buttons
     this.copyBtn.text.setVisible(true);
     this.shareBtn.text.setVisible(true);
+
+    // Register authenticated player identity with server
+    if (AuthManager.isLoggedIn()) {
+      SocketManager.registerPlayer(AuthManager.getToken()!);
+    }
 
     if (this.isCryptoMode && GameState.walletAddress) {
       this.signAndRegisterWallet();
@@ -294,9 +300,13 @@ private onHostDepositConfirmed(): void {
     this.roomCodeText.setText(`ROOM: ${code}`);
     this.statusText.setText('Joined room! Waiting...');
 
-    // Show copy/share for joiners too
     this.copyBtn.text.setVisible(true);
     this.shareBtn.text.setVisible(true);
+
+    // Register authenticated player identity with server
+    if (AuthManager.isLoggedIn()) {
+      SocketManager.registerPlayer(AuthManager.getToken()!);
+    }
 
     if (this.isCryptoMode && GameState.walletAddress) {
       this.signAndRegisterWallet();
@@ -410,6 +420,12 @@ private onHostDepositConfirmed(): void {
   }
 
   private enterBattle(): void {
+    // Submit deck to server before entering battle (non-blocking)
+    const deckIds = DeckLoader.get();
+    if (deckIds.length > 0 && this.currentRoomCode) {
+      SocketManager.submitDeck(this.currentRoomCode, deckIds);
+    }
+
     this.cameras.main.fadeOut(300, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       this.scene.start('BattleScene', {

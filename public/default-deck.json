@@ -1,0 +1,24 @@
+{
+  "_comment": "Beginner's Deck — 31 cards. Edit this file to change the default deck for new players.",
+  "_rules": "Exactly 31 cards. No 'king' (pre-placed). Each card has a max copies limit (see copies field in card data).",
+  "name": "Starter Deck",
+  "deckIds": [
+    "foot_soldier", "foot_soldier", "foot_soldier",
+    "militia",      "militia",
+    "pikeman",      "pikeman",
+    "scout",        "scout",
+    "archer",       "archer",
+    "lancer",       "lancer",
+    "messenger",    "messenger",
+    "swordsman",    "swordsman",
+    "knight",       "knight",
+    "priest",       "priest",
+    "scribe",       "scribe",
+    "princess",
+    "commander",
+    "knights_guard",
+    "mystic",
+    "village",      "village",
+    "reform",       "reform"
+  ]
+}

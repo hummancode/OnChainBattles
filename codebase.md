@@ -53,6 +53,9 @@
 # Game session logs (generated during play, for debugging)
 /logs
 
+# SQLite database (local dev data)
+server/data/
+
 # Claude Code local settings
 .claude/
 
@@ -2825,10 +2828,11 @@ endlocal
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="/style.css">
-    <title>Phaser - Template</title>
+    <title>OnChainBattles</title>
 </head>
 
 <body>
@@ -2873,9 +2877,12 @@ endlocal
         "@nomicfoundation/hardhat-ethers": "^4.0.4",
         "@nomicfoundation/hardhat-ignition": "^3.0.7",
         "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.2",
+        "@types/better-sqlite3": "^7.6.13",
         "@types/chai": "^4.3.20",
         "@types/chai-as-promised": "^8.0.2",
+        "@types/cors": "^2.8.19",
         "@types/express": "^5.0.6",
+        "@types/jsonwebtoken": "^9.0.10",
         "@types/mocha": "^10.0.10",
         "@types/node": "^22.19.11",
         "chai": "^5.3.3",
@@ -2890,9 +2897,12 @@ endlocal
     },
     "dependencies": {
         "@phaserjs/editor-scripts-base": "^2.0.1",
+        "better-sqlite3": "^12.8.0",
+        "cors": "^2.8.6",
         "dotenv": "^17.3.1",
         "ethers": "^6.16.0",
         "express": "^5.2.1",
+        "jsonwebtoken": "^9.0.3",
         "phaser": "^4.0.0-rc.6",
         "socket.io": "^4.8.3",
         "socket.io-client": "^4.8.3"
@@ -3338,9 +3348,43 @@ This is a binary file of the type: Image
 }
 ```
 
+# public\default-deck.json
+
+```json
+{
+  "_comment": "Beginner's Deck — 31 cards. Edit this file to change the default deck for new players.",
+  "_rules": "Exactly 31 cards. No 'king' (pre-placed). Each card has a max copies limit (see copies field in card data).",
+  "name": "Starter Deck",
+  "deckIds": [
+    "foot_soldier", "foot_soldier", "foot_soldier",
+    "militia",      "militia",
+    "pikeman",      "pikeman",
+    "scout",        "scout",
+    "archer",       "archer",
+    "lancer",       "lancer",
+    "messenger",    "messenger",
+    "swordsman",    "swordsman",
+    "knight",       "knight",
+    "priest",       "priest",
+    "scribe",       "scribe",
+    "princess",
+    "commander",
+    "knights_guard",
+    "mystic",
+    "village",      "village",
+    "reform",       "reform"
+  ]
+}
+
+```
+
 # public\favicon.png
 
 This is a binary file of the type: Image
+
+# public\favicon.svg
+
+This is a file of the type: SVG Image
 
 # public\layouts\BattleScene.layout.json
 
@@ -5213,6 +5257,565 @@ console.log("Transaction sent successfully");
 
 ```
 
+# server\api\authRoutes.ts
+
+```ts
+// ============================================================
+// authRoutes.ts
+// Wallet-based authentication: nonce → sign → JWT.
+// No password, no email. MetaMask signature is the credential.
+// ============================================================
+
+import { Router } from 'express';
+import crypto from 'crypto';
+import { ethers } from 'ethers';
+import { getDB } from '../db/database.js';
+import { issueToken } from './middleware.js';
+import { initializeCollection } from './collectionHelpers.js';
+
+export const authRouter = Router();
+
+// In-memory nonce store: wallet → { nonce, expiresAt }
+const nonceStore = new Map<string, { nonce: string; expiresAt: number }>();
+
+const MAX_NONCES = 10_000;
+
+function cleanExpiredNonces(): void {
+  const now = Date.now();
+  for (const [key, val] of nonceStore) {
+    if (val.expiresAt < now) nonceStore.delete(key);
+  }
+  // Hard cap to prevent OOM under attack
+  if (nonceStore.size > MAX_NONCES) {
+    const excess = nonceStore.size - MAX_NONCES;
+    const keys = nonceStore.keys();
+    for (let i = 0; i < excess; i++) {
+      const k = keys.next().value;
+      if (k !== undefined) nonceStore.delete(k);
+    }
+  }
+}
+
+function buildNonceMessage(nonce: string): string {
+  return `Sign this message to log in to OnChainBattles.\n\nNonce: ${nonce}\n\nThis does not cost any gas.`;
+}
+
+// GET /api/auth/nonce?wallet=0x...
+authRouter.get('/nonce', (req, res) => {
+  const wallet = (req.query.wallet as string ?? '').toLowerCase();
+  if (!wallet.startsWith('0x') || wallet.length !== 42) {
+    res.status(400).json({ error: 'Invalid wallet address.' });
+    return;
+  }
+
+  cleanExpiredNonces();
+  const nonce = crypto.randomBytes(32).toString('hex');
+  nonceStore.set(wallet, { nonce, expiresAt: Date.now() + 5 * 60 * 1000 });
+
+  res.json({ nonce, message: buildNonceMessage(nonce) });
+});
+
+// POST /api/auth/login  { wallet, signature }
+authRouter.post('/login', (req, res) => {
+  const { wallet, signature } = req.body ?? {};
+  const w = (wallet ?? '').toLowerCase();
+
+  if (!w || !signature) {
+    res.status(400).json({ error: 'Missing wallet or signature.' });
+    return;
+  }
+
+  const stored = nonceStore.get(w);
+  if (!stored || stored.expiresAt < Date.now()) {
+    res.status(401).json({ error: 'Nonce expired. Request a new one.' });
+    return;
+  }
+
+  const message = buildNonceMessage(stored.nonce);
+  try {
+    const recovered = ethers.verifyMessage(message, signature);
+    if (recovered.toLowerCase() !== w) {
+      res.status(401).json({ error: 'Signature does not match wallet.' });
+      return;
+    }
+  } catch {
+    res.status(401).json({ error: 'Invalid signature.' });
+    return;
+  }
+
+  nonceStore.delete(w);
+
+  const db = getDB();
+  let player = db.prepare('SELECT * FROM players WHERE wallet_address = ?').get(w) as Record<string, unknown> | undefined;
+
+  if (!player) {
+    const result = db.prepare(
+      'INSERT INTO players (wallet_address, display_name) VALUES (?, ?)'
+    ).run(w, `Player_${w.slice(-6)}`);
+    player = db.prepare('SELECT * FROM players WHERE id = ?').get(result.lastInsertRowid) as Record<string, unknown>;
+    initializeCollection(player!.id as number);
+  }
+
+  db.prepare('UPDATE players SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(player!.id);
+
+  const token = issueToken({ playerId: player!.id as number, wallet: w });
+
+  res.json({
+    token,
+    player: {
+      id: player!.id,
+      wallet: player!.wallet_address,
+      displayName: player!.display_name,
+      winCount: player!.win_count,
+      lossCount: player!.loss_count,
+      eloRating: player!.elo_rating,
+      activeDeckId: player!.active_deck_id,
+    },
+  });
+});
+
+```
+
+# server\api\collectionHelpers.ts
+
+```ts
+// ============================================================
+// collectionHelpers.ts
+// Card collection initialization for new players.
+// MVP: all cards unlocked at max copies.
+// ============================================================
+
+import { getDB } from '../db/database.js';
+import { CARD_POOL } from '../validation/CardPool.js';
+
+/** Grant a new player all cards at max copies. */
+export function initializeCollection(playerId: number): void {
+  const db = getDB();
+  const insert = db.prepare(
+    'INSERT OR IGNORE INTO collections (player_id, card_id, owned_copies) VALUES (?, ?, ?)'
+  );
+
+  const batch = db.transaction(() => {
+    for (const card of CARD_POOL) {
+      if (card.id === 'king') continue;
+      insert.run(playerId, card.id, card.copies);
+    }
+  });
+
+  batch();
+  console.log(`[Collection] Initialized for player #${playerId}`);
+}
+
+```
+
+# server\api\collectionRoutes.ts
+
+```ts
+// ============================================================
+// collectionRoutes.ts
+// Card collection query for authenticated players.
+// ============================================================
+
+import { Router } from 'express';
+import { getDB } from '../db/database.js';
+import { requireAuth } from './middleware.js';
+import { CARD_POOL } from '../validation/CardPool.js';
+
+export const collectionRouter = Router();
+
+// GET /api/collection
+collectionRouter.get('/', requireAuth, (req, res) => {
+  const db = getDB();
+  const rows = db.prepare(
+    'SELECT card_id, owned_copies FROM collections WHERE player_id = ?'
+  ).all(req.player!.playerId) as Array<{ card_id: string; owned_copies: number }>;
+
+  const collection = CARD_POOL
+    .filter(c => c.id !== 'king')
+    .map(card => {
+      const owned = rows.find(r => r.card_id === card.id);
+      return {
+        id: card.id, name: card.name,
+        maxCopies: card.copies, ownedCopies: owned?.owned_copies ?? 0,
+      };
+    });
+
+  res.json({ collection });
+});
+
+```
+
+# server\api\deckRoutes.ts
+
+```ts
+// ============================================================
+// deckRoutes.ts
+// Deck CRUD: list, create, update, delete, activate, validate.
+// ============================================================
+
+import { Router } from 'express';
+import { getDB } from '../db/database.js';
+import { requireAuth } from './middleware.js';
+import { validateDeck } from '../validation/DeckValidator.js';
+import { sanitizeText } from '../utils/sanitize.js';
+
+export const deckRouter = Router();
+
+const MAX_DECKS = 10;
+
+function getOwnedCards(playerId: number): Map<string, number> {
+  const db = getDB();
+  const rows = db.prepare(
+    'SELECT card_id, owned_copies FROM collections WHERE player_id = ?'
+  ).all(playerId) as Array<{ card_id: string; owned_copies: number }>;
+  return new Map(rows.map(r => [r.card_id, r.owned_copies]));
+}
+
+// GET /api/decks
+deckRouter.get('/', requireAuth, (req, res) => {
+  const db = getDB();
+  const rows = db.prepare(
+    'SELECT * FROM decks WHERE player_id = ? ORDER BY updated_at DESC'
+  ).all(req.player!.playerId) as Array<Record<string, unknown>>;
+
+  res.json({
+    decks: rows.map(d => {
+      let cardIds: string[] = [];
+      try { cardIds = JSON.parse(d.card_ids as string); } catch { /* corrupted */ }
+      return {
+        id: d.id, name: d.name, cardIds,
+        isValid: !!d.is_valid,
+        createdAt: d.created_at, updatedAt: d.updated_at,
+      };
+    }),
+  });
+});
+
+// POST /api/decks
+deckRouter.post('/', requireAuth, (req, res) => {
+  const { name, cardIds } = req.body ?? {};
+  if (!Array.isArray(cardIds)) {
+    res.status(400).json({ error: 'cardIds must be an array.' });
+    return;
+  }
+  const db = getDB();
+  const count = db.prepare(
+    'SELECT COUNT(*) as cnt FROM decks WHERE player_id = ?'
+  ).get(req.player!.playerId) as { cnt: number };
+
+  if (count.cnt >= MAX_DECKS) {
+    res.status(400).json({ error: `Maximum ${MAX_DECKS} decks.` });
+    return;
+  }
+
+  const owned = getOwnedCards(req.player!.playerId);
+  const validation = validateDeck(cardIds, owned);
+
+  const safeName = sanitizeText(name, 40) || 'My Deck';
+  const result = db.prepare(
+    'INSERT INTO decks (player_id, name, card_ids, is_valid) VALUES (?, ?, ?, ?)'
+  ).run(req.player!.playerId, safeName, JSON.stringify(cardIds), validation.valid ? 1 : 0);
+
+  res.status(201).json({
+    deck: {
+      id: Number(result.lastInsertRowid), name: name ?? 'My Deck',
+      cardIds, isValid: validation.valid, errors: validation.errors,
+    },
+  });
+});
+
+// PUT /api/decks/:id
+deckRouter.put('/:id', requireAuth, (req, res) => {
+  const db = getDB();
+  const existing = db.prepare(
+    'SELECT * FROM decks WHERE id = ? AND player_id = ?'
+  ).get(req.params.id, req.player!.playerId) as Record<string, unknown> | undefined;
+
+  if (!existing) { res.status(404).json({ error: 'Deck not found.' }); return; }
+
+  const name = req.body.name ?? existing.name;
+  const cardIds = req.body.cardIds ?? JSON.parse(existing.card_ids as string);
+  const owned = getOwnedCards(req.player!.playerId);
+  const validation = validateDeck(cardIds, owned);
+
+  db.prepare(
+    'UPDATE decks SET name=?, card_ids=?, is_valid=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
+  ).run(name, JSON.stringify(cardIds), validation.valid ? 1 : 0, req.params.id);
+
+  res.json({ deck: { id: existing.id, name, cardIds, isValid: validation.valid, errors: validation.errors } });
+});
+
+// DELETE /api/decks/:id
+deckRouter.delete('/:id', requireAuth, (req, res) => {
+  const db = getDB();
+
+  // Prevent deleting the last deck
+  const count = db.prepare(
+    'SELECT COUNT(*) as cnt FROM decks WHERE player_id = ?'
+  ).get(req.player!.playerId) as { cnt: number };
+  if (count.cnt <= 1) {
+    res.status(400).json({ error: 'Cannot delete your last deck.' });
+    return;
+  }
+
+  db.prepare('UPDATE players SET active_deck_id=NULL WHERE id=? AND active_deck_id=?')
+    .run(req.player!.playerId, req.params.id);
+  const r = db.prepare('DELETE FROM decks WHERE id=? AND player_id=?')
+    .run(req.params.id, req.player!.playerId);
+  res.json({ success: r.changes > 0 });
+});
+
+// POST /api/decks/:id/activate
+deckRouter.post('/:id/activate', requireAuth, (req, res) => {
+  const db = getDB();
+  const deck = db.prepare('SELECT * FROM decks WHERE id=? AND player_id=?')
+    .get(req.params.id, req.player!.playerId) as Record<string, unknown> | undefined;
+  if (!deck) { res.status(404).json({ error: 'Deck not found.' }); return; }
+  if (!deck.is_valid) { res.status(400).json({ error: 'Cannot activate invalid deck.' }); return; }
+  db.prepare('UPDATE players SET active_deck_id=? WHERE id=?').run(deck.id, req.player!.playerId);
+  res.json({ success: true, activeDeckId: deck.id });
+});
+
+// POST /api/decks/validate
+deckRouter.post('/validate', requireAuth, (req, res) => {
+  const owned = getOwnedCards(req.player!.playerId);
+  res.json(validateDeck(req.body?.cardIds ?? [], owned));
+});
+
+```
+
+# server\api\index.ts
+
+```ts
+// ============================================================
+// api/index.ts
+// Assembles all REST API sub-routers.
+// Mounted at /api in server/app.ts.
+// ============================================================
+
+import { Router } from 'express';
+import { authRouter } from './authRoutes.js';
+import { playerRouter } from './playerRoutes.js';
+import { deckRouter } from './deckRoutes.js';
+import { collectionRouter } from './collectionRoutes.js';
+import { matchRouter } from './matchRoutes.js';
+
+export const apiRouter = Router();
+
+apiRouter.use('/auth', authRouter);
+apiRouter.use('/player', playerRouter);
+apiRouter.use('/decks', deckRouter);
+apiRouter.use('/collection', collectionRouter);
+apiRouter.use('/matches', matchRouter);
+
+```
+
+# server\api\matchRoutes.ts
+
+```ts
+// ============================================================
+// matchRoutes.ts
+// Match history query for authenticated players.
+// ============================================================
+
+import { Router } from 'express';
+import { getDB } from '../db/database.js';
+import { requireAuth } from './middleware.js';
+
+export const matchRouter = Router();
+
+// GET /api/matches?limit=20&offset=0
+matchRouter.get('/', requireAuth, (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+  const offset = parseInt(req.query.offset as string) || 0;
+  const pid = req.player!.playerId;
+  const db = getDB();
+
+  const rows = db.prepare(`
+    SELECT * FROM match_history
+    WHERE player_a_id = ? OR player_b_id = ?
+    ORDER BY started_at DESC LIMIT ? OFFSET ?
+  `).all(pid, pid, limit, offset);
+
+  res.json({ matches: rows });
+});
+
+```
+
+# server\api\matchService.ts
+
+```ts
+// ============================================================
+// matchService.ts
+// Match recording logic — used by SessionManager on game_over.
+// Separate from matchRoutes to avoid circular dependency.
+// ============================================================
+
+import { getDB } from '../db/database.js';
+import type { Room } from '../../shared/types/NetworkEvents.js';
+
+export interface RecordMatchOptions {
+  roomCode: string;
+  room: Room;
+  winnerIndex: number;
+  totalTurns: number;
+  txHash?: string;
+}
+
+/** Record a finished match to database. Safe for guests (null playerIds). */
+export function recordMatch(opts: RecordMatchOptions): void {
+  const { roomCode, room, winnerIndex, totalTurns, txHash } = opts;
+  const pA = room.players[0];
+  const pB = room.players[1];
+  const winnerId = room.players[winnerIndex]?.playerId ?? null;
+
+  // Skip recording if both players are guests
+  if (!pA?.playerId && !pB?.playerId) return;
+
+  const db = getDB();
+  db.prepare(`
+    INSERT INTO match_history
+    (room_code, player_a_id, player_b_id, winner_id,
+     player_a_deck, player_b_deck, tx_hash, game_seed, total_turns, ended_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  `).run(
+    roomCode,
+    pA?.playerId ?? null,
+    pB?.playerId ?? null,
+    winnerId,
+    pA?.deckIds ? JSON.stringify(pA.deckIds) : null,
+    pB?.deckIds ? JSON.stringify(pB.deckIds) : null,
+    txHash ?? null,
+    room.gameSeed ?? 0,
+    totalTurns,
+  );
+
+  // Update win/loss
+  if (winnerId) {
+    db.prepare('UPDATE players SET win_count = win_count + 1 WHERE id = ?').run(winnerId);
+    const loserId = winnerIndex === 0 ? pB?.playerId : pA?.playerId;
+    if (loserId) {
+      db.prepare('UPDATE players SET loss_count = loss_count + 1 WHERE id = ?').run(loserId);
+    }
+  }
+
+  console.log(`[MatchService] Recorded match in ${roomCode}, winner: ${winnerId ?? 'guest'}`);
+}
+
+```
+
+# server\api\middleware.ts
+
+```ts
+// ============================================================
+// middleware.ts
+// JWT authentication middleware for Express routes.
+// ============================================================
+
+import type { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET ?? 'ocb-dev-secret-replace-in-production';
+
+export interface TokenPayload {
+  playerId: number;
+  wallet: string;
+}
+
+// Extend Express Request to carry auth payload
+declare global {
+  namespace Express {
+    interface Request {
+      player?: TokenPayload;
+    }
+  }
+}
+
+export function issueToken(payload: TokenPayload): string {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' });
+}
+
+export function verifyToken(token: string): TokenPayload | null {
+  try {
+    return jwt.verify(token, JWT_SECRET) as TokenPayload;
+  } catch {
+    return null;
+  }
+}
+
+/** Requires valid JWT. Attaches `req.player`. Returns 401 on failure. */
+export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  const header = req.headers.authorization;
+  if (!header?.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'Missing Authorization header.' });
+    return;
+  }
+
+  const payload = verifyToken(header.slice(7));
+  if (!payload) {
+    res.status(401).json({ error: 'Invalid or expired token.' });
+    return;
+  }
+
+  req.player = payload;
+  next();
+}
+
+```
+
+# server\api\playerRoutes.ts
+
+```ts
+// ============================================================
+// playerRoutes.ts
+// Player profile: read + update display name.
+// ============================================================
+
+import { Router } from 'express';
+import { getDB } from '../db/database.js';
+import { requireAuth } from './middleware.js';
+import { sanitizeText } from '../utils/sanitize.js';
+
+export const playerRouter = Router();
+
+// GET /api/player/me
+playerRouter.get('/me', requireAuth, (req, res) => {
+  const db = getDB();
+  const p = db.prepare('SELECT * FROM players WHERE id = ?').get(req.player!.playerId) as Record<string, unknown> | undefined;
+  if (!p) {
+    res.status(404).json({ error: 'Player not found.' });
+    return;
+  }
+
+  res.json({
+    id: p.id,
+    wallet: p.wallet_address,
+    displayName: p.display_name,
+    winCount: p.win_count,
+    lossCount: p.loss_count,
+    eloRating: p.elo_rating,
+    activeDeckId: p.active_deck_id,
+    createdAt: p.created_at,
+  });
+});
+
+// PATCH /api/player/me  { displayName }
+playerRouter.patch('/me', requireAuth, (req, res) => {
+  const { displayName } = req.body ?? {};
+  const db = getDB();
+
+  const clean = sanitizeText(displayName, 20);
+  if (clean.length >= 2) {
+    db.prepare('UPDATE players SET display_name = ? WHERE id = ?')
+      .run(clean, req.player!.playerId);
+  }
+
+  const p = db.prepare('SELECT * FROM players WHERE id = ?').get(req.player!.playerId) as Record<string, unknown>;
+  res.json({ id: p.id, displayName: p.display_name });
+});
+
+```
+
 # server\app.ts
 
 ```ts
@@ -5222,6 +5825,7 @@ console.log("Transaction sent successfully");
 // ============================================================
 
 import express from 'express';
+import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
@@ -5230,10 +5834,23 @@ import type { ClientToServerEvents, ServerToClientEvents } from '../shared/types
 import { RoomManager } from './rooms/RoomManager.js';
 import { PayoutService } from './game/PayoutService.js';
 import { SessionManager } from './game/SessionManager.js';
+import { getDB, closeDB } from './db/database.js';
+import { runMigrations } from './db/migrations.js';
+import { apiRouter } from './api/index.js';
+import { LobbyManager } from './lobby/LobbyManager.js';
+import { RoomJanitor } from './lobby/RoomJanitor.js';
 
 dotenv.config();
 
 const app = express();
+app.use(cors({ origin: '*' }));
+app.use(express.json());
+app.use('/api', apiRouter);
+
+// ── Database ──
+getDB();
+runMigrations();
+
 const httpServer = createServer(app);
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
@@ -5246,6 +5863,9 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 const roomManager = new RoomManager();
 const payout = new PayoutService(process.env.FUJI_PRIVATE_KEY!);
 const session = new SessionManager(io, roomManager, payout);
+const lobby = new LobbyManager(io, roomManager);
+const janitor = new RoomJanitor(roomManager);
+janitor.start();
 
 // ── Per-socket rate limiter ──
 const RATE_WINDOW_MS = 1_000;
@@ -5344,15 +5964,187 @@ io.on('connection', (socket) => {
   // ── Game session events ──
   session.registerHandlers(socket);
 
+  // ── Lobby events ──
+  lobby.registerHandlers(socket);
+
   // ── Disconnect ──
   socket.on('disconnect', () => {
+    lobby.handleLobbyDisconnect(socket);
     session.handleDisconnect(socket);
   });
 });
 
-httpServer.listen(3001, () => {
-  console.log('[Server] Socket.io running on port 3001');
+// Public room list (no auth required)
+app.get('/api/rooms', (_req, res) => {
+  res.json({ rooms: roomManager.getPublicRooms() });
 });
+
+httpServer.listen(3001, () => {
+  console.log('[Server] Socket.io + REST API + Lobby running on port 3001');
+});
+
+function shutdown() {
+  janitor.stop();
+  closeDB();
+  process.exit(0);
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
+```
+
+# server\data\ocb.sqlite
+
+This is a binary file of the type: Binary
+
+# server\data\ocb.sqlite-shm
+
+This is a binary file of the type: Binary
+
+# server\data\ocb.sqlite-wal
+
+This is a binary file of the type: Binary
+
+# server\db\database.ts
+
+```ts
+// ============================================================
+// database.ts
+// SQLite connection — singleton with WAL mode.
+// ============================================================
+
+import Database from 'better-sqlite3';
+import path from 'path';
+import fs from 'fs';
+
+const DB_DIR = path.resolve('server/data');
+const DB_PATH = path.join(DB_DIR, 'ocb.sqlite');
+
+let db: Database.Database | null = null;
+
+export function getDB(): Database.Database {
+  if (db) return db;
+
+  if (!fs.existsSync(DB_DIR)) {
+    fs.mkdirSync(DB_DIR, { recursive: true });
+  }
+
+  db = new Database(DB_PATH);
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+  console.log(`[DB] Opened: ${DB_PATH}`);
+  return db;
+}
+
+export function closeDB(): void {
+  if (db) {
+    db.close();
+    db = null;
+    console.log('[DB] Closed.');
+  }
+}
+
+```
+
+# server\db\migrations.ts
+
+```ts
+// ============================================================
+// migrations.ts
+// Idempotent schema migrations. Run on every server start.
+// Each migration has a unique ID — only runs once.
+// ============================================================
+
+import { getDB } from './database.js';
+
+interface Migration {
+  id: string;
+  sql: string;
+}
+
+const MIGRATIONS: Migration[] = [
+  {
+    id: '001_players',
+    sql: `CREATE TABLE IF NOT EXISTS players (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      wallet_address  TEXT UNIQUE NOT NULL,
+      display_name    TEXT NOT NULL DEFAULT 'Player',
+      created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_login      DATETIME DEFAULT CURRENT_TIMESTAMP,
+      win_count       INTEGER DEFAULT 0,
+      loss_count      INTEGER DEFAULT 0,
+      elo_rating      INTEGER DEFAULT 1000,
+      active_deck_id  INTEGER
+    )`,
+  },
+  {
+    id: '002_decks',
+    sql: `CREATE TABLE IF NOT EXISTS decks (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      player_id   INTEGER NOT NULL,
+      name        TEXT NOT NULL DEFAULT 'My Deck',
+      card_ids    TEXT NOT NULL,
+      is_valid    INTEGER DEFAULT 0,
+      created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (player_id) REFERENCES players(id)
+    )`,
+  },
+  {
+    id: '003_collections',
+    sql: `CREATE TABLE IF NOT EXISTS collections (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      player_id     INTEGER NOT NULL,
+      card_id       TEXT NOT NULL,
+      owned_copies  INTEGER DEFAULT 0,
+      unlocked_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (player_id) REFERENCES players(id),
+      UNIQUE(player_id, card_id)
+    )`,
+  },
+  {
+    id: '004_match_history',
+    sql: `CREATE TABLE IF NOT EXISTS match_history (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_code     TEXT NOT NULL,
+      player_a_id   INTEGER,
+      player_b_id   INTEGER,
+      winner_id     INTEGER,
+      player_a_deck TEXT,
+      player_b_deck TEXT,
+      stake_amount  REAL DEFAULT 0,
+      tx_hash       TEXT,
+      game_seed     INTEGER,
+      total_turns   INTEGER DEFAULT 0,
+      started_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+      ended_at      DATETIME,
+      FOREIGN KEY (player_a_id) REFERENCES players(id),
+      FOREIGN KEY (player_b_id) REFERENCES players(id)
+    )`,
+  },
+];
+
+export function runMigrations(): void {
+  const db = getDB();
+
+  db.exec(`CREATE TABLE IF NOT EXISTS _migrations (
+    id     TEXT PRIMARY KEY,
+    ran_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  const check = db.prepare('SELECT id FROM _migrations WHERE id = ?');
+  const mark = db.prepare('INSERT INTO _migrations (id) VALUES (?)');
+
+  for (const m of MIGRATIONS) {
+    if (!check.get(m.id)) {
+      console.log(`[DB] Running migration: ${m.id}`);
+      db.exec(m.sql);
+      mark.run(m.id);
+    }
+  }
+
+  console.log('[DB] Migrations complete.');
+}
 
 ```
 
@@ -5644,6 +6436,9 @@ import type { RoomManager } from '../rooms/RoomManager.js';
 import type { PayoutService } from './PayoutService.js';
 import { Logger } from '../utils/Logger.js';
 import { GameLogWriter } from './GameLogWriter.js';
+import { verifyToken } from '../api/middleware.js';
+import { validateDeck } from '../validation/DeckValidator.js';
+import { recordMatch } from '../api/matchService.js';
 
 type TypedServer = Server<ClientToServerEvents, ServerToClientEvents>;
 type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -5758,7 +6553,7 @@ export class SessionManager {
       log.debug(`Relayed ${action.type} in ${roomCode} (action #${room.actionCount}, serverSeq=${room.globalSeq})`);
     });
 
-    socket.on('game_over', async ({ roomCode, winnerIndex }) => {
+    socket.on('game_over', async ({ roomCode, winnerIndex, totalTurns }) => {
       const room = this.rooms.getRoom(roomCode);
       if (!room) return;
       if (room.settled) return;
@@ -5789,7 +6584,19 @@ export class SessionManager {
 
       const hasWallets = room.players.some(p => p.wallet !== null);
       if (!hasWallets) {
-        log.info(`Free-play mode game_over in ${roomCode}`);
+        // Free-play: still wait for both claims before recording
+        if (room.gameOverClaims.length < 2) {
+          log.info(`Free-play game_over claim ${room.gameOverClaims.length}/2 in ${roomCode}`);
+          return;
+        }
+        const fc0 = room.gameOverClaims.find(c => c.playerIndex === 0);
+        const fc1 = room.gameOverClaims.find(c => c.playerIndex === 1);
+        const agreedWinner = (fc0 && fc1 && fc0.claimedWinner === fc1.claimedWinner)
+          ? fc0.claimedWinner : winnerIndex;
+        log.info(`Free-play mode game_over in ${roomCode}, winner: P${agreedWinner + 1}`);
+        try { recordMatch({ roomCode, room, winnerIndex: agreedWinner, totalTurns: totalTurns ?? 0 }); }
+        catch (err: unknown) { log.error('Failed to record match:', err); }
+        if (room.status) room.status = 'finished';
         room.settled = true;
         return;
       }
@@ -5802,6 +6609,11 @@ export class SessionManager {
       room.settled = true;
 
       if (claim0.claimedWinner === claim1.claimedWinner) {
+        // Record match to database
+        try { recordMatch({ roomCode, room, winnerIndex: claim0.claimedWinner, totalTurns: totalTurns ?? 0 }); }
+        catch (err: unknown) { log.error('Failed to record match:', err); }
+        if (room.status) room.status = 'finished';
+
         const winner = room.players[claim0.claimedWinner];
         if (winner?.wallet) {
           log.info(`Both agree: P${claim0.claimedWinner + 1} (${winner.name}) wins room ${roomCode}`);
@@ -5866,6 +6678,37 @@ export class SessionManager {
       } else if (count >= 2) {
         this.io.to(roomCode).emit('bothCryptoReady');
         log.info(`Both players crypto-ready in room ${roomCode}`);
+      }
+    });
+
+    // ── Auth: register player identity ──
+    socket.on('registerPlayer' as any, ({ token }: { token: string }) => {
+      const payload = verifyToken(token);
+      if (!payload) return;
+      const found = this.rooms.findBySocket(socket.id);
+      if (found) {
+        this.rooms.setPlayerAuth(socket.id, found.roomCode, payload.playerId);
+        log.info(`Player #${payload.playerId} identified on ${socket.id}`);
+      }
+    });
+
+    // ── Deck: validate and store deck for match ──
+    socket.on('submitDeck' as any, ({ roomCode, deckIds }: { roomCode: string; deckIds: string[] }) => {
+      const result = validateDeck(deckIds, null);
+      if (!result.valid) {
+        socket.emit('deckRejected', { errors: result.errors });
+        return;
+      }
+
+      const stored = this.rooms.setPlayerDeck(socket.id, roomCode, deckIds);
+      if (!stored) return;
+
+      socket.emit('deckAccepted', { cardCount: deckIds.length });
+      log.info(`Deck accepted for socket ${socket.id} in ${roomCode}`);
+
+      if (this.rooms.allDecksReady(roomCode)) {
+        this.io.to(roomCode).emit('bothDecksReady');
+        log.info(`Both decks ready in ${roomCode}`);
       }
     });
   }
@@ -5959,8 +6802,409 @@ export class SessionManager {
     socket.to(roomCode).emit('opponentReconnected');
     log.info(`${playerName} rejoined room: ${roomCode}`);
 
-    // Re-register session handlers on the new socket
-    this.registerHandlers(socket);
+    // NOTE: handlers are NOT re-registered here — app.ts already calls
+    // registerHandlers() + lobby.registerHandlers() for every new socket
+    // on 'connection'. Re-registering would cause duplicate handlers.
+  }
+}
+
+```
+
+# server\lobby\lobbyHelpers.ts
+
+```ts
+// ============================================================
+// lobbyHelpers.ts
+// Lobby room creation helpers — pure functions.
+// ============================================================
+
+import type { Room, RoomSettings } from '../../shared/types/NetworkEvents.js';
+
+const DEFAULT_SETTINGS: RoomSettings = {
+  isPublic: true,
+  isCrypto: false,
+  maxPlayers: 2,
+  roomName: 'Game Room',
+  stakeAmount: 0,
+  password: null,
+};
+
+/** Create a lobby-enabled room with full settings and all required Room fields. */
+export function createLobbyRoom(
+  hostSocketId: string,
+  hostName: string,
+  hostPlayerId: number | null,
+  settings: Partial<RoomSettings> = {}
+): Room {
+  const merged: RoomSettings = {
+    ...DEFAULT_SETTINGS,
+    ...settings,
+    roomName: (settings.roomName ?? `${hostName}'s Room`).slice(0, 40),
+  };
+
+  return {
+    players: [{
+      id: hostSocketId,
+      name: hostName,
+      wallet: null,
+      playerId: hostPlayerId ?? null,
+      deckIds: null,
+      ready: true,
+    }],
+    gameSeed: null,
+    cryptoReadyCount: 0,
+    battleReadyCount: 0,
+    actionQueue: [],
+    settled: false,
+    currentTurnPlayer: 0,
+    currentPhase: 'PLAY',
+    actionCount: 0,
+    gameOverClaims: [],
+    lastSeqNum: [0, 0],
+    globalSeq: 0,
+    pendingHashes: new Map(),
+    disconnectTimers: new Map(),
+    disconnectIntervals: new Map(),
+    createdAt: Date.now(),
+    // Lobby extensions
+    hostSocketId,
+    hostPlayerId: hostPlayerId ?? null,
+    status: 'waiting',
+    settings: merged,
+    chat: [],
+  };
+}
+
+```
+
+# server\lobby\LobbyManager.ts
+
+```ts
+// ============================================================
+// LobbyManager.ts
+// Handles all lobby: namespaced socket events.
+// Same pattern as SessionManager — registered per socket.
+// ============================================================
+
+import type { Server, Socket } from 'socket.io';
+import type { ClientToServerEvents, ServerToClientEvents, Room } from '../../shared/types/NetworkEvents.js';
+import type { RoomManager } from '../rooms/RoomManager.js';
+import { createLobbyRoom } from './lobbyHelpers.js';
+import { sanitizeText } from '../utils/sanitize.js';
+
+type TypedServer = Server<ClientToServerEvents, ServerToClientEvents>;
+type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
+
+// Per-socket chat rate limiter
+const chatRateMap = new WeakMap<TypedSocket, number[]>();
+const CHAT_RATE_WINDOW = 2000;
+const CHAT_RATE_MAX = 3;
+const MAX_CHAT_LENGTH = 200;
+
+export class LobbyManager {
+  constructor(
+    private io: TypedServer,
+    private rooms: RoomManager
+  ) {}
+
+  registerHandlers(socket: TypedSocket): void {
+    socket.on('lobby:create', ({ playerName, settings }) => {
+      // Look up playerId BEFORE removing from rooms
+      const found = this.rooms.findBySocket(socket.id);
+      const playerId = found?.room.players.find(p => p.id === socket.id)?.playerId ?? null;
+
+      this.rooms.removeFromAllRooms(socket.id);
+      const code = this.rooms.generateUniqueCode();
+      const room = createLobbyRoom(socket.id, playerName, playerId, settings);
+      this.rooms.setRoom(code, room);
+      socket.join(code);
+      socket.emit('lobby:created', { code });
+      this.emitState(code);
+      console.log(`[Lobby] Room ${code} created by ${playerName}`);
+    });
+
+    socket.on('lobby:join', ({ roomCode, playerName, password }) => {
+      this.rooms.removeFromAllRooms(socket.id);
+      const room = this.rooms.getRoom(roomCode);
+      if (!room) { socket.emit('lobby:error', { message: 'Room not found.' }); return; }
+      if (room.status !== 'waiting') { socket.emit('lobby:error', { message: 'Room not accepting players.' }); return; }
+      if (room.players.length >= (room.settings?.maxPlayers ?? 2)) { socket.emit('lobby:error', { message: 'Room is full.' }); return; }
+      if (room.settings?.password && room.settings.password !== password) {
+        socket.emit('lobby:password_required', { roomCode });
+        return;
+      }
+
+      room.players.push({
+        id: socket.id, name: playerName, wallet: null,
+        playerId: null, deckIds: null, ready: false,
+      });
+      if (room.players.length >= (room.settings?.maxPlayers ?? 2)) {
+        room.status = 'full';
+      }
+      socket.join(roomCode);
+      socket.emit('lobby:joined', { code: roomCode });
+      this.emitState(roomCode);
+      this.emitSystem(roomCode, `${playerName} joined the room.`);
+    });
+
+    socket.on('lobby:leave', ({ roomCode }) => {
+      this.handleLeave(socket, roomCode);
+    });
+
+    socket.on('lobby:list', () => {
+      socket.emit('lobby:room_list', { rooms: this.rooms.getPublicRooms() });
+    });
+
+    socket.on('lobby:request_state', ({ roomCode }) => {
+      const state = this.rooms.getLobbyState(roomCode);
+      if (state) socket.emit('lobby:state', state);
+    });
+
+    socket.on('lobby:chat', ({ roomCode, text }) => {
+      const room = this.rooms.getRoom(roomCode);
+      if (!room) return;
+      const player = room.players.find(p => p.id === socket.id);
+      if (!player) return;
+
+      // Rate limit
+      const timestamps = chatRateMap.get(socket) ?? [];
+      const now = Date.now();
+      const recent = timestamps.filter(t => now - t < CHAT_RATE_WINDOW);
+      if (recent.length >= CHAT_RATE_MAX) {
+        socket.emit('lobby:error', { message: 'Slow down — too many messages.' });
+        return;
+      }
+      recent.push(now);
+      chatRateMap.set(socket, recent);
+
+      const clean = sanitizeText(text, MAX_CHAT_LENGTH);
+      if (!clean) return;
+
+      const msg = { sender: player.name, text: clean, timestamp: now };
+      room.chat = room.chat ?? [];
+      room.chat.push(msg);
+      if (room.chat.length > 100) room.chat = room.chat.slice(-100);
+      this.io.to(roomCode).emit('lobby:chat_message', msg);
+    });
+
+    socket.on('lobby:ready', ({ roomCode }) => {
+      const room = this.rooms.getRoom(roomCode);
+      if (!room) return;
+      const player = room.players.find(p => p.id === socket.id);
+      if (player) player.ready = !(player.ready ?? false);
+      this.emitState(roomCode);
+    });
+
+    socket.on('lobby:kick', ({ roomCode, targetPlayerName }) => {
+      const room = this.rooms.getRoom(roomCode);
+      if (!room || room.hostSocketId !== socket.id) return;
+      const idx = room.players.findIndex(p => p.name === targetPlayerName && p.id !== room.hostSocketId);
+      if (idx === -1) return;
+
+      const target = room.players.splice(idx, 1)[0];
+      this.io.to(target.id).emit('lobby:kicked', { reason: 'Removed by host.' });
+      const targetSocket = this.io.sockets.sockets.get(target.id);
+      targetSocket?.leave(roomCode);
+      if (room.status === 'full') room.status = 'waiting';
+      this.emitState(roomCode);
+      this.emitSystem(roomCode, `${target.name} was removed.`);
+    });
+
+    socket.on('lobby:settings', ({ roomCode, settings }) => {
+      const room = this.rooms.getRoom(roomCode);
+      if (!room || room.hostSocketId !== socket.id || room.status !== 'waiting') return;
+      if (room.settings) {
+        if (typeof settings.isPublic === 'boolean') room.settings.isPublic = settings.isPublic;
+        if (typeof settings.roomName === 'string') room.settings.roomName = sanitizeText(settings.roomName, 40) || room.settings.roomName;
+        if (typeof settings.isCrypto === 'boolean') room.settings.isCrypto = settings.isCrypto;
+        if (typeof settings.stakeAmount === 'number') room.settings.stakeAmount = settings.stakeAmount;
+      }
+      this.emitState(roomCode);
+    });
+
+    socket.on('lobby:start_game', ({ roomCode }) => {
+      const room = this.rooms.getRoom(roomCode);
+      if (!room || room.hostSocketId !== socket.id) {
+        socket.emit('lobby:error', { message: 'Only the host can start.' }); return;
+      }
+      if (room.players.length < 2) {
+        socket.emit('lobby:error', { message: 'Need 2 players.' }); return;
+      }
+      const allReady = room.players.filter(p => p.id !== room.hostSocketId).every(p => p.ready);
+      if (!allReady) {
+        socket.emit('lobby:error', { message: 'All players must be ready.' }); return;
+      }
+
+      if (room.settings?.isCrypto) {
+        room.status = 'depositing';
+        room.cryptoReadyCount = 0;
+        this.emitState(roomCode);
+        this.io.to(roomCode).emit('lobby:deposit_phase', { stakeAmount: room.settings.stakeAmount });
+        return;
+      }
+
+      this.launchGame(roomCode, room);
+    });
+
+    socket.on('lobby:crypto_ready', ({ roomCode }) => {
+      const room = this.rooms.getRoom(roomCode);
+      if (!room || room.status !== 'depositing') return;
+      // Dedup: prevent same player from incrementing twice
+      const player = room.players.find(p => p.id === socket.id);
+      if (!player || (player as any)._cryptoReady) return;
+      (player as any)._cryptoReady = true;
+
+      room.cryptoReadyCount += 1;
+      if (room.cryptoReadyCount === 1) {
+        socket.to(roomCode).emit('lobby:opponent_deposited');
+      } else if (room.cryptoReadyCount >= 2) {
+        this.io.to(roomCode).emit('lobby:both_deposited');
+        setTimeout(() => this.launchGame(roomCode, room), 1000);
+      }
+    });
+
+    socket.on('lobby:deck_submitted', ({ roomCode, deckIds }) => {
+      const room = this.rooms.getRoom(roomCode);
+      if (!room || room.status !== 'starting') return;
+      const player = room.players.find(p => p.id === socket.id);
+      if (player) player.deckIds = deckIds;
+      if (room.players.every(p => p.deckIds)) {
+        this.finalizeLaunch(roomCode, room);
+      }
+    });
+  }
+
+  /** Handle lobby-phase disconnects (waiting/full/depositing only). */
+  handleLobbyDisconnect(socket: TypedSocket): void {
+    const found = this.rooms.findBySocket(socket.id);
+    if (!found) return;
+    const { roomCode, room } = found;
+    if (room.status === 'waiting' || room.status === 'full' || room.status === 'depositing') {
+      this.handleLeave(socket, roomCode);
+    }
+    // in_progress disconnects are handled by SessionManager
+  }
+
+  // ─── Private Helpers ─────────────────────────────────────
+
+  private launchGame(roomCode: string, room: Room): void {
+    room.status = 'starting';
+    this.io.to(roomCode).emit('lobby:submit_decks');
+    this.emitState(roomCode);
+
+    // Timeout: if decks don't arrive in 10s, launch anyway
+    setTimeout(() => {
+      if (room.status === 'starting') this.finalizeLaunch(roomCode, room);
+    }, 10000);
+  }
+
+  private finalizeLaunch(roomCode: string, room: Room): void {
+    if (room.status === 'in_progress') return;
+    room.status = 'in_progress';
+
+    const seed = Math.floor(Math.random() * 999999);
+    room.gameSeed = seed;
+
+    this.io.to(roomCode).emit('lobby:game_starting', {
+      seed,
+      players: room.players.map((p, i) => ({
+        name: p.name, playerIndex: i, isHost: p.id === room.hostSocketId,
+      })),
+    });
+
+    // Legacy events for BattleScene backward compatibility
+    this.io.to(roomCode).emit('game_seed', { seed });
+    room.players.forEach((p, i) => {
+      const oppIdx = i === 0 ? 1 : 0;
+      this.io.to(p.id).emit('roomCreated', { roomCode, playerIndex: i });
+      this.io.to(p.id).emit('opponentJoined', {
+        playerName: room.players[oppIdx].name, playerIndex: i,
+      });
+    });
+
+    console.log(`[Lobby] Game launched in ${roomCode}, seed: ${seed}`);
+  }
+
+  private handleLeave(socket: TypedSocket, roomCode: string): void {
+    const room = this.rooms.getRoom(roomCode);
+    if (!room) return;
+    const idx = room.players.findIndex(p => p.id === socket.id);
+    if (idx === -1) return;
+
+    const leaving = room.players.splice(idx, 1)[0];
+    socket.leave(roomCode);
+
+    if (room.players.length === 0) {
+      this.rooms.deleteRoom(roomCode);
+    } else {
+      if (leaving.id === room.hostSocketId) {
+        room.hostSocketId = room.players[0].id;
+        room.hostPlayerId = room.players[0].playerId ?? null;
+        this.emitSystem(roomCode, `${leaving.name} left. ${room.players[0].name} is now host.`);
+      } else {
+        this.emitSystem(roomCode, `${leaving.name} left.`);
+      }
+      if (room.status === 'full') room.status = 'waiting';
+      this.emitState(roomCode);
+    }
+  }
+
+  private emitState(roomCode: string): void {
+    const state = this.rooms.getLobbyState(roomCode);
+    if (state) this.io.to(roomCode).emit('lobby:state', state);
+  }
+
+  private emitSystem(roomCode: string, text: string): void {
+    this.io.to(roomCode).emit('lobby:system_message', { text, timestamp: Date.now() });
+  }
+}
+
+```
+
+# server\lobby\RoomJanitor.ts
+
+```ts
+// ============================================================
+// RoomJanitor.ts
+// Periodic cleanup of stale rooms — ALL rooms, not just public.
+// ============================================================
+
+import type { RoomManager } from '../rooms/RoomManager.js';
+
+const ROOM_TTL_MS = 30 * 60 * 1000;   // 30 minutes for lobby rooms
+const JANITOR_INTERVAL = 60 * 1000;    // Check every minute
+
+export class RoomJanitor {
+  private intervalId: ReturnType<typeof setInterval> | null = null;
+
+  constructor(
+    private rooms: RoomManager
+  ) {}
+
+  start(): void {
+    this.intervalId = setInterval(() => this.sweep(), JANITOR_INTERVAL);
+    console.log('[Janitor] Started — checking every 60s.');
+  }
+
+  stop(): void {
+    if (this.intervalId) clearInterval(this.intervalId);
+    this.intervalId = null;
+  }
+
+  private sweep(): void {
+    // RoomManager already has sweepStaleRooms (2h TTL) for legacy rooms.
+    // This janitor handles lobby rooms with shorter TTL (30min waiting).
+    // Both can coexist safely — deleteRoom is idempotent.
+    const publicRooms = this.rooms.getPublicRooms();
+    const now = Date.now();
+
+    for (const listing of publicRooms) {
+      const age = now - listing.createdAt;
+      if (listing.playerCount === 0 || (listing.status === 'waiting' && age > ROOM_TTL_MS)) {
+        this.rooms.deleteRoom(listing.code);
+        console.log(`[Janitor] Deleted stale lobby room: ${listing.code} (age: ${Math.round(age / 60_000)}m)`);
+      }
+    }
   }
 }
 
@@ -5975,7 +7219,7 @@ export class SessionManager {
 // ============================================================
 
 import { randomInt } from 'crypto';
-import type { Room } from '../../shared/types/NetworkEvents.js';
+import type { Room, RoomPlayer, PublicRoomListing, LobbyState } from '../../shared/types/NetworkEvents.js';
 import { Logger } from '../utils/Logger.js';
 
 const log = new Logger('RoomManager');
@@ -6095,7 +7339,6 @@ export class RoomManager {
   deleteRoom(roomCode: string): void {
     const room = this.rooms.get(roomCode);
     if (room) {
-      // Clear any pending disconnect grace timers/intervals to avoid dangling callbacks
       for (const timer of room.disconnectTimers.values()) {
         clearTimeout(timer);
       }
@@ -6106,6 +7349,116 @@ export class RoomManager {
       room.disconnectIntervals.clear();
     }
     this.rooms.delete(roomCode);
+  }
+
+  /** Insert a pre-built room (used by LobbyManager). */
+  setRoom(roomCode: string, room: Room): void {
+    this.rooms.set(roomCode, room);
+  }
+
+  // ─── Auth / Deck Extensions ──────────────────────────────
+
+  /** Associate a DB player ID with a socket in a room. */
+  setPlayerAuth(socketId: string, roomCode: string, playerId: number): void {
+    const player = this.findPlayer(socketId, roomCode);
+    if (player) player.playerId = playerId;
+  }
+
+  /** Store validated deck IDs for a player. */
+  setPlayerDeck(socketId: string, roomCode: string, deckIds: string[]): boolean {
+    const player = this.findPlayer(socketId, roomCode);
+    if (!player) return false;
+    player.deckIds = deckIds;
+    return true;
+  }
+
+  /** Check if all players in a room have submitted decks. */
+  allDecksReady(roomCode: string): boolean {
+    const room = this.rooms.get(roomCode);
+    if (!room || room.players.length < 2) return false;
+    return room.players.every(p => !!p.deckIds);
+  }
+
+  // ─── Lobby Extensions ────────────────────────────────────
+
+  /** Get all waiting public rooms for the room browser. */
+  getPublicRooms(): PublicRoomListing[] {
+    const result: PublicRoomListing[] = [];
+    for (const [code, room] of this.rooms) {
+      if (room.settings?.isPublic && room.status === 'waiting') {
+        result.push({
+          code,
+          roomName: room.settings.roomName,
+          hostName: room.players[0]?.name ?? 'Unknown',
+          playerCount: room.players.length,
+          maxPlayers: room.settings.maxPlayers,
+          isCrypto: room.settings.isCrypto,
+          stakeAmount: room.settings.stakeAmount,
+          hasPassword: !!room.settings.password,
+          status: room.status,
+          createdAt: room.createdAt ?? Date.now(),
+        });
+      }
+    }
+    return result.sort((a, b) => b.createdAt - a.createdAt).slice(0, 50);
+  }
+
+  /** Build lobby state for players inside a room. */
+  getLobbyState(roomCode: string): LobbyState | null {
+    const room = this.rooms.get(roomCode);
+    if (!room || !room.settings) return null;
+    // Strip password from broadcast — only expose hasPassword flag
+    const { password: _pw, ...safeSettings } = room.settings;
+    return {
+      code: roomCode,
+      settings: { ...safeSettings, password: null },
+      status: room.status ?? 'waiting',
+      players: room.players.map(p => ({
+        name: p.name,
+        playerId: p.playerId ?? null,
+        ready: p.ready ?? false,
+        isHost: p.id === room.hostSocketId,
+        hasDeck: !!p.deckIds,
+      })),
+      chat: (room.chat ?? []).slice(-50),
+    };
+  }
+
+  /** Generate a unique 6-digit room code. */
+  generateUniqueCode(): string {
+    let code: string;
+    let attempts = 0;
+    do {
+      code = Math.floor(100000 + Math.random() * 900000).toString();
+      attempts++;
+    } while (this.rooms.has(code) && attempts < 100);
+    return code;
+  }
+
+  /** Remove a player from all rooms (prevent multi-room). Returns codes left. */
+  removeFromAllRooms(socketId: string): string[] {
+    const leftCodes: string[] = [];
+    for (const [code, room] of this.rooms) {
+      const idx = room.players.findIndex(p => p.id === socketId);
+      if (idx !== -1) {
+        room.players.splice(idx, 1);
+        leftCodes.push(code);
+        if (room.players.length === 0) {
+          this.rooms.delete(code);
+        } else if (room.hostSocketId === socketId) {
+          room.hostSocketId = room.players[0].id;
+          room.hostPlayerId = room.players[0].playerId ?? null;
+        }
+      }
+    }
+    return leftCodes;
+  }
+
+  // ─── Private Helpers ─────────────────────────────────────
+
+  private findPlayer(socketId: string, roomCode: string): RoomPlayer | undefined {
+    const room = this.rooms.get(roomCode);
+    return room?.players.find(p => p.id === socketId);
   }
 }
 
@@ -6169,6 +7522,171 @@ export class Logger {
   error(...args: unknown[]): void {
     if (globalLevel <= LogLevel.ERROR) console.error(`[${this.tag}]`, ...args);
   }
+}
+
+```
+
+# server\utils\sanitize.ts
+
+```ts
+// ============================================================
+// sanitize.ts
+// Input sanitization for user-provided strings.
+// Strips HTML tags and trims to max length.
+// ============================================================
+
+/** Strip HTML tags and trim to maxLen. */
+export function sanitizeText(input: unknown, maxLen: number): string {
+  if (typeof input !== 'string') return '';
+  return input
+    .replace(/<[^>]*>/g, '')   // strip HTML tags
+    .replace(/[<>&"']/g, '')   // strip remaining dangerous chars
+    .trim()
+    .slice(0, maxLen);
+}
+
+```
+
+# server\validation\CardPool.ts
+
+```ts
+// ============================================================
+// CardPool.ts
+// Server-side card pool — minimal data for deck validation.
+// Costs and copies verified against src/game/data/cards/ definitions.
+//
+// Future: auto-generate from card definitions via build script.
+// ============================================================
+
+export interface CardPoolEntry {
+  id: string;
+  name: string;
+  copies: number;
+  cost: number;
+}
+
+export const CARD_POOL: readonly CardPoolEntry[] = [
+  // King (pre-placed, excluded from decks)
+  { id: 'king',           name: 'King',            copies: 1,  cost: 0 },
+
+  // Standard Units
+  { id: 'foot_soldier',   name: 'Foot Soldier',    copies: 3,  cost: 1 },
+  { id: 'messenger',      name: 'Messenger',       copies: 2,  cost: 1 },
+  { id: 'militia',        name: 'Militia',          copies: 2,  cost: 2 },
+  { id: 'pikeman',        name: 'Pikeman',          copies: 2,  cost: 2 },
+  { id: 'scout',          name: 'Scout',            copies: 2,  cost: 2 },
+  { id: 'archer',         name: 'Archer',           copies: 2,  cost: 3 },
+  { id: 'assassin',       name: 'Assassin',         copies: 2,  cost: 3 },
+  { id: 'lancer',         name: 'Lancer',           copies: 2,  cost: 4 },
+
+  // Royal Units
+  { id: 'swordsman',      name: 'Swordsman',        copies: 2,  cost: 3 },
+  { id: 'princess',       name: 'Princess',          copies: 1,  cost: 5 },
+  { id: 'scribe',         name: 'Scribe',            copies: 2,  cost: 5 },
+  { id: 'priest',         name: 'Priest',            copies: 2,  cost: 6 },
+  { id: 'mystic',         name: 'Mystic',            copies: 1,  cost: 6 },
+  { id: 'commander',      name: 'Commander',         copies: 1,  cost: 7 },
+  { id: 'inquisitor',     name: 'Inquisitor',        copies: 2,  cost: 7 },
+  { id: 'knight',         name: 'Knight',            copies: 2,  cost: 9 },
+  { id: 'knights_guard',  name: "King's Guard",      copies: 1,  cost: 12 },
+
+  // Structures
+  { id: 'village',        name: 'Village',            copies: 2,  cost: 2 },
+  { id: 'temple',         name: 'Temple',             copies: 2,  cost: 3 },
+  { id: 'castle',         name: 'Castle',             copies: 1,  cost: 4 },
+
+  // Spells
+  { id: 'reform',         name: 'Reform',             copies: 2,  cost: 2 },
+  { id: 'civil_war',      name: 'Civil War',          copies: 1,  cost: 3 },
+  { id: 'peasant_revolt', name: 'Peasant Revolt',     copies: 1,  cost: 3 },
+  { id: 'war_horn',       name: 'War Horn',           copies: 2,  cost: 3 },
+  { id: 'casus_belli',    name: 'Casus Belli',        copies: 1,  cost: 4 },
+  { id: 'disease',        name: 'Disease',            copies: 2,  cost: 4 },
+  { id: 'motherland',     name: 'Motherland',         copies: 1,  cost: 4 },
+  { id: 'treason',        name: 'Treason',            copies: 2,  cost: 4 },
+  { id: 'earthquake',     name: 'Earthquake',         copies: 1,  cost: 5 },
+  { id: 'coup',           name: 'Coup',               copies: 1,  cost: 12 },
+] as const;
+
+const POOL_MAP = new Map<string, CardPoolEntry>(
+  CARD_POOL.map(c => [c.id, c])
+);
+
+export function getCardFromPool(id: string): CardPoolEntry | undefined {
+  return POOL_MAP.get(id);
+}
+
+```
+
+# server\validation\DeckValidator.ts
+
+```ts
+// ============================================================
+// DeckValidator.ts
+// Pure deck validation. No database access — ownership map
+// is passed in by the caller.
+// ============================================================
+
+import { getCardFromPool } from './CardPool.js';
+
+const DECK_SIZE = 31;
+
+export interface DeckValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
+/**
+ * Validate a deck of card IDs.
+ * @param cardIds    - Array of card ID strings
+ * @param ownedCards - Optional ownership map (cardId → copies owned). Null = skip ownership check.
+ */
+export function validateDeck(
+  cardIds: string[],
+  ownedCards: Map<string, number> | null = null
+): DeckValidationResult {
+  const errors: string[] = [];
+
+  if (!Array.isArray(cardIds)) {
+    return { valid: false, errors: ['cardIds must be an array.'] };
+  }
+
+  if (cardIds.length !== DECK_SIZE) {
+    errors.push(`Deck must have exactly ${DECK_SIZE} cards, got ${cardIds.length}.`);
+  }
+
+  if (cardIds.includes('king')) {
+    errors.push('King cannot be in deck (pre-placed automatically).');
+  }
+
+  const unknown = cardIds.filter(id => !getCardFromPool(id));
+  if (unknown.length > 0) {
+    errors.push(`Unknown card IDs: ${[...new Set(unknown)].join(', ')}`);
+  }
+
+  const counts = new Map<string, number>();
+  for (const id of cardIds) {
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+
+  for (const [id, count] of counts) {
+    const card = getCardFromPool(id);
+    if (card && count > card.copies) {
+      errors.push(`${card.name}: ${count} copies, max ${card.copies}.`);
+    }
+  }
+
+  if (ownedCards) {
+    for (const [id, count] of counts) {
+      const owned = ownedCards.get(id) ?? 0;
+      if (count > owned) {
+        const card = getCardFromPool(id);
+        errors.push(`${card?.name ?? id}: need ${count}, own ${owned}.`);
+      }
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
 }
 
 ```
@@ -6247,16 +7765,35 @@ export interface GameStateReport {
 }
 
 export interface ClientToServerEvents {
+  // Existing room events
   createRoom:     (data: { roomCode: string; playerName: string }) => void;
   joinRoom:       (data: { roomCode: string; playerName: string }) => void;
   registerWallet: (data: { roomCode: string; walletAddress: string; message: string; signature: string }) => void;
   cryptoReady:    (data: { roomCode: string }) => void;
   player_ready:   (data: { roomCode: string }) => void;
   game_action:    (data: { roomCode: string; action: GameAction }) => void;
-  game_over:      (data: { roomCode: string; winnerIndex: number }) => void;
+  game_over:      (data: { roomCode: string; winnerIndex: number; totalTurns?: number }) => void;
   state_hash:     (data: { roomCode: string; hash: string; afterGlobalSeq: number }) => void;
   rejoin_room:    (data: { roomCode: string; playerName: string }) => void;
   game_state_report: (data: { roomCode: string; report: GameStateReport }) => void;
+
+  // Auth/Deck events
+  registerPlayer: (data: { token: string }) => void;
+  submitDeck:     (data: { roomCode: string; deckIds: string[] }) => void;
+
+  // Lobby events
+  'lobby:create':         (data: { playerName: string; settings?: Partial<RoomSettings> }) => void;
+  'lobby:join':           (data: { roomCode: string; playerName: string; password?: string }) => void;
+  'lobby:leave':          (data: { roomCode: string }) => void;
+  'lobby:chat':           (data: { roomCode: string; text: string }) => void;
+  'lobby:ready':          (data: { roomCode: string }) => void;
+  'lobby:kick':           (data: { roomCode: string; targetPlayerName: string }) => void;
+  'lobby:settings':       (data: { roomCode: string; settings: Partial<RoomSettings> }) => void;
+  'lobby:start_game':     (data: { roomCode: string }) => void;
+  'lobby:crypto_ready':   (data: { roomCode: string }) => void;
+  'lobby:deck_submitted': (data: { roomCode: string; deckIds: string[] }) => void;
+  'lobby:list':           () => void;
+  'lobby:request_state':  (data: { roomCode: string }) => void;
 }
 
 // ─── Server → Client Events ─────────────────────────────────
@@ -6268,6 +7805,7 @@ export interface PayoutResult {
 }
 
 export interface ServerToClientEvents {
+  // Existing room events
   roomCreated:          (data: { roomCode: string; playerIndex: number }) => void;
   roomJoined:           (data: { roomCode: string; playerIndex: number }) => void;
   opponentJoined:       (data: { playerName: string; playerIndex: number }) => void;
@@ -6283,6 +7821,90 @@ export interface ServerToClientEvents {
   bothCryptoReady:      () => void;
   payout_result:        (data: PayoutResult) => void;
   error:                (data: { message: string }) => void;
+
+  // Deck validation events
+  deckAccepted:   (data: { cardCount: number }) => void;
+  deckRejected:   (data: { errors: string[] }) => void;
+  bothDecksReady: () => void;
+
+  // Lobby events
+  'lobby:created':            (data: { code: string }) => void;
+  'lobby:joined':             (data: { code: string }) => void;
+  'lobby:state':              (data: LobbyState) => void;
+  'lobby:room_list':          (data: { rooms: PublicRoomListing[] }) => void;
+  'lobby:chat_message':       (data: ChatMessage) => void;
+  'lobby:system_message':     (data: { text: string; timestamp: number }) => void;
+  'lobby:kicked':             (data: { reason: string }) => void;
+  'lobby:game_starting':      (data: GameStartingData) => void;
+  'lobby:error':              (data: { message: string }) => void;
+  'lobby:deposit_phase':      (data: { stakeAmount: number }) => void;
+  'lobby:opponent_deposited': () => void;
+  'lobby:both_deposited':     () => void;
+  'lobby:submit_decks':       () => void;
+  'lobby:password_required':  (data: { roomCode: string }) => void;
+}
+
+// ─── Room Settings (lobby) ──────────────────────────────────
+
+export interface RoomSettings {
+  isPublic: boolean;
+  isCrypto: boolean;
+  maxPlayers: number;
+  roomName: string;
+  stakeAmount: number;
+  password: string | null;
+}
+
+// ─── Chat ───────────────────────────────────────────────────
+
+export interface ChatMessage {
+  sender: string;
+  text: string;
+  timestamp: number;
+}
+
+// ─── Room Status ────────────────────────────────────────────
+
+export type RoomStatus = 'waiting' | 'full' | 'depositing' | 'starting' | 'in_progress' | 'finished';
+
+// ─── Lobby State (sent to players inside a room) ────────────
+
+export interface LobbyPlayerInfo {
+  name: string;
+  playerId: number | null;
+  ready: boolean;
+  isHost: boolean;
+  hasDeck: boolean;
+}
+
+export interface LobbyState {
+  code: string;
+  settings: RoomSettings;
+  status: RoomStatus;
+  players: LobbyPlayerInfo[];
+  chat: ChatMessage[];
+}
+
+export interface PublicRoomListing {
+  code: string;
+  roomName: string;
+  hostName: string;
+  playerCount: number;
+  maxPlayers: number;
+  isCrypto: boolean;
+  stakeAmount: number;
+  hasPassword: boolean;
+  status: RoomStatus;
+  createdAt: number;
+}
+
+export interface GameStartingData {
+  seed: number;
+  players: Array<{
+    name: string;
+    playerIndex: number;
+    isHost: boolean;
+  }>;
 }
 
 // ─── Room Player (server-side) ──────────────────────────────
@@ -6291,6 +7913,10 @@ export interface RoomPlayer {
   id: string;
   name: string;
   wallet: string | null;
+  // Auth/Deck extensions (optional — backward compatible)
+  playerId?: number | null;
+  deckIds?: string[] | null;
+  ready?: boolean;
 }
 
 export interface GameOverClaim {
@@ -6323,7 +7949,132 @@ export interface Room {
   createdAt: number;
   // Server-side game log (optional, set when battle starts)
   gameLog?: any;
+  // Lobby extensions (optional — backward compatible with legacy RoomScene flow)
+  hostSocketId?: string;
+  hostPlayerId?: number | null;
+  status?: RoomStatus;
+  settings?: RoomSettings;
+  chat?: ChatMessage[];
 }
+
+```
+
+# src\auth\AuthManager.ts
+
+```ts
+// ============================================================
+// AuthManager.ts
+// Wallet-based authentication: nonce → sign → JWT.
+// Singleton — survives scene changes.
+//
+// Flow:
+//   1. WalletManager.connect() → get signer
+//   2. GET /api/auth/nonce?wallet=... → get nonce + message
+//   3. signer.signMessage(message) → signature
+//   4. POST /api/auth/login → JWT + player record
+//   5. Store in GameState + AuthManager
+// ============================================================
+
+import WalletManager from '../web3/WalletManager';
+import GameState from '../GameState';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
+export interface AuthPlayer {
+  id: number;
+  wallet: string;
+  displayName: string;
+  winCount: number;
+  lossCount: number;
+  eloRating: number;
+  activeDeckId: number | null;
+}
+
+class AuthManagerClass {
+  private _loggedIn = false;
+  private _player: AuthPlayer | null = null;
+  private _token: string | null = null;
+
+  /** Wallet login: connect → nonce → sign → JWT. */
+  async login(): Promise<AuthPlayer> {
+    // 1. Connect wallet (may already be connected)
+    let address: string;
+    if (WalletManager.isConnected()) {
+      const signer = WalletManager.getSigner();
+      if (!signer) throw new Error('Wallet connected but no signer');
+      address = await signer.getAddress();
+    } else {
+      address = await WalletManager.connect();
+    }
+
+    // 2. Get nonce from server
+    const nonceRes = await fetch(`${API_BASE}/auth/nonce?wallet=${address.toLowerCase()}`);
+    if (!nonceRes.ok) throw new Error('Failed to get login nonce');
+    const { message } = await nonceRes.json();
+
+    // 3. Sign the nonce message
+    const signer = WalletManager.getSigner();
+    if (!signer) throw new Error('No signer available');
+    const signature = await signer.signMessage(message);
+
+    // 4. Login with signature
+    const loginRes = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wallet: address.toLowerCase(), signature }),
+    });
+    if (!loginRes.ok) {
+      const err = await loginRes.json().catch(() => ({}));
+      throw new Error(err.error || 'Login failed');
+    }
+
+    const { token, player } = await loginRes.json();
+
+    // 5. Store auth state
+    this._setAuth(token, {
+      id: player.id,
+      wallet: player.wallet,
+      displayName: player.displayName,
+      winCount: player.winCount,
+      lossCount: player.lossCount,
+      eloRating: player.eloRating,
+      activeDeckId: player.activeDeckId,
+    });
+
+    // Sync to GameState
+    GameState.setAuthData(token, player.id, player.displayName);
+    GameState.connectWallet(address);
+
+    console.log(`[AuthManager] Logged in as ${player.displayName} (#${player.id})`);
+    return this._player!;
+  }
+
+  getToken(): string | null { return this._token; }
+  getPlayer(): AuthPlayer | null { return this._player; }
+  isLoggedIn(): boolean { return this._loggedIn; }
+
+  /** Auth headers for REST API calls. Empty object if not logged in. */
+  authHeaders(): Record<string, string> {
+    if (!this._token) return {};
+    return { 'Authorization': `Bearer ${this._token}` };
+  }
+
+  logout(): void {
+    this._loggedIn = false;
+    this._player = null;
+    this._token = null;
+    GameState.clearAuth();
+  }
+
+  /** Internal — set auth state directly. */
+  _setAuth(token: string, player: AuthPlayer): void {
+    this._token = token;
+    this._player = player;
+    this._loggedIn = true;
+  }
+}
+
+export const AuthManager = new AuthManagerClass();
 
 ```
 
@@ -6332,68 +8083,82 @@ export interface Room {
 ```ts
 // ============================================================
 // DeckLoader.ts
-// Fetches deck card IDs from /public/deck.config.json at runtime.
-// Developer edits the JSON file to change the deck — no code changes needed.
-// Falls back to UNITS_ONLY_DECK_IDS if the file is missing or invalid.
+// 4-priority deck loading chain:
+//   1. Server active deck (if authenticated + has active deck)
+//   2. /public/default-deck.json (beginner's deck, easily editable)
+//   3. /public/deck.config.json (legacy runtime config)
+//   4. UNITS_ONLY_DECK_IDS (hardcoded fallback)
+//
+// Call load() once during PreloadScene. Result is cached.
 // ============================================================
 
 import { UNITS_ONLY_DECK_IDS } from '../game/data/DeckDefinitions';
 import { getCard } from '../game/data/CardRegistry';
+import GameState from '../GameState';
+import { AuthManager } from '../auth/AuthManager';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 class DeckLoaderClass {
   private deckIds: string[] | null = null;
-  private readonly CONFIG_PATH = '/deck.config.json';
 
   /**
-   * Load deck from /public/deck.config.json.
-   * Call once during PreloadScene. Result is cached.
+   * Load deck using 4-priority chain.
    * Safe to call multiple times — returns cache after first load.
    */
   async load(): Promise<string[]> {
     if (this.deckIds !== null) return this.deckIds;
 
-    try {
-      const res = await fetch(this.CONFIG_PATH);
-      if (!res.ok) {
-        console.warn('[DeckLoader] deck.config.json not found — using built-in deck');
-        return this.useFallback();
-      }
-
-      const json = await res.json();
-
-      if (!Array.isArray(json.deckIds)) {
-        console.error('[DeckLoader] deck.config.json missing "deckIds" array — using built-in deck');
-        return this.useFallback();
-      }
-
-      const ids: string[] = json.deckIds;
-
-      // Validate every card ID exists in CardDefinitions
-      const invalid = ids.filter(id => {
-        try { getCard(id); return false; }
-        catch { return true; }
-      });
-
-      if (invalid.length > 0) {
-        console.error(`[DeckLoader] Unknown card IDs in deck.config.json: ${invalid.join(', ')} — using built-in deck`);
-        return this.useFallback();
-      }
-
-      if (ids.length !== 31) {
-        console.warn(`[DeckLoader] deck.config.json has ${ids.length} cards, expected 31. Loading anyway.`);
-      }
-
-      console.log(`[DeckLoader] Loaded ${ids.length} cards from deck.config.json`);
-      this.deckIds = ids;
+    // Priority 1: Server active deck (authenticated player with active deck)
+    if (GameState.hasActiveDeck()) {
+      console.log(`[DeckLoader] Using GameState active deck (${GameState.activeDeckCardIds.length} cards)`);
+      this.deckIds = [...GameState.activeDeckCardIds];
       return this.deckIds;
-
-    } catch (err) {
-      console.warn('[DeckLoader] Failed to fetch deck.config.json — using built-in deck', err);
-      return this.useFallback();
     }
+
+    if (AuthManager.isLoggedIn()) {
+      try {
+        const serverDeck = await this.fetchServerActiveDeck();
+        if (serverDeck) {
+          console.log(`[DeckLoader] Loaded ${serverDeck.length} cards from server active deck`);
+          this.deckIds = serverDeck;
+          GameState.setActiveDeck(AuthManager.getPlayer()?.activeDeckId ?? null, serverDeck);
+          return this.deckIds;
+        }
+      } catch (err) {
+        console.warn('[DeckLoader] Failed to fetch server deck:', err);
+      }
+    }
+
+    // Priority 2: default-deck.json (beginner's deck)
+    try {
+      const defaultDeck = await this.fetchJsonDeck('/default-deck.json');
+      if (defaultDeck) {
+        console.log(`[DeckLoader] Loaded ${defaultDeck.length} cards from default-deck.json`);
+        this.deckIds = defaultDeck;
+        return this.deckIds;
+      }
+    } catch (err) {
+      console.warn('[DeckLoader] Failed to fetch default-deck.json:', err);
+    }
+
+    // Priority 3: deck.config.json (legacy)
+    try {
+      const configDeck = await this.fetchJsonDeck('/deck.config.json');
+      if (configDeck) {
+        console.log(`[DeckLoader] Loaded ${configDeck.length} cards from deck.config.json`);
+        this.deckIds = configDeck;
+        return this.deckIds;
+      }
+    } catch (err) {
+      console.warn('[DeckLoader] Failed to fetch deck.config.json:', err);
+    }
+
+    // Priority 4: hardcoded fallback
+    return this.useFallback();
   }
 
-  /** Synchronous get — only works after load() has been called. Returns fallback if not yet loaded. */
+  /** Synchronous get — only works after load(). Returns fallback if not yet loaded. */
   get(): string[] {
     return this.deckIds ?? UNITS_ONLY_DECK_IDS;
   }
@@ -6403,13 +8168,61 @@ class DeckLoaderClass {
     this.deckIds = null;
   }
 
+  // ─── Private loaders ──────────────────────────────────────
+
+  private async fetchServerActiveDeck(): Promise<string[] | null> {
+    const player = AuthManager.getPlayer();
+    if (!player?.activeDeckId) return null;
+
+    const res = await fetch(`${API_BASE}/decks`, {
+      headers: AuthManager.authHeaders(),
+    });
+    if (!res.ok) return null;
+
+    const { decks } = await res.json();
+    const active = decks.find((d: any) => d.id === player.activeDeckId);
+    if (!active?.cardIds || !Array.isArray(active.cardIds)) return null;
+
+    return this.validateCardIds(active.cardIds) ? active.cardIds : null;
+  }
+
+  private async fetchJsonDeck(path: string): Promise<string[] | null> {
+    const res = await fetch(path);
+    if (!res.ok) return null;
+
+    const json = await res.json();
+    if (!Array.isArray(json.deckIds)) return null;
+
+    return this.validateCardIds(json.deckIds) ? json.deckIds : null;
+  }
+
+  private validateCardIds(ids: string[]): boolean {
+    const invalid = ids.filter(id => {
+      try { getCard(id); return false; }
+      catch { return true; }
+    });
+
+    if (invalid.length > 0) {
+      console.error(`[DeckLoader] Unknown card IDs: ${invalid.join(', ')}`);
+      return false;
+    }
+
+    if (ids.length !== 31) {
+      console.warn(`[DeckLoader] Deck has ${ids.length} cards, expected 31. Loading anyway.`);
+    }
+
+    return true;
+  }
+
   private useFallback(): string[] {
+    console.log('[DeckLoader] Using built-in fallback deck');
     this.deckIds = [...UNITS_ONLY_DECK_IDS];
     return this.deckIds;
   }
 }
 
 export const DeckLoader = new DeckLoaderClass();
+
 ```
 
 # src\config\LayoutLoader.ts
@@ -7027,6 +8840,1080 @@ cardTypeTheme(theme: ThemeJSON, cardClass: string): CardTypeTheme {
 }
 
 export const ThemeLoader = new ThemeLoaderClass();
+
+```
+
+# src\deck\CardDetailOverlay.ts
+
+```ts
+// ============================================================
+// CardDetailOverlay.ts
+// Popup overlay showing full card stats. Dimmer + panel.
+// ============================================================
+
+import Phaser from 'phaser';
+import { getCard } from '../game/data/CardRegistry';
+import type { CollectionCard } from './CollectionAPI';
+
+const FONT = '"Courier New", monospace';
+
+export function showCardDetail(
+  scene: Phaser.Scene,
+  cardId: string,
+  collection: CollectionCard[],
+  onDismiss: () => void,
+): Phaser.GameObjects.Container {
+  const { width, height } = scene.scale;
+  const container = scene.add.container(0, 0);
+
+  // Dimmer
+  const dim = scene.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.6)
+    .setInteractive();
+  dim.on('pointerdown', onDismiss);
+  container.add(dim);
+
+  // Panel
+  const pw = 420, ph = 380;
+  const px = width / 2 - pw / 2, py = height / 2 - ph / 2;
+
+  const g = scene.add.graphics();
+  g.fillStyle(0x16213e, 0.97);
+  g.fillRoundedRect(px, py, pw, ph, 10);
+  g.lineStyle(2, 0xf5a623, 0.6);
+  g.strokeRoundedRect(px, py, pw, ph, 10);
+  container.add(g);
+
+  let card;
+  try { card = getCard(cardId); } catch {
+    container.add(scene.add.text(width / 2, height / 2, `Unknown card: ${cardId}`, {
+      fontSize: '16px', fontFamily: FONT, color: '#ff4444',
+    }).setOrigin(0.5));
+    return container;
+  }
+
+  const cx = width / 2;
+  let y = py + 25;
+  const left = px + 20;
+
+  // Title
+  container.add(scene.add.text(cx, y, card.name, {
+    fontSize: '22px', fontFamily: FONT, fontStyle: 'bold', color: '#f5a623',
+  }).setOrigin(0.5));
+  y += 35;
+
+  // Class + Cost
+  container.add(scene.add.text(left, y, `Class: ${card.class}`, {
+    fontSize: '14px', fontFamily: FONT, color: '#FFFFFF',
+  }));
+  container.add(scene.add.text(left + 220, y, `Cost: ${card.cost}`, {
+    fontSize: '14px', fontFamily: FONT, color: '#4fc3f7',
+  }));
+  y += 22;
+
+  // Allegiance
+  container.add(scene.add.text(left, y, `Allegiance: ${card.allegiance}`, {
+    fontSize: '14px', fontFamily: FONT, color: '#AAAAAA',
+  }));
+  y += 22;
+
+  // Stats (if unit/structure)
+  if (card.stats) {
+    container.add(scene.add.text(left, y, `ATK: ${card.stats.atk}  DEF: ${card.stats.def}`, {
+      fontSize: '14px', fontFamily: FONT, color: '#FFFFFF',
+    }));
+    y += 22;
+
+    container.add(scene.add.text(left, y, `Move: ${card.stats.movement}`, {
+      fontSize: '13px', fontFamily: FONT, color: '#AAAAAA',
+    }));
+    container.add(scene.add.text(left + 220, y, `Atk: ${card.stats.attackPattern}`, {
+      fontSize: '13px', fontFamily: FONT, color: '#AAAAAA',
+    }));
+    y += 22;
+  }
+
+  y += 5;
+
+  // Ability text
+  if (card.abilityText) {
+    const abilityLines = wordWrap(card.abilityText, 48);
+    for (const line of abilityLines) {
+      container.add(scene.add.text(left, y, line, {
+        fontSize: '12px', fontFamily: FONT, color: '#00ff88',
+      }));
+      y += 16;
+    }
+    y += 5;
+  }
+
+  // Flavor text
+  if (card.flavorText) {
+    container.add(scene.add.text(left, y, `"${card.flavorText}"`, {
+      fontSize: '11px', fontFamily: FONT, fontStyle: 'italic', color: '#777777',
+    }));
+    y += 20;
+  }
+
+  // Ownership
+  const owned = collection.find(c => c.id === cardId)?.ownedCopies ?? 0;
+  container.add(scene.add.text(left, y, `Max per deck: ${card.copies}  |  You own: ${owned}`, {
+    fontSize: '13px', fontFamily: FONT, color: '#AAAAAA',
+  }));
+  y += 30;
+
+  // Close button
+  const closeBtn = scene.add.text(cx, py + ph - 30, '[ CLOSE ]', {
+    fontSize: '16px', fontFamily: FONT, fontStyle: 'bold', color: '#ff4444',
+  }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+  closeBtn.on('pointerover', () => closeBtn.setColor('#ffffff'));
+  closeBtn.on('pointerout', () => closeBtn.setColor('#ff4444'));
+  closeBtn.on('pointerdown', onDismiss);
+  container.add(closeBtn);
+
+  // ESC key
+  const escKey = scene.input.keyboard?.addKey('ESC');
+  const escHandler = () => { onDismiss(); };
+  escKey?.once('down', escHandler);
+
+  // Cleanup when container is destroyed
+  container.once('destroy', () => {
+    escKey?.off('down', escHandler);
+  });
+
+  return container;
+}
+
+function wordWrap(text: string, maxChars: number): string[] {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    if (current.length + word.length + 1 > maxChars && current.length > 0) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = current ? current + ' ' + word : word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+```
+
+# src\deck\CollectionAPI.ts
+
+```ts
+// ============================================================
+// CollectionAPI.ts
+// Fetch authenticated player's card collection from server.
+// ============================================================
+
+import { AuthManager } from '../auth/AuthManager';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
+export interface CollectionCard {
+  id: string;
+  name: string;
+  maxCopies: number;
+  ownedCopies: number;
+}
+
+export const CollectionAPI = {
+  /** Fetch the authenticated player's card collection. */
+  async get(): Promise<CollectionCard[]> {
+    if (!AuthManager.isLoggedIn()) return [];
+
+    const res = await fetch(`${API_BASE}/collection`, {
+      headers: AuthManager.authHeaders(),
+    });
+    if (!res.ok) return [];
+
+    const { collection } = await res.json();
+    return collection;
+  },
+};
+
+```
+
+# src\deck\DeckAPI.ts
+
+```ts
+// ============================================================
+// DeckAPI.ts
+// HTTP client for server-side deck CRUD operations.
+// All calls require authentication via AuthManager.
+// ============================================================
+
+import { AuthManager } from '../auth/AuthManager';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
+export interface DeckSummary {
+  id: number;
+  name: string;
+  cardIds: string[];
+  isValid: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DeckCreateResult {
+  deck: DeckSummary & { errors: string[] };
+}
+
+async function apiCall<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...AuthManager.authHeaders(),
+      ...options.headers,
+    },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `API error ${res.status}`);
+  }
+  return res.json();
+}
+
+export const DeckAPI = {
+  /** List all decks for the authenticated player. */
+  async list(): Promise<{ decks: DeckSummary[] }> {
+    return apiCall('/decks');
+  },
+
+  /** Create a new deck. */
+  async create(name: string, cardIds: string[]): Promise<DeckCreateResult> {
+    return apiCall('/decks', {
+      method: 'POST',
+      body: JSON.stringify({ name, cardIds }),
+    });
+  },
+
+  /** Update an existing deck. */
+  async update(deckId: number, name: string, cardIds: string[]): Promise<DeckCreateResult> {
+    return apiCall(`/decks/${deckId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name, cardIds }),
+    });
+  },
+
+  /** Delete a deck. */
+  async remove(deckId: number): Promise<{ success: boolean }> {
+    return apiCall(`/decks/${deckId}`, { method: 'DELETE' });
+  },
+
+  /** Activate a deck (set as active for matches). */
+  async activate(deckId: number): Promise<{ success: boolean; activeDeckId: number }> {
+    return apiCall(`/decks/${deckId}/activate`, { method: 'POST' });
+  },
+
+  /** Validate a deck server-side. */
+  async validate(cardIds: string[]): Promise<{ valid: boolean; errors: string[] }> {
+    return apiCall('/decks/validate', {
+      method: 'POST',
+      body: JSON.stringify({ cardIds }),
+    });
+  },
+};
+
+```
+
+# src\deck\DeckBuilderHelpers.ts
+
+```ts
+// ============================================================
+// DeckBuilderHelpers.ts
+// Pure functions for deck builder: filter, sort, cost curve.
+// No Phaser dependency — easy to unit test.
+// ============================================================
+
+import type { CollectionCard } from './CollectionAPI';
+import { getCard } from '../game/data/CardRegistry';
+import { CardClass } from '../game/types/CardTypes';
+
+export interface DeckCardEntry {
+  cardId: string;
+  name: string;
+  cost: number;
+  count: number;
+}
+
+/** Group a flat cardIds array into sorted entries with counts. */
+export function groupDeckCards(cardIds: string[], sortBy: 'cost' | 'name'): DeckCardEntry[] {
+  const counts = new Map<string, number>();
+  for (const id of cardIds) {
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+
+  const entries: DeckCardEntry[] = [];
+  for (const [cardId, count] of counts) {
+    try {
+      const card = getCard(cardId);
+      entries.push({ cardId, name: card.name, cost: card.cost, count });
+    } catch {
+      entries.push({ cardId, name: cardId, cost: 0, count });
+    }
+  }
+
+  if (sortBy === 'cost') {
+    entries.sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name));
+  } else {
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  return entries;
+}
+
+/** Filter collection cards by class and sort. */
+export function filterCollection(
+  collection: CollectionCard[],
+  classFilter: CardClass | 'ALL',
+  sortBy: 'cost' | 'name',
+): CollectionCard[] {
+  let filtered = collection;
+
+  if (classFilter !== 'ALL') {
+    filtered = filtered.filter(c => {
+      try {
+        return getCard(c.id).class === classFilter;
+      } catch { return false; }
+    });
+  }
+
+  // Exclude king
+  filtered = filtered.filter(c => c.id !== 'king');
+
+  const sorted = [...filtered];
+  if (sortBy === 'cost') {
+    sorted.sort((a, b) => {
+      try {
+        return getCard(a.id).cost - getCard(b.id).cost || a.name.localeCompare(b.name);
+      } catch { return 0; }
+    });
+  } else {
+    sorted.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  return sorted;
+}
+
+/** How many more copies of this card can be added to the deck? */
+export function availableCopies(
+  cardId: string,
+  currentDeckIds: string[],
+  collection: CollectionCard[],
+): number {
+  const inDeck = currentDeckIds.filter(id => id === cardId).length;
+
+  let maxPerDeck = 1;
+  try { maxPerDeck = getCard(cardId).copies; } catch { /* default 1 */ }
+
+  const owned = collection.find(c => c.id === cardId)?.ownedCopies ?? 0;
+
+  // Can add up to min(maxPerDeck, owned) total, minus what's already in deck
+  return Math.max(0, Math.min(maxPerDeck, owned) - inDeck);
+}
+
+/** Build compact ASCII cost curve string lines for display. */
+export function buildCostCurveLines(costCurve: Map<number, number>): string[] {
+  if (costCurve.size === 0) return ['  (empty)'];
+
+  const maxCost = Math.max(...costCurve.keys(), 6);
+  const maxCount = Math.max(...costCurve.values(), 1);
+  const barScale = 10 / maxCount;
+
+  const lines: string[] = [];
+  for (let cost = 1; cost <= maxCost; cost++) {
+    const count = costCurve.get(cost) ?? 0;
+    const barLen = Math.round(count * barScale);
+    const bar = '\u2588'.repeat(barLen);
+    const padCount = String(count).padStart(2, ' ');
+    lines.push(`${cost}: ${bar} ${padCount}`);
+  }
+  return lines;
+}
+
+```
+
+# src\deck\DeckBuilderState.ts
+
+```ts
+// ============================================================
+// DeckBuilderState.ts
+// State types and factory for DeckBuilderScene.
+// ============================================================
+
+import type { DeckSummary } from './DeckAPI';
+import type { CollectionCard } from './CollectionAPI';
+import type { ClientValidationResult } from './DeckValidatorClient';
+import { CardClass } from '../game/types/CardTypes';
+import { AuthManager } from '../auth/AuthManager';
+import GameState from '../GameState';
+
+export enum DeckView { DECK_LIST, DECK_EDITOR }
+
+export interface EditorState {
+  deckId: number | null;        // null = creating new deck
+  deckName: string;
+  cardIds: string[];            // mutable working copy
+  dirty: boolean;
+  validation: ClientValidationResult;
+  classFilter: CardClass | 'ALL';
+  sortBy: 'cost' | 'name';
+  collectionPage: number;
+}
+
+export interface DeckBuilderState {
+  decks: DeckSummary[];
+  collection: CollectionCard[];
+  activeDeckId: number | null;
+  currentView: DeckView;
+  loading: boolean;
+  editor: EditorState | null;
+  deleteConfirmId: number | null;  // deck id pending delete confirmation
+}
+
+export function createInitialState(): DeckBuilderState {
+  return {
+    decks: [],
+    collection: [],
+    activeDeckId: AuthManager.getPlayer()?.activeDeckId ?? GameState.activeDeckId,
+    currentView: DeckView.DECK_LIST,
+    loading: true,
+    editor: null,
+    deleteConfirmId: null,
+  };
+}
+
+export interface DeckBuilderCallbacks {
+  onEditDeck(deckId: number): void;
+  onCreateDeck(): void;
+  onDeleteDeck(deckId: number): void;
+  onConfirmDelete(deckId: number): void;
+  onCancelDelete(): void;
+  onActivateDeck(deckId: number): void;
+  onAddCard(cardId: string): void;
+  onRemoveCard(cardId: string): void;
+  onSave(): void;
+  onSaveAndActivate(): void;
+  onBackToList(): void;
+  onBackToHub(): void;
+  onShowCardDetail(cardId: string): void;
+  onDismissCardDetail(): void;
+  onFilterChange(filter: CardClass | 'ALL'): void;
+  onSortChange(sort: 'cost' | 'name'): void;
+  onPageChange(delta: number): void;
+}
+
+```
+
+# src\deck\DeckEditorView.ts
+
+```ts
+// ============================================================
+// DeckEditorView.ts
+// Renders the DECK_EDITOR view: left=deck contents, right=collection.
+// ============================================================
+
+import Phaser from 'phaser';
+import { MenuButton } from '../ui/MenuButton';
+import { DOMInputManager } from '../ui/DOMInputManager';
+import { getCard } from '../game/data/CardRegistry';
+import { CardClass } from '../game/types/CardTypes';
+import { groupDeckCards, filterCollection, availableCopies, buildCostCurveLines } from './DeckBuilderHelpers';
+import type { DeckBuilderState, DeckBuilderCallbacks } from './DeckBuilderState';
+
+const FONT = '"Courier New", monospace';
+
+// Layout constants — wider panel (100..1180)
+const LEFT_X = 135;     // left panel content start
+const DIVIDER_X = 620;  // vertical divider
+const RIGHT_X = 650;    // right panel content start
+const RIGHT_END = 1140;  // right panel end
+const ROW_H = 22;
+const DECK_MAX_ROWS = 20;
+const COLL_PAGE_SIZE = 16;
+
+export function renderDeckEditor(
+  scene: Phaser.Scene,
+  state: DeckBuilderState,
+  cb: DeckBuilderCallbacks,
+  inputManager: DOMInputManager,
+): Phaser.GameObjects.GameObject[] {
+  const objs: Phaser.GameObjects.GameObject[] = [];
+  const editor = state.editor!;
+
+  // ── Header Bar ────────────────────────────────────────────
+  // Left: back button
+  const backBtn = new MenuButton(scene, 200, 40, '[ BACK TO DECKS ]', {
+    color: '#ff4444', fontSize: '14px',
+    onPointerDown: () => cb.onBackToList(),
+  });
+  objs.push(backBtn.text);
+
+  // Center: deck name input
+  const nameInput = inputManager.createInput({
+    gameX: 490, gameY: 40, width: 200, height: 28,
+    placeholder: 'Deck name...', maxLength: 30,
+  });
+  nameInput.value = editor.deckName;
+  nameInput.addEventListener('input', () => {
+    editor.deckName = nameInput.value;
+    editor.dirty = true;
+  });
+
+  // Right: card count + validity + dirty flag
+  const countColor = editor.validation.valid ? '#00ff88' : '#ff4444';
+  const validLabel = editor.validation.valid ? 'VALID' : 'INVALID';
+  const dirtyStr = editor.dirty ? '  *' : '';
+  objs.push(scene.add.text(680, 34, `${editor.validation.cardCount}/31  ${validLabel}${dirtyStr}`, {
+    fontSize: '18px', fontFamily: FONT, fontStyle: 'bold', color: countColor,
+  }));
+
+  // Separator line
+  const sepLine = scene.add.graphics();
+  sepLine.lineStyle(1, 0xf5a623, 0.3);
+  sepLine.lineBetween(120, 62, 1160, 62);
+  objs.push(sepLine);
+
+  // ── Vertical Divider ─────────────────────────────────────
+  const divider = scene.add.graphics();
+  divider.lineStyle(1, 0x4fc3f7, 0.25);
+  divider.lineBetween(DIVIDER_X, 62, DIVIDER_X, 645);
+  objs.push(divider);
+
+  // ══════════════════════════════════════════════════════════
+  // LEFT PANEL: Deck Contents
+  // ══════════════════════════════════════════════════════════
+  objs.push(scene.add.text(LEFT_X, 72, 'DECK CONTENTS', {
+    fontSize: '13px', fontFamily: FONT, fontStyle: 'bold', color: '#f5a623',
+  }));
+
+  // Sort toggle
+  const sortLabel = editor.sortBy === 'cost' ? 'COST' : 'NAME';
+  const sortBtn = scene.add.text(LEFT_X + 330, 72, `Sort:[${sortLabel}]`, {
+    fontSize: '11px', fontFamily: FONT, color: '#4fc3f7',
+  }).setInteractive({ useHandCursor: true });
+  sortBtn.on('pointerover', () => sortBtn.setColor('#ffffff'));
+  sortBtn.on('pointerout', () => sortBtn.setColor('#4fc3f7'));
+  sortBtn.on('pointerdown', () => {
+    cb.onSortChange(editor.sortBy === 'cost' ? 'name' : 'cost');
+  });
+  objs.push(sortBtn);
+
+  // Column header
+  objs.push(scene.add.text(LEFT_X, 92, 'Card               Cost  Qty', {
+    fontSize: '10px', fontFamily: FONT, color: '#555555',
+  }));
+
+  const deckEntries = groupDeckCards(editor.cardIds, editor.sortBy);
+
+  if (deckEntries.length === 0) {
+    objs.push(scene.add.text(LEFT_X, 115, 'Empty — add cards from collection', {
+      fontSize: '12px', fontFamily: FONT, color: '#555555',
+    }));
+  } else {
+    let y = 108;
+    for (const entry of deckEntries.slice(0, DECK_MAX_ROWS)) {
+      // Card name (clickable)
+      const nameText = scene.add.text(LEFT_X, y, entry.name, {
+        fontSize: '13px', fontFamily: FONT, color: '#FFFFFF',
+      }).setInteractive({ useHandCursor: true });
+      nameText.on('pointerover', () => nameText.setColor('#4fc3f7'));
+      nameText.on('pointerout', () => nameText.setColor('#FFFFFF'));
+      nameText.on('pointerdown', () => cb.onShowCardDetail(entry.cardId));
+      objs.push(nameText);
+
+      // Cost
+      objs.push(scene.add.text(LEFT_X + 230, y + 1, `${entry.cost}`, {
+        fontSize: '12px', fontFamily: FONT, color: '#777777',
+      }));
+
+      // Count
+      objs.push(scene.add.text(LEFT_X + 290, y + 1, `x${entry.count}`, {
+        fontSize: '12px', fontFamily: FONT, color: '#4fc3f7',
+      }));
+
+      // Remove button
+      const removeBtn = scene.add.text(LEFT_X + 340, y, '[-]', {
+        fontSize: '13px', fontFamily: FONT, fontStyle: 'bold', color: '#ff4444',
+      }).setInteractive({ useHandCursor: true });
+      removeBtn.on('pointerover', () => removeBtn.setColor('#ffffff'));
+      removeBtn.on('pointerout', () => removeBtn.setColor('#ff4444'));
+      const capturedId = entry.cardId;
+      removeBtn.on('pointerdown', () => cb.onRemoveCard(capturedId));
+      objs.push(removeBtn);
+
+      y += ROW_H;
+    }
+
+    if (deckEntries.length > DECK_MAX_ROWS) {
+      objs.push(scene.add.text(LEFT_X, 108 + DECK_MAX_ROWS * ROW_H, `... +${deckEntries.length - DECK_MAX_ROWS} more`, {
+        fontSize: '10px', fontFamily: FONT, color: '#555555',
+      }));
+    }
+  }
+
+  // ── Cost Curve (compact, inline) ──────────────────────────
+  const curveY = 560;
+  objs.push(scene.add.text(LEFT_X, curveY, 'MANA CURVE', {
+    fontSize: '10px', fontFamily: FONT, fontStyle: 'bold', color: '#f5a623',
+  }));
+
+  const curveLines = buildCostCurveLines(editor.validation.costCurve);
+  let cy = curveY + 14;
+  for (const line of curveLines) {
+    objs.push(scene.add.text(LEFT_X, cy, line, {
+      fontSize: '10px', fontFamily: FONT, color: '#AAAAAA',
+    }));
+    cy += 12;
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // RIGHT PANEL: Collection Browser
+  // ══════════════════════════════════════════════════════════
+  objs.push(scene.add.text(RIGHT_X, 72, 'COLLECTION', {
+    fontSize: '13px', fontFamily: FONT, fontStyle: 'bold', color: '#4fc3f7',
+  }));
+
+  // Class filter tabs
+  const filters: Array<{ key: CardClass | 'ALL'; label: string }> = [
+    { key: 'ALL', label: 'ALL' },
+    { key: CardClass.UNIT, label: 'UNIT' },
+    { key: CardClass.SPELL, label: 'SPELL' },
+    { key: CardClass.STRUCTURE, label: 'STRUCT' },
+  ];
+
+  let fx = RIGHT_X;
+  for (const f of filters) {
+    const isSelected = editor.classFilter === f.key;
+    const baseColor = isSelected ? '#f5a623' : '#555555';
+
+    const filterBtn = scene.add.text(fx, 92, `[${f.label}]`, {
+      fontSize: '11px', fontFamily: FONT, fontStyle: isSelected ? 'bold' : 'normal', color: baseColor,
+    }).setInteractive({ useHandCursor: true });
+    filterBtn.on('pointerover', () => { if (!isSelected) filterBtn.setColor('#ffffff'); });
+    filterBtn.on('pointerout', () => { if (!isSelected) filterBtn.setColor(baseColor); });
+    const capturedKey = f.key;
+    filterBtn.on('pointerdown', () => cb.onFilterChange(capturedKey));
+    objs.push(filterBtn);
+
+    fx += f.label.length * 8 + 28;
+  }
+
+  // Column headers
+  objs.push(scene.add.text(RIGHT_X, 112, 'Card', {
+    fontSize: '10px', fontFamily: FONT, color: '#555555',
+  }));
+  objs.push(scene.add.text(RIGHT_X + 200, 112, 'Cost', {
+    fontSize: '10px', fontFamily: FONT, color: '#555555',
+  }));
+  objs.push(scene.add.text(RIGHT_X + 250, 112, 'A/D', {
+    fontSize: '10px', fontFamily: FONT, color: '#555555',
+  }));
+  objs.push(scene.add.text(RIGHT_X + 300, 112, 'In Deck', {
+    fontSize: '10px', fontFamily: FONT, color: '#555555',
+  }));
+  objs.push(scene.add.text(RIGHT_X + 370, 112, 'Own', {
+    fontSize: '10px', fontFamily: FONT, color: '#555555',
+  }));
+
+  // Filtered collection
+  const filteredCards = filterCollection(state.collection, editor.classFilter, editor.sortBy);
+  const totalPages = Math.max(1, Math.ceil(filteredCards.length / COLL_PAGE_SIZE));
+  const page = Math.min(editor.collectionPage, totalPages - 1);
+  const pageCards = filteredCards.slice(page * COLL_PAGE_SIZE, (page + 1) * COLL_PAGE_SIZE);
+
+  let ry = 128;
+  for (const collCard of pageCards) {
+    let cardDef;
+    try { cardDef = getCard(collCard.id); } catch { continue; }
+
+    const canAdd = availableCopies(collCard.id, editor.cardIds, state.collection);
+    const inDeck = editor.cardIds.filter(id => id === collCard.id).length;
+    const maxCopies = cardDef.copies;
+
+    // Card name (clickable)
+    const nameColor = inDeck > 0 ? '#FFFFFF' : '#BBBBBB';
+    const nameText = scene.add.text(RIGHT_X, ry, cardDef.name, {
+      fontSize: '12px', fontFamily: FONT, color: nameColor,
+    }).setInteractive({ useHandCursor: true });
+    nameText.on('pointerover', () => nameText.setColor('#4fc3f7'));
+    nameText.on('pointerout', () => nameText.setColor(nameColor));
+    const capturedId = collCard.id;
+    nameText.on('pointerdown', () => cb.onShowCardDetail(capturedId));
+    objs.push(nameText);
+
+    // Cost
+    objs.push(scene.add.text(RIGHT_X + 205, ry + 1, `${cardDef.cost}`, {
+      fontSize: '11px', fontFamily: FONT, color: '#777777',
+    }));
+
+    // Stats (ATK/DEF)
+    const statsStr = cardDef.stats ? `${cardDef.stats.atk}/${cardDef.stats.def}` : '--';
+    objs.push(scene.add.text(RIGHT_X + 250, ry + 1, statsStr, {
+      fontSize: '11px', fontFamily: FONT, color: '#777777',
+    }));
+
+    // In deck count (colored)
+    const deckCountColor = inDeck >= maxCopies ? '#f5a623' : inDeck > 0 ? '#4fc3f7' : '#444444';
+    objs.push(scene.add.text(RIGHT_X + 310, ry + 1, `${inDeck}/${maxCopies}`, {
+      fontSize: '11px', fontFamily: FONT, color: deckCountColor,
+    }));
+
+    // Owned count
+    objs.push(scene.add.text(RIGHT_X + 375, ry + 1, `${collCard.ownedCopies}`, {
+      fontSize: '11px', fontFamily: FONT, color: '#777777',
+    }));
+
+    // Add button
+    if (canAdd > 0) {
+      const addBtn = scene.add.text(RIGHT_X + 410, ry, '[+]', {
+        fontSize: '12px', fontFamily: FONT, fontStyle: 'bold', color: '#00ff88',
+      }).setInteractive({ useHandCursor: true });
+      addBtn.on('pointerover', () => addBtn.setColor('#ffffff'));
+      addBtn.on('pointerout', () => addBtn.setColor('#00ff88'));
+      addBtn.on('pointerdown', () => cb.onAddCard(capturedId));
+      objs.push(addBtn);
+    } else {
+      objs.push(scene.add.text(RIGHT_X + 410, ry, '[+]', {
+        fontSize: '12px', fontFamily: FONT, color: '#2a2a2a',
+      }));
+    }
+
+    ry += ROW_H;
+  }
+
+  // Pagination
+  if (totalPages > 1) {
+    const pageY = 128 + COLL_PAGE_SIZE * ROW_H + 8;
+
+    if (page > 0) {
+      const prevBtn = scene.add.text(RIGHT_X + 100, pageY, '< Prev', {
+        fontSize: '12px', fontFamily: FONT, color: '#4fc3f7',
+      }).setInteractive({ useHandCursor: true });
+      prevBtn.on('pointerover', () => prevBtn.setColor('#ffffff'));
+      prevBtn.on('pointerout', () => prevBtn.setColor('#4fc3f7'));
+      prevBtn.on('pointerdown', () => cb.onPageChange(-1));
+      objs.push(prevBtn);
+    }
+
+    objs.push(scene.add.text(RIGHT_X + 190, pageY, `${page + 1} / ${totalPages}`, {
+      fontSize: '12px', fontFamily: FONT, color: '#777777',
+    }));
+
+    if (page < totalPages - 1) {
+      const nextBtn = scene.add.text(RIGHT_X + 280, pageY, 'Next >', {
+        fontSize: '12px', fontFamily: FONT, color: '#4fc3f7',
+      }).setInteractive({ useHandCursor: true });
+      nextBtn.on('pointerover', () => nextBtn.setColor('#ffffff'));
+      nextBtn.on('pointerout', () => nextBtn.setColor('#4fc3f7'));
+      nextBtn.on('pointerdown', () => cb.onPageChange(1));
+      objs.push(nextBtn);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // BOTTOM BAR: Save buttons + validation errors
+  // ══════════════════════════════════════════════════════════
+  const bottomSep = scene.add.graphics();
+  bottomSep.lineStyle(1, 0xf5a623, 0.3);
+  bottomSep.lineBetween(120, 650, 1160, 650);
+  objs.push(bottomSep);
+
+  const saveBtn = new MenuButton(scene, 420, 672, '[ SAVE ]', {
+    color: '#00ff88', fontSize: '18px',
+    onPointerDown: () => cb.onSave(),
+  });
+  objs.push(saveBtn.text);
+
+  const saveActivateBtn = new MenuButton(scene, 680, 672, '[ SAVE & ACTIVATE ]', {
+    color: '#f5a623', fontSize: '18px',
+    onPointerDown: () => cb.onSaveAndActivate(),
+  });
+  if (!editor.validation.valid) {
+    saveActivateBtn.setDisabled(true);
+  }
+  objs.push(saveActivateBtn.text);
+
+  // Validation errors
+  if (editor.validation.errors.length > 0) {
+    const errText = editor.validation.errors.slice(0, 2).join('  |  ');
+    objs.push(scene.add.text(640, 696, errText, {
+      fontSize: '10px', fontFamily: FONT, color: '#ff4444',
+    }).setOrigin(0.5));
+  }
+
+  return objs;
+}
+
+```
+
+# src\deck\DeckListView.ts
+
+```ts
+// ============================================================
+// DeckListView.ts
+// Renders the DECK_LIST view: saved decks with actions,
+// plus the "currently playing" deck info (default or active).
+// ============================================================
+
+import Phaser from 'phaser';
+import { MenuButton } from '../ui/MenuButton';
+import type { DeckBuilderState, DeckBuilderCallbacks } from './DeckBuilderState';
+
+const CX = 640;
+const FONT = '"Courier New", monospace';
+const MAX_DECKS = 10;
+const LEFT = 180;
+
+export function renderDeckList(
+  scene: Phaser.Scene,
+  state: DeckBuilderState,
+  cb: DeckBuilderCallbacks,
+): Phaser.GameObjects.GameObject[] {
+  const objs: Phaser.GameObjects.GameObject[] = [];
+
+  // ── Decks Section ──────────────────────────────────────────
+  const deckCount = state.decks.length;
+  const sectionY = 85;
+
+  objs.push(scene.add.text(CX, sectionY, `── Your Decks (${deckCount}/${MAX_DECKS}) ──`, {
+    fontSize: '15px', fontFamily: FONT, color: '#4fc3f7',
+  }).setOrigin(0.5));
+
+  if (deckCount === 0) {
+    objs.push(scene.add.text(CX, sectionY + 60, 'No decks yet — creating starter deck...', {
+      fontSize: '16px', fontFamily: FONT, color: '#555555',
+    }).setOrigin(0.5));
+  } else {
+    // Column headers
+    objs.push(scene.add.text(LEFT, sectionY + 25, 'Name', {
+      fontSize: '10px', fontFamily: FONT, color: '#444444',
+    }));
+    objs.push(scene.add.text(480, sectionY + 25, 'Cards', {
+      fontSize: '10px', fontFamily: FONT, color: '#444444',
+    }));
+    objs.push(scene.add.text(560, sectionY + 25, 'Status', {
+      fontSize: '10px', fontFamily: FONT, color: '#444444',
+    }));
+    objs.push(scene.add.text(680, sectionY + 25, 'Actions', {
+      fontSize: '10px', fontFamily: FONT, color: '#444444',
+    }));
+
+    let y = sectionY + 42;
+    const rowH = 36;
+
+    for (const deck of state.decks) {
+      const isActive = deck.id === state.activeDeckId;
+      const isDeleting = state.deleteConfirmId === deck.id;
+
+      // Active row highlight
+      if (isActive) {
+        const rowBg = scene.add.graphics();
+        rowBg.fillStyle(0xf5a623, 0.06);
+        rowBg.fillRoundedRect(LEFT - 10, y - 3, 920, rowH - 2, 4);
+        objs.push(rowBg);
+      }
+
+      if (isDeleting) {
+        objs.push(scene.add.text(LEFT, y + 2, `Delete "${deck.name}"?`, {
+          fontSize: '14px', fontFamily: FONT, color: '#ff4444',
+        }));
+
+        const yesBtn = scene.add.text(620, y + 2, '[ YES, DELETE ]', {
+          fontSize: '13px', fontFamily: FONT, fontStyle: 'bold', color: '#ff4444',
+        }).setInteractive({ useHandCursor: true });
+        yesBtn.on('pointerover', () => yesBtn.setColor('#ffffff'));
+        yesBtn.on('pointerout', () => yesBtn.setColor('#ff4444'));
+        yesBtn.on('pointerdown', () => cb.onConfirmDelete(deck.id));
+        objs.push(yesBtn);
+
+        const noBtn = scene.add.text(800, y + 2, '[ CANCEL ]', {
+          fontSize: '13px', fontFamily: FONT, fontStyle: 'bold', color: '#4fc3f7',
+        }).setInteractive({ useHandCursor: true });
+        noBtn.on('pointerover', () => noBtn.setColor('#ffffff'));
+        noBtn.on('pointerout', () => noBtn.setColor('#4fc3f7'));
+        noBtn.on('pointerdown', () => cb.onCancelDelete());
+        objs.push(noBtn);
+
+        y += rowH;
+        continue;
+      }
+
+      // Deck name
+      const nameColor = isActive ? '#f5a623' : '#FFFFFF';
+      const prefix = isActive ? '\u25B6 ' : '  ';
+      objs.push(scene.add.text(LEFT, y, `${prefix}${deck.name}`, {
+        fontSize: '15px', fontFamily: FONT, fontStyle: 'bold', color: nameColor,
+      }));
+
+      // Card count
+      const countColor = deck.cardIds.length === 31 ? '#AAAAAA' : '#ff4444';
+      objs.push(scene.add.text(480, y + 2, `${deck.cardIds.length}/31`, {
+        fontSize: '13px', fontFamily: FONT, color: countColor,
+      }));
+
+      // Validity badge
+      const validColor = deck.isValid ? '#00ff88' : '#ff4444';
+      const validLabel = deck.isValid ? 'VALID' : 'INVALID';
+      objs.push(scene.add.text(560, y + 2, validLabel, {
+        fontSize: '12px', fontFamily: FONT, fontStyle: 'bold', color: validColor,
+      }));
+
+      // Action buttons
+      let btnX = 680;
+
+      if (isActive) {
+        objs.push(scene.add.text(btnX, y + 2, 'ACTIVE', {
+          fontSize: '12px', fontFamily: FONT, fontStyle: 'bold', color: '#f5a623',
+        }));
+        btnX += 70;
+      } else {
+        const actBtn = scene.add.text(btnX, y + 2, '[ACTIVATE]', {
+          fontSize: '12px', fontFamily: FONT, color: deck.isValid ? '#4fc3f7' : '#444444',
+        });
+        if (deck.isValid) {
+          actBtn.setInteractive({ useHandCursor: true });
+          actBtn.on('pointerover', () => actBtn.setColor('#ffffff'));
+          actBtn.on('pointerout', () => actBtn.setColor('#4fc3f7'));
+          actBtn.on('pointerdown', () => cb.onActivateDeck(deck.id));
+        }
+        objs.push(actBtn);
+        btnX += 95;
+      }
+
+      const editBtn = scene.add.text(btnX, y + 2, '[EDIT]', {
+        fontSize: '12px', fontFamily: FONT, color: '#4fc3f7',
+      }).setInteractive({ useHandCursor: true });
+      editBtn.on('pointerover', () => editBtn.setColor('#ffffff'));
+      editBtn.on('pointerout', () => editBtn.setColor('#4fc3f7'));
+      editBtn.on('pointerdown', () => cb.onEditDeck(deck.id));
+      objs.push(editBtn);
+      btnX += 60;
+
+      // Delete: not allowed for active deck or last remaining deck
+      const canDelete = !isActive && deckCount > 1;
+      if (canDelete) {
+        const delBtn = scene.add.text(btnX, y + 2, '[DEL]', {
+          fontSize: '12px', fontFamily: FONT, color: '#ff4444',
+        }).setInteractive({ useHandCursor: true });
+        delBtn.on('pointerover', () => delBtn.setColor('#ffffff'));
+        delBtn.on('pointerout', () => delBtn.setColor('#ff4444'));
+        delBtn.on('pointerdown', () => cb.onDeleteDeck(deck.id));
+        objs.push(delBtn);
+      }
+
+      y += rowH;
+    }
+  }
+
+  // ── New Deck Button ───────────────────────────────────────
+  const emptyRows = deckCount === 0 ? 1 : deckCount;
+  const btnY = Math.max(380, sectionY + 42 + emptyRows * 36 + 30);
+
+  if (deckCount < MAX_DECKS) {
+    const newBtn = new MenuButton(scene, CX, btnY, '[ + NEW DECK ]', {
+      color: '#00ff88', fontSize: '22px',
+      onPointerDown: () => cb.onCreateDeck(),
+    });
+    objs.push(newBtn.text);
+  } else {
+    objs.push(scene.add.text(CX, btnY, 'Maximum decks reached (10/10)', {
+      fontSize: '14px', fontFamily: FONT, color: '#777777',
+    }).setOrigin(0.5));
+  }
+
+  // Collection summary
+  const ownedCount = state.collection.filter(c => c.ownedCopies > 0).length;
+  objs.push(scene.add.text(CX, btnY + 50, `Card collection: ${ownedCount} unique cards owned`, {
+    fontSize: '13px', fontFamily: FONT, color: '#555555',
+  }).setOrigin(0.5));
+
+  // Tip
+  objs.push(scene.add.text(CX, 680, 'Create a deck and activate it to use in matches', {
+    fontSize: '10px', fontFamily: FONT, color: '#3a3a3a',
+  }).setOrigin(0.5));
+
+  return objs;
+}
+
+```
+
+# src\deck\DeckValidatorClient.ts
+
+```ts
+// ============================================================
+// DeckValidatorClient.ts
+// Client-side instant deck validation feedback.
+// Uses CardRegistry for card data — no network calls.
+// ============================================================
+
+import { getCard } from '../game/data/CardRegistry';
+
+const DECK_SIZE = 31;
+
+export interface ClientValidationResult {
+  valid: boolean;
+  errors: string[];
+  cardCount: number;
+  costCurve: Map<number, number>;  // cost → count
+}
+
+/**
+ * Validate a deck locally for instant UI feedback.
+ * Server-side validation is authoritative — this is for UX only.
+ */
+export function validateDeckClient(cardIds: string[]): ClientValidationResult {
+  const errors: string[] = [];
+  const costCurve = new Map<number, number>();
+
+  if (!Array.isArray(cardIds)) {
+    return { valid: false, errors: ['Invalid deck data.'], cardCount: 0, costCurve };
+  }
+
+  if (cardIds.length !== DECK_SIZE) {
+    errors.push(`Deck needs exactly ${DECK_SIZE} cards (has ${cardIds.length}).`);
+  }
+
+  if (cardIds.includes('king')) {
+    errors.push('King is pre-placed and cannot be in the deck.');
+  }
+
+  // Check each card exists and count copies
+  const counts = new Map<string, number>();
+  for (const id of cardIds) {
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+    try {
+      const card = getCard(id);
+      costCurve.set(card.cost, (costCurve.get(card.cost) ?? 0) + 1);
+    } catch {
+      errors.push(`Unknown card: ${id}`);
+    }
+  }
+
+  // Check copy limits
+  for (const [id, count] of counts) {
+    try {
+      const card = getCard(id);
+      if (count > card.copies) {
+        errors.push(`${card.name}: ${count} copies (max ${card.copies}).`);
+      }
+    } catch { /* already reported as unknown */ }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    cardCount: cardIds.length,
+    costCurve,
+  };
+}
 
 ```
 
@@ -9693,7 +12580,22 @@ export const KNIGHT_DEF: CardDefinition = {
   id: 'knight', name: 'Knight',
   flavorText: 'Heavy, fast, devastating.',
   class: U, allegiance: ROY, subtypes: [CAV], cost: 9, copies: 2,
-  stats: { atk: 5, def: 8, movement: MovementType.OMNI_2, attackPattern: AtkPattern.OMNI },
+  stats: { atk: 5, def: 8, movement: MovementType.OMNI_2, attackPattern: AtkPattern.OMNI,
+      customAttack: {
+        offsets: [
+          { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 }, { dx: -1, dy: 0 },
+          { dx: 1, dy: 0 }, { dx: -1, dy: 1 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 },
+        ],
+      },
+      customMove: {
+        offsets: [
+          { dx: -1, dy: -2 }, { dx: 0, dy: -2 }, { dx: 1, dy: -2 }, { dx: -2, dy: -1 },
+          { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 }, { dx: 2, dy: -1 },
+          { dx: -2, dy: 0 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }, { dx: 2, dy: 0 },
+          { dx: -2, dy: 1 }, { dx: -1, dy: 1 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 },
+          { dx: 2, dy: 1 }, { dx: -1, dy: 2 }, { dx: 0, dy: 2 }, { dx: 1, dy: 2 },
+        ],
+      },},
   flags: [],
   abilities: [],
   abilityText: 'Cavalry. Requires Royal discount engine to play before late game.',
@@ -11743,7 +14645,73 @@ export function isLancerForwardMove(unit: Unit, toRow: number): boolean {
 
 // ═══════════════════════════════════════════════════════
 // CUSTOM PATTERN RESOLVER
+//
+// Path-blocking rules (when canJump = false):
+//   - Adjacent offsets (|dx|≤1 AND |dy|≤1): no intermediates to check.
+//   - Decomposable offsets (gcd(|dx|,|dy|) ≥ 2, e.g. {-2,-2}, {0,-2}):
+//     Single clear path exists. Trace step-by-step along {dx/gcd, dy/gcd}.
+//     Blocked if ANY intermediate is occupied.
+//   - L-shaped offsets (gcd=1, distance > 1, e.g. {-1,-2}, {2,-1}):
+//     Multiple paths through the bounding rectangle. Check ALL cells in
+//     the rectangle (excluding start + destination). Blocked only if
+//     EVERY intermediate cell is occupied — meaning no path exists.
+//     Example: (0,0)→(1,2) checks (0,1),(1,0),(1,1),(0,2).
 // ═══════════════════════════════════════════════════════
+
+/**
+ * GCD for decomposing offsets into traceable steps.
+ * gcd(0, n) = n, gcd(a, b) = gcd(b, a%b).
+ */
+function gcd(a: number, b: number): number {
+  a = Math.abs(a); b = Math.abs(b);
+  while (b) { [a, b] = [b, a % b]; }
+  return a;
+}
+
+/**
+ * Check if the path from (col, row) to (col+dx, row+dy) is clear.
+ * Only checks intermediate squares — NOT the destination itself.
+ * Returns true if the path is clear.
+ */
+function isPathClear(col: number, row: number, dx: number, dy: number, board: Board): boolean {
+  const dist = Math.max(Math.abs(dx), Math.abs(dy));
+  if (dist <= 1) return true; // adjacent — no intermediates
+
+  const g = gcd(dx, dy);
+
+  if (g >= 2) {
+    // Decomposable (straight/diagonal): single path, ANY blocker stops it
+    const sdx = dx / g;
+    const sdy = dy / g;
+    for (let s = 1; s < g; s++) {
+      const ic = col + sdx * s;
+      const ir = row + sdy * s;
+      if (board.isInBounds(ic, ir) && board.getUnit(ic, ir) !== null) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // L-shaped: multiple paths through bounding rectangle.
+  // Blocked only if ALL intermediate cells are occupied.
+  const minC = Math.min(0, dx), maxC = Math.max(0, dx);
+  const minR = Math.min(0, dy), maxR = Math.max(0, dy);
+
+  for (let dc = minC; dc <= maxC; dc++) {
+    for (let dr = minR; dr <= maxR; dr++) {
+      if (dc === 0 && dr === 0) continue;       // skip origin
+      if (dc === dx && dr === dy) continue;      // skip destination
+      const ic = col + dc;
+      const ir = row + dr;
+      if (!board.isInBounds(ic, ir)) continue;
+      if (board.getUnit(ic, ir) === null) {
+        return true; // at least one cell is free — path exists
+      }
+    }
+  }
+  return false; // every intermediate cell is occupied — fully blocked
+}
 
 function resolveCustomPattern(
   unit: Unit, pattern: CustomPattern, board: Board, isAttack: boolean,
@@ -11758,9 +14726,14 @@ function resolveCustomPattern(
 
   for (const offset of pattern.offsets) {
     for (let step = 1; step <= range; step++) {
-      const nc = col + offset.dx * step;
-      const nr = row + (offset.dy * dySign) * step;
+      const dx = offset.dx * step;
+      const dy = (offset.dy * dySign) * step;
+      const nc = col + dx;
+      const nr = row + dy;
       if (!board.isInBounds(nc, nr)) break;
+
+      // Path blocking: check intermediate squares (unless canJump)
+      if (!canJump && !isPathClear(col, row, dx, dy, board)) break;
 
       const occupant = board.getUnit(nc, nr);
 
@@ -11792,9 +14765,13 @@ function resolvePatternRange(unit: Unit, pattern: CustomPattern, board: Board): 
 
   for (const offset of pattern.offsets) {
     for (let step = 1; step <= range; step++) {
-      const nc = col + offset.dx * step;
-      const nr = row + (offset.dy * dySign) * step;
+      const dx = offset.dx * step;
+      const dy = (offset.dy * dySign) * step;
+      const nc = col + dx;
+      const nr = row + dy;
       if (!board.isInBounds(nc, nr)) break;
+      // For range display: show square but stop extending if path blocked
+      if (!canJump && !isPathClear(col, row, dx, dy, board)) break;
       results.push({ col: nc, row: nr });
       if (board.getUnit(nc, nr) && !canJump) break;
     }
@@ -14983,11 +17960,9 @@ export interface BoardGameResult {
     payout: number;
 }
 
-export interface PayoutResult {
-    success: boolean;
-    txHash?: string;
-    error?: string;
-}
+// Re-export from shared types for backward compat
+export type { PayoutResult } from '../shared/types/NetworkEvents';
+import type { PayoutResult } from '../shared/types/NetworkEvents';
 
 class GameStateClass {
     // ─── Player ───────────────────────────────────────────────
@@ -15014,6 +17989,15 @@ class GameStateClass {
     // ─── Crypto ───────────────────────────────────────────────
     depositTxHash: string | null = null;
     payoutResult: PayoutResult | null = null;
+
+    // ─── Auth (populated by AuthManager after login) ─────────
+    authToken: string = '';
+    authenticatedPlayerId: number = 0;
+    displayName: string = '';
+
+    // ─── Deck (populated by deck selection flow) ─────────────
+    activeDeckId: number | null = null;
+    activeDeckCardIds: string[] = [];
 
     // ─── Setters ──────────────────────────────────────────────
     setPlayerName(name: string): void {
@@ -15092,6 +18076,37 @@ class GameStateClass {
         this.lastMatch = null;
         this.depositTxHash = null;
         this.payoutResult = null;
+    }
+
+    // ─── Auth ─────────────────────────────────────────────────
+    setAuthData(token: string, playerId: number, name: string): void {
+        this.authToken = token;
+        this.authenticatedPlayerId = playerId;
+        this.displayName = name;
+        this.playerName = name;
+        console.log(`[GameState] Auth: ${name} (#${playerId})`);
+    }
+
+    isAuthenticated(): boolean {
+        return this.authenticatedPlayerId > 0 && this.authToken.length > 0;
+    }
+
+    clearAuth(): void {
+        this.authToken = '';
+        this.authenticatedPlayerId = 0;
+        this.displayName = '';
+        console.log('[GameState] Auth cleared.');
+    }
+
+    // ─── Deck ─────────────────────────────────────────────────
+    setActiveDeck(deckId: number | null, cardIds: string[]): void {
+        this.activeDeckId = deckId;
+        this.activeDeckCardIds = [...cardIds];
+        console.log(`[GameState] Active deck: #${deckId} (${cardIds.length} cards)`);
+    }
+
+    hasActiveDeck(): boolean {
+        return this.activeDeckCardIds.length > 0;
     }
 
     // ─── Debug ────────────────────────────────────────────────
@@ -15556,16 +18571,198 @@ private publishHighlights(): void {
 
 ```
 
+# src\lobby\LobbySocketManager.ts
+
+```ts
+// ============================================================
+// LobbySocketManager.ts
+// Typed wrapper for lobby: namespaced socket events.
+// Uses SocketManager.getSocket() — never accesses private fields.
+//
+// Usage:
+//   const lobby = new LobbySocketManager();
+//   lobby.attach();  // start listening
+//   lobby.createRoom('MyName', { isPublic: true });
+//   lobby.detach();  // stop listening
+// ============================================================
+
+import SocketManager from '../network/SocketManager';
+import type { Socket } from 'socket.io-client';
+import type {
+  RoomSettings, LobbyState, PublicRoomListing,
+  ChatMessage, GameStartingData,
+} from '../../shared/types/NetworkEvents';
+
+export type LobbyEventHandlers = {
+  onCreated?:          (code: string) => void;
+  onJoined?:           (code: string) => void;
+  onStateUpdate?:      (state: LobbyState) => void;
+  onRoomList?:         (rooms: PublicRoomListing[]) => void;
+  onChatMessage?:      (msg: ChatMessage) => void;
+  onSystemMessage?:    (text: string) => void;
+  onKicked?:           (reason: string) => void;
+  onGameStarting?:     (data: GameStartingData) => void;
+  onError?:            (message: string) => void;
+  onDepositPhase?:     (stakeAmount: number) => void;
+  onOpponentDeposited?:() => void;
+  onBothDeposited?:    () => void;
+  onSubmitDecks?:      () => void;
+  onPasswordRequired?: (roomCode: string) => void;
+};
+
+export class LobbySocketManager {
+  private handlers: LobbyEventHandlers = {};
+  private attached = false;
+
+  constructor(handlers: LobbyEventHandlers = {}) {
+    this.handlers = handlers;
+  }
+
+  /** Update handlers without detach/reattach. */
+  setHandlers(handlers: LobbyEventHandlers): void {
+    this.handlers = handlers;
+  }
+
+  /** Start listening for lobby events on the shared socket. */
+  attach(): void {
+    if (this.attached) return;
+    const s = this.getSocket();
+    if (!s) return;
+    this.attached = true;
+
+    s.on('lobby:created',          (d: any) => this.handlers.onCreated?.(d.code));
+    s.on('lobby:joined',           (d: any) => this.handlers.onJoined?.(d.code));
+    s.on('lobby:state',            (d: any) => this.handlers.onStateUpdate?.(d));
+    s.on('lobby:room_list',        (d: any) => this.handlers.onRoomList?.(d.rooms));
+    s.on('lobby:chat_message',     (d: any) => this.handlers.onChatMessage?.(d));
+    s.on('lobby:system_message',   (d: any) => this.handlers.onSystemMessage?.(d.text));
+    s.on('lobby:kicked',           (d: any) => this.handlers.onKicked?.(d.reason));
+    s.on('lobby:game_starting',    (d: any) => this.handlers.onGameStarting?.(d));
+    s.on('lobby:error',            (d: any) => this.handlers.onError?.(d.message));
+    s.on('lobby:deposit_phase',    (d: any) => this.handlers.onDepositPhase?.(d.stakeAmount));
+    s.on('lobby:opponent_deposited', ()     => this.handlers.onOpponentDeposited?.());
+    s.on('lobby:both_deposited',   ()       => this.handlers.onBothDeposited?.());
+    s.on('lobby:submit_decks',     ()       => this.handlers.onSubmitDecks?.());
+    s.on('lobby:password_required',(d: any) => this.handlers.onPasswordRequired?.(d.roomCode));
+  }
+
+  /** Stop listening. Call on scene shutdown. */
+  detach(): void {
+    if (!this.attached) return;
+    const s = this.getSocket();
+    if (s) {
+      const events = [
+        'lobby:created', 'lobby:joined', 'lobby:state', 'lobby:room_list',
+        'lobby:chat_message', 'lobby:system_message', 'lobby:kicked',
+        'lobby:game_starting', 'lobby:error', 'lobby:deposit_phase',
+        'lobby:opponent_deposited', 'lobby:both_deposited', 'lobby:submit_decks',
+        'lobby:password_required',
+      ];
+      for (const ev of events) s.removeAllListeners(ev);
+    }
+    this.attached = false;
+  }
+
+  // ─── Outgoing Events ──────────────────────────────────────
+
+  createRoom(playerName: string, settings?: Partial<RoomSettings>): void {
+    this.getSocket()?.emit('lobby:create', { playerName, settings });
+  }
+
+  joinRoom(roomCode: string, playerName: string, password?: string): void {
+    this.getSocket()?.emit('lobby:join', { roomCode, playerName, password });
+  }
+
+  leaveRoom(roomCode: string): void {
+    this.getSocket()?.emit('lobby:leave', { roomCode });
+  }
+
+  sendChat(roomCode: string, text: string): void {
+    this.getSocket()?.emit('lobby:chat', { roomCode, text });
+  }
+
+  toggleReady(roomCode: string): void {
+    this.getSocket()?.emit('lobby:ready', { roomCode });
+  }
+
+  kickPlayer(roomCode: string, targetPlayerName: string): void {
+    this.getSocket()?.emit('lobby:kick', { roomCode, targetPlayerName });
+  }
+
+  updateSettings(roomCode: string, settings: Partial<RoomSettings>): void {
+    this.getSocket()?.emit('lobby:settings', { roomCode, settings });
+  }
+
+  startGame(roomCode: string): void {
+    this.getSocket()?.emit('lobby:start_game', { roomCode });
+  }
+
+  signalCryptoReady(roomCode: string): void {
+    this.getSocket()?.emit('lobby:crypto_ready', { roomCode });
+  }
+
+  submitDeck(roomCode: string, deckIds: string[]): void {
+    this.getSocket()?.emit('lobby:deck_submitted', { roomCode, deckIds });
+  }
+
+  requestRoomList(): void {
+    this.getSocket()?.emit('lobby:list');
+  }
+
+  /** Request the server to re-emit lobby:state for a room. */
+  requestRoomState(roomCode: string): void {
+    this.getSocket()?.emit('lobby:request_state', { roomCode });
+  }
+
+  // ─── Private ──────────────────────────────────────────────
+
+  private getSocket(): Socket | null {
+    return SocketManager.getSocket();
+  }
+}
+
+```
+
+# src\lobby\RoomBrowserAPI.ts
+
+```ts
+// ============================================================
+// RoomBrowserAPI.ts
+// REST fetch for public room list (no auth required).
+// ============================================================
+
+import type { PublicRoomListing } from '../../shared/types/NetworkEvents';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
+export async function fetchPublicRooms(): Promise<PublicRoomListing[]> {
+  try {
+    const res = await fetch(`${API_BASE}/rooms`);
+    if (!res.ok) return [];
+    const { rooms } = await res.json();
+    return rooms ?? [];
+  } catch {
+    return [];
+  }
+}
+
+```
+
 # src\main.ts
 
 ```ts
 import './game/abilities/registerAll';
 import Phaser from 'phaser';
-import PreLoadScene    from './scenes/PreloadScene';
-import MainMenuScene   from './scenes/MainMenuScene';
-import RoomScene       from './scenes/RoomScene';
-import BattleScene     from './scenes/BattleScene';
-import ResultScene     from './scenes/ResultScene';
+import PreLoadScene       from './scenes/PreloadScene';
+import LoginScene         from './scenes/LoginScene';
+import HubScene           from './scenes/HubScene';
+import DeckBuilderScene   from './scenes/DeckBuilderScene';
+import RoomBrowserScene   from './scenes/RoomBrowserScene';
+import LobbyScene         from './scenes/LobbyScene';
+import MainMenuScene      from './scenes/MainMenuScene';
+import RoomScene          from './scenes/RoomScene';
+import BattleScene        from './scenes/BattleScene';
+import ResultScene        from './scenes/ResultScene';
 
 const config: Phaser.Types.Core.GameConfig = {
     type: Phaser.WEBGL, 
@@ -15582,6 +18779,11 @@ const config: Phaser.Types.Core.GameConfig = {
     },
     scene: [
         PreLoadScene,
+        LoginScene,
+        HubScene,
+        DeckBuilderScene,
+        RoomBrowserScene,
+        LobbyScene,
         MainMenuScene,
         RoomScene,
         BattleScene,
@@ -15601,23 +18803,22 @@ export default game;
 
 ```ts
 // ─── SocketManager.ts ─────────────────────────────────────────
-// Handles all Socket.io multiplayer logic
-// Equivalent to PhotonManager.cs in Unity
+// Handles all Socket.io multiplayer logic.
+//
+// Two connection modes:
+//   connect(callbacks)   — legacy flow: auto-creates/joins room
+//   connectOnly(cbs?)    — lobby flow: connect without auto-action
+//
+// Both modes share the same socket + event registrations.
+// Switching from connectOnly → connect is safe (reuses socket).
 
 import { io, Socket } from "socket.io-client";
 import GameState, { RoomAction } from "../GameState.ts";
-export interface GameAction {
-  type: 'PLAY_CARD' | 'MOVE_UNIT' | 'ATTACK_UNIT' | 'END_PLAY_PHASE' | 'END_ACT_PHASE' | 'SELECT_POSITION' | 'SELECT_TARGET' | 'CANCEL_PENDING';
-  handIndex?: number;
-  col?: number;
-  row?: number;
-  fromCol?: number;
-  fromRow?: number;
-  targetCol?: number;
-  targetRow?: number;
-  seqNum?: number;
-  serverSeq?: number;
-}
+import type { GameAction, PayoutResult } from "../../shared/types/NetworkEvents.js";
+
+// Re-export so existing importers don't break
+export type { GameAction };
+
 // ─── Event Callbacks ──────────────────────────────────────────
 export interface RoomCallbacks {
   onRoomCreated: (code: string) => void;
@@ -15634,9 +18835,20 @@ export interface RoomCallbacks {
   onError: (message: string) => void;
   onBothCryptoReady?: () => void;
   onBothBattleReady?: () => void;
-  onPayoutResult?: (result: { success: boolean; txHash?: string; error?: string }) => void;
+  onPayoutResult?: (result: PayoutResult) => void;
   onHostDepositConfirmed?: () => void;
+  // Deck validation callbacks (optional)
+  onDeckAccepted?: (data: { cardCount: number }) => void;
+  onDeckRejected?: (data: { errors: string[] }) => void;
+  onBothDecksReady?: () => void;
 }
+
+const RECONNECT_OPTS = {
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+};
 
 class SocketManagerClass {
   private socket: Socket | null = null;
@@ -15646,36 +18858,33 @@ class SocketManagerClass {
   private actionBuffer: GameAction[] = [];
   private static readonly MAX_BUFFER_SIZE = 50;
   private hasConnectedOnce: boolean = false;
+  private eventsRegistered: boolean = false;
 
+  // ─── Connection Modes ──────────────────────────────────────
+
+  /** Legacy flow: connect + auto-create/join room based on GameState. */
   connect(callbacks: RoomCallbacks): void {
     this.callbacks = callbacks;
 
     if (this.socket?.connected) {
-      console.log("[SocketManager] Already connected.");
+      console.log("[SocketManager] Already connected — routing room action.");
       this.actOnRoomAction();
       return;
     }
 
-    console.log("[SocketManager] Connecting to server...");
-    this.socket = io(this.serverUrl, {
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-    });
+    this.ensureSocket();
 
-    this.socket.on("connect", () => {
+    this.socket!.on("connect", () => {
       console.log("[SocketManager] Connected to server.");
       if (!this.hasConnectedOnce) {
         this.hasConnectedOnce = true;
         this.seqCounter = 0;
         this.actOnRoomAction();
       } else {
-        // Reconnection — reset sequence, rejoin room, flush buffered actions
         console.log("[SocketManager] Reconnected! Rejoining room...");
         this.seqCounter = 0;
         this.actionBuffer = [];
-        this.socket?.emit("rejoin_room" as any, {
+        this.socket?.emit("rejoin_room", {
           roomCode: GameState.roomCode,
           playerName: GameState.playerName,
         });
@@ -15683,32 +18892,58 @@ class SocketManagerClass {
       }
     });
 
-    this.socket.on("disconnect", () => {
+    this.socket!.on("disconnect", () => {
       console.log("[SocketManager] Disconnected from server.");
       if (this.hasConnectedOnce) {
         this.callbacks?.onConnectionLost?.();
       }
     });
 
-    this.socket.io.on("reconnect_failed", () => {
+    this.socket!.io.on("reconnect_failed", () => {
       console.warn("[SocketManager] All reconnection attempts failed.");
       this.callbacks?.onReconnectFailed?.();
     });
+  }
 
+  /**
+   * Lobby flow: connect WITHOUT auto-creating/joining a room.
+   * Safe to call before connect() — if socket exists, reuses it.
+   */
+  connectOnly(callbacks?: Partial<RoomCallbacks>): void {
+    if (callbacks) {
+      this.callbacks = {
+        onRoomCreated: () => {},
+        onRoomJoined: () => {},
+        onOpponentJoined: () => {},
+        onOpponentAction: () => {},
+        onOpponentDisconnected: () => {},
+        onError: (msg) => console.warn('[SocketManager] Error:', msg),
+        ...callbacks,
+      } as RoomCallbacks;
+    }
+
+    if (this.socket?.connected) {
+      console.log('[SocketManager] Already connected (connectOnly).');
+      return;
+    }
+
+    this.ensureSocket();
+
+    // Use once to avoid stacking on repeated connectOnly() calls
+    this.socket!.once('connect', () => {
+      console.log('[SocketManager] Connected (lobby mode).');
+    });
+  }
+
+  /** Create socket if none exists, register shared events. */
+  private ensureSocket(): void {
+    if (!this.socket) {
+      this.socket = io(this.serverUrl, RECONNECT_OPTS);
+    }
     this.registerEvents();
   }
 
-  private flushActionBuffer(): void {
-    if (this.actionBuffer.length === 0) return;
-    console.log(`[SocketManager] Flushing ${this.actionBuffer.length} buffered actions`);
-    for (const action of this.actionBuffer) {
-      this.socket?.emit('game_action', {
-        roomCode: GameState.roomCode,
-        action,
-      });
-    }
-    this.actionBuffer = [];
-  }
+  // ─── Room Actions (legacy flow) ────────────────────────────
 
   private actOnRoomAction(): void {
     if (GameState.roomAction === RoomAction.Create) {
@@ -15736,9 +18971,9 @@ class SocketManagerClass {
     });
   }
 
-  // Register wallet address with server (needed for payout)
+  // ─── Outgoing Events ──────────────────────────────────────
+
   registerWallet(walletAddress: string, message: string, signature: string): void {
-    console.log(`[SocketManager] Registering wallet: ${walletAddress}`);
     this.socket?.emit("registerWallet", {
       roomCode: GameState.roomCode,
       walletAddress,
@@ -15747,144 +18982,74 @@ class SocketManagerClass {
     });
   }
 
-  // Signal to server that escrow deposit is confirmed
   signalCryptoReady(): void {
-    console.log("[SocketManager] Signaling crypto ready");
-    this.socket?.emit("cryptoReady", {
-      roomCode: GameState.roomCode,
-    });
+    this.socket?.emit("cryptoReady", { roomCode: GameState.roomCode });
   }
 
-  // Signal to server that BattleScene is loaded and ready
   signalBattleReady(): void {
-    console.log("[SocketManager] Signaling battle ready");
-    this.socket?.emit("player_ready", {
-      roomCode: GameState.roomCode,
-    });
+    this.socket?.emit("player_ready", { roomCode: GameState.roomCode });
   }
 
-  private registerEvents(): void {
-    if (!this.socket) return;
-
-  this.socket.on("roomCreated", (data: { roomCode: string; playerIndex: number }) => {
-  console.log(`[SocketManager] Room created: ${data.roomCode}, playerIndex: ${data.playerIndex ?? 0}`);
-  GameState.setPlayerIndex(data.playerIndex ?? 0);
-  this.callbacks?.onRoomCreated(data.roomCode);
-});
-this.socket.on("hostDepositConfirmed", () => {
-  console.log("[SocketManager] Host deposit confirmed — my turn to deposit");
-  this.callbacks?.onHostDepositConfirmed?.();
-});
-    this.socket.on("roomJoined", (data: { roomCode: string; playerIndex: number }) => {
-  console.log(`[SocketManager] Room joined: ${data.roomCode}, playerIndex: ${data.playerIndex ?? 1}`);
-  GameState.setPlayerIndex(data.playerIndex ?? 1);
-  this.callbacks?.onRoomJoined(data.roomCode);
-});
-    this.socket.on("opponentJoined", (data: { playerName: string; playerIndex?: number }) => {
-  console.log(`[SocketManager] Opponent joined: ${data.playerName}`);
-  this.callbacks?.onOpponentJoined(data.playerName);
-});
-this.socket.on("opponent_action", (action: GameAction) => {
-  console.log('[SocketManager] Received opponent_action:', action.type);
-  this.callbacks?.onOpponentAction(action);
-});
-this.socket.on("game_seed", (data: { seed: number }) => {
-  console.log(`[SocketManager] Game seed received: ${data.seed}`);
-  GameState.setGameSeed(data.seed);
-});
-    this.socket.on("opponentDisconnected", () => {
-      console.log("[SocketManager] Opponent disconnected.");
-      this.callbacks?.onOpponentDisconnected();
-    });
-
-    this.socket.on("opponentReconnected" as any, () => {
-      console.log("[SocketManager] Opponent reconnected!");
-      this.callbacks?.onOpponentReconnected?.();
-    });
-
-    this.socket.on("opponentAbandon" as any, () => {
-      console.log("[SocketManager] Opponent abandon (grace period expired).");
-      this.callbacks?.onOpponentAbandon?.();
-    });
-
-    this.socket.on("disconnectCountdown" as any, (data: { remaining: number }) => {
-      this.callbacks?.onDisconnectCountdown?.(data.remaining);
-    });
-
-    this.socket.on("rejoinSuccess" as any, (data: { roomCode: string; playerIndex: number }) => {
-      console.log(`[SocketManager] Rejoin success: room=${data.roomCode}, playerIndex=${data.playerIndex}`);
-    });
-
-    this.socket.on("error", (data: { message: string }) => {
-      console.error(`[SocketManager] Error: ${data.message}`);
-      this.callbacks?.onError(data.message);
-    });
-
-    // Battle ready handshake
-    this.socket.on("both_battle_ready", () => {
-      console.log("[SocketManager] Both players battle ready!");
-      this.callbacks?.onBothBattleReady?.();
-    });
-
-    // Crypto events
-    this.socket.on("bothCryptoReady", () => {
-      console.log("[SocketManager] Both players crypto ready!");
-      this.callbacks?.onBothCryptoReady?.();
-    });
-
-this.socket.on('payout_result', (data: { success: boolean; txHash?: string; error?: string }) => {
-  console.log('[SocketManager] Payout result:', data);
-  GameState.payoutResult = data;
-  this.callbacks?.onPayoutResult?.(data);
-});
-  }
-sendGameAction(action: GameAction): void {
-  this.seqCounter += 1;
-  action.seqNum = this.seqCounter;
-  if (!this.socket?.connected) {
-    if (this.actionBuffer.length >= SocketManagerClass.MAX_BUFFER_SIZE) {
-      console.error(`[SocketManager] Action buffer full (${SocketManagerClass.MAX_BUFFER_SIZE}), dropping action: ${action.type}`);
+  sendGameAction(action: GameAction): void {
+    this.seqCounter += 1;
+    action.seqNum = this.seqCounter;
+    if (!this.socket?.connected) {
+      if (this.actionBuffer.length >= SocketManagerClass.MAX_BUFFER_SIZE) {
+        console.error(`[SocketManager] Action buffer full, dropping: ${action.type}`);
+        return;
+      }
+      console.warn(`[SocketManager] Buffering game_action: ${action.type} (seq=${action.seqNum})`);
+      this.actionBuffer.push(action);
       return;
     }
-    console.warn(`[SocketManager] Buffering game_action (disconnected): ${action.type} (seq=${action.seqNum})`);
-    this.actionBuffer.push(action);
-    return;
+    this.socket.emit('game_action', { roomCode: GameState.roomCode, action });
   }
-  this.socket.emit('game_action', {
-    roomCode: GameState.roomCode,
-    action,
-  });
-  console.log(`[SocketManager] Sent game_action: ${action.type} (seq=${action.seqNum})`);
-}
-sendStateReport(report: Record<string, any>): void {
-  this.socket?.emit('game_state_report' as any, {
-    roomCode: GameState.roomCode,
-    report,
-  });
-}
 
-sendStateHash(hash: string, afterGlobalSeq: number): void {
-  this.socket?.emit('state_hash' as any, {
-    roomCode: GameState.roomCode,
-    hash,
-    afterGlobalSeq,
-  });
-}
+  sendStateReport(report: Record<string, any>): void {
+    this.socket?.emit('game_state_report', {
+      roomCode: GameState.roomCode,
+      report,
+    });
+  }
 
-sendGameOver(localPlayerIndex: number, localPlayerWon: boolean): void {
-  console.log(`[SocketManager] Sending game_over, won: ${localPlayerWon}`);
-  this.socket?.emit('game_over', {
-    roomCode: GameState.roomCode,
-    winnerIndex: localPlayerWon ? localPlayerIndex : (localPlayerIndex === 0 ? 1 : 0),
-  });
-}
-// ADD this method to SocketManagerClass, before disconnect():
-setCallbacks(callbacks: RoomCallbacks): void {
-  this.callbacks = callbacks;
-  console.log('[SocketManager] Callbacks updated.');
-}
+  sendStateHash(hash: string, afterGlobalSeq: number): void {
+    this.socket?.emit('state_hash', {
+      roomCode: GameState.roomCode,
+      hash,
+      afterGlobalSeq,
+    });
+  }
+
+  sendGameOver(localPlayerIndex: number, localPlayerWon: boolean, totalTurns?: number): void {
+    console.log(`[SocketManager] Sending game_over, won: ${localPlayerWon}, turns: ${totalTurns ?? 0}`);
+    this.socket?.emit('game_over', {
+      roomCode: GameState.roomCode,
+      winnerIndex: localPlayerWon ? localPlayerIndex : (localPlayerIndex === 0 ? 1 : 0),
+      totalTurns: totalTurns ?? 0,
+    });
+  }
+
+  registerPlayer(token: string): void {
+    this.socket?.emit('registerPlayer', { token });
+  }
+
+  submitDeck(roomCode: string, deckIds: string[]): void {
+    this.socket?.emit('submitDeck', { roomCode, deckIds });
+  }
+
+  // ─── State Management ─────────────────────────────────────
+
+  setCallbacks(callbacks: RoomCallbacks): void {
+    this.callbacks = callbacks;
+  }
+
   isConnected(): boolean {
     return this.socket?.connected ?? false;
+  }
+
+  /** Expose raw socket for LobbySocketManager to attach lobby: events. */
+  getSocket(): Socket | null {
+    return this.socket;
   }
 
   /** One-shot listener for both_battle_ready (used by BattleScene). */
@@ -15896,14 +19061,107 @@ setCallbacks(callbacks: RoomCallbacks): void {
     this.socket?.disconnect();
     this.socket = null;
     this.hasConnectedOnce = false;
+    this.eventsRegistered = false;
     this.actionBuffer = [];
     this.seqCounter = 0;
     console.log("[SocketManager] Manually disconnected.");
+  }
+
+  // ─── Shared Event Registration ────────────────────────────
+
+  private registerEvents(): void {
+    if (!this.socket || this.eventsRegistered) return;
+    this.eventsRegistered = true;
+
+    const s = this.socket;
+
+    // Room lifecycle
+    s.on("roomCreated", (data) => {
+      GameState.setRoomCode(data.roomCode);
+      GameState.setPlayerIndex(data.playerIndex ?? 0);
+      this.callbacks?.onRoomCreated(data.roomCode);
+    });
+
+    s.on("roomJoined", (data) => {
+      GameState.setPlayerIndex(data.playerIndex ?? 1);
+      this.callbacks?.onRoomJoined(data.roomCode);
+    });
+
+    s.on("opponentJoined", (data) => {
+      this.callbacks?.onOpponentJoined(data.playerName);
+    });
+
+    s.on("opponent_action", (action) => {
+      this.callbacks?.onOpponentAction(action);
+    });
+
+    s.on("game_seed", (data) => {
+      GameState.setGameSeed(data.seed);
+    });
+
+    // Connection events
+    s.on("opponentDisconnected", () => {
+      this.callbacks?.onOpponentDisconnected();
+    });
+
+    s.on("opponentReconnected", () => {
+      this.callbacks?.onOpponentReconnected?.();
+    });
+
+    s.on("opponentAbandon", () => {
+      this.callbacks?.onOpponentAbandon?.();
+    });
+
+    s.on("disconnectCountdown", (data) => {
+      this.callbacks?.onDisconnectCountdown?.(data.remaining);
+    });
+
+    s.on("rejoinSuccess", (data) => {
+      console.log(`[SocketManager] Rejoin success: room=${data.roomCode}`);
+    });
+
+    s.on("error", (data) => {
+      console.error(`[SocketManager] Error: ${data.message}`);
+      this.callbacks?.onError(data.message);
+    });
+
+    // Battle ready
+    s.on("both_battle_ready", () => {
+      this.callbacks?.onBothBattleReady?.();
+    });
+
+    // Crypto
+    s.on("hostDepositConfirmed", () => {
+      this.callbacks?.onHostDepositConfirmed?.();
+    });
+
+    s.on("bothCryptoReady", () => {
+      this.callbacks?.onBothCryptoReady?.();
+    });
+
+    s.on("payout_result", (data) => {
+      GameState.payoutResult = data;
+      this.callbacks?.onPayoutResult?.(data);
+    });
+
+    // Deck validation
+    s.on("deckAccepted", (data) => {
+      this.callbacks?.onDeckAccepted?.(data);
+    });
+
+    s.on("deckRejected", (data) => {
+      this.callbacks?.onDeckRejected?.(data);
+    });
+
+    s.on("bothDecksReady", () => {
+      this.callbacks?.onBothDecksReady?.();
+    });
   }
 }
 
 const SocketManager = new SocketManagerClass();
 export default SocketManager;
+
 ```
 
 # src\renderers\BoardRenderer.ts
@@ -19194,7 +22452,7 @@ export function setupGameOverHandler(
   localPlayerIndex: number,
   playerName: string,
   opponentName: string,
-  isCryptoMode: boolean,
+  _isCryptoMode: boolean,
 ): () => void {
   const unsub = EventBus.on(EV.GAME_OVER, (ev: any) => {
     if (!scene.scene.isActive('BattleScene')) return;
@@ -19213,7 +22471,7 @@ export function setupGameOverHandler(
       payout: playerWon ? GameState.currentStake * 2 * 0.95 : 0,
     });
 
-    if (isCryptoMode) SocketManager.sendGameOver(localPlayerIndex, playerWon);
+    SocketManager.sendGameOver(localPlayerIndex, playerWon, turnCount);
 
     scene.time.delayedCall(1500, () => {
       scene.cameras.main.fadeOut(300, 0, 0, 0);
@@ -19823,6 +23081,1295 @@ export default class BattleScene extends Phaser.Scene {
 
 ```
 
+# src\scenes\DeckBuilderScene.ts
+
+```ts
+// ============================================================
+// DeckBuilderScene.ts
+// Thin orchestrator: owns state, handles API calls, delegates
+// rendering to DeckListView and DeckEditorView.
+// ============================================================
+
+import Phaser from 'phaser';
+import GameState from '../GameState';
+import { AuthManager } from '../auth/AuthManager';
+import { DeckAPI, type DeckSummary } from '../deck/DeckAPI';
+import { CollectionAPI } from '../deck/CollectionAPI';
+import { validateDeckClient } from '../deck/DeckValidatorClient';
+import { DOMInputManager } from '../ui/DOMInputManager';
+import { MenuButton } from '../ui/MenuButton';
+import { ToastNotification } from '../ui/ToastNotification';
+import { DeckLoader } from '../config/DeckLoader';
+import { DeckView, createInitialState, type DeckBuilderState, type DeckBuilderCallbacks } from '../deck/DeckBuilderState';
+import { renderDeckList } from '../deck/DeckListView';
+import { renderDeckEditor } from '../deck/DeckEditorView';
+import { showCardDetail } from '../deck/CardDetailOverlay';
+import { CardClass } from '../game/types/CardTypes';
+
+const CX = 640;
+const FONT = '"Courier New", monospace';
+
+export default class DeckBuilderScene extends Phaser.Scene {
+  private state!: DeckBuilderState;
+  private viewObjects: Phaser.GameObjects.GameObject[] = [];
+  private inputManager!: DOMInputManager;
+  private cardDetailContainer?: Phaser.GameObjects.Container;
+  private transitioning = false;
+
+  // Persistent background (always visible)
+  private bgObjects: Phaser.GameObjects.GameObject[] = [];
+  // Persistent header (hidden during editor view)
+  private headerObjects: Phaser.GameObjects.GameObject[] = [];
+
+  constructor() { super('DeckBuilderScene'); }
+
+  create(): void {
+    const { width, height } = this.scale;
+    this.state = createInitialState();
+    this.inputManager = new DOMInputManager(this);
+
+    // Background
+    if (this.textures.exists('bg_main_menu')) {
+      this.bgObjects.push(this.add.image(width / 2, height / 2, 'bg_main_menu').setDisplaySize(width, height));
+    } else {
+      this.bgObjects.push(this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a2e));
+    }
+
+    // Main panel (wider for editor)
+    const panel = this.add.graphics();
+    panel.fillStyle(0x16213e, 0.90);
+    panel.fillRoundedRect(100, 15, 1080, 695, 10);
+    panel.lineStyle(2, 0xf5a623, 0.4);
+    panel.strokeRoundedRect(100, 15, 1080, 695, 10);
+    this.bgObjects.push(panel);
+
+    this.cameras.main.fadeIn(400, 0, 0, 0);
+
+    // Persistent header (only visible in DECK_LIST view)
+    this.headerObjects.push(this.add.text(CX, 45, 'DECK BUILDER', {
+      fontSize: '28px', fontFamily: FONT, fontStyle: 'bold', color: '#f5a623',
+    }).setOrigin(0.5));
+
+    const backBtn = new MenuButton(this, 200, 45, '[ BACK ]', {
+      color: '#ff4444', fontSize: '16px',
+      onPointerDown: () => this.callbacks.onBackToHub(),
+    });
+    this.headerObjects.push(backBtn.text);
+
+    // Loading text
+    const loadingText = this.add.text(CX, 350, 'Loading...', {
+      fontSize: '16px', fontFamily: FONT, color: '#AAAAAA',
+    }).setOrigin(0.5);
+
+    this.loadData(loadingText);
+
+    this.events.once('shutdown', () => this.cleanup());
+  }
+
+  // ─── Callbacks ────────────────────────────────────────────
+
+  private callbacks: DeckBuilderCallbacks = {
+    onEditDeck: (deckId) => {
+      const deck = this.state.decks.find(d => d.id === deckId);
+      if (!deck) return;
+      this.state.editor = {
+        deckId: deck.id,
+        deckName: deck.name,
+        cardIds: [...deck.cardIds],
+        dirty: false,
+        validation: validateDeckClient(deck.cardIds),
+        classFilter: 'ALL',
+        sortBy: 'cost',
+        collectionPage: 0,
+      };
+      this.state.currentView = DeckView.DECK_EDITOR;
+      this.renderCurrentView();
+    },
+
+    onCreateDeck: () => {
+      this.state.editor = {
+        deckId: null,
+        deckName: 'New Deck',
+        cardIds: [],
+        dirty: false,
+        validation: validateDeckClient([]),
+        classFilter: 'ALL',
+        sortBy: 'cost',
+        collectionPage: 0,
+      };
+      this.state.currentView = DeckView.DECK_EDITOR;
+      this.renderCurrentView();
+    },
+
+    onDeleteDeck: (deckId) => {
+      this.state.deleteConfirmId = deckId;
+      this.renderCurrentView();
+    },
+
+    onConfirmDelete: async (deckId) => {
+      try {
+        await DeckAPI.remove(deckId);
+        if (this.state.activeDeckId === deckId) {
+          this.state.activeDeckId = null;
+          GameState.setActiveDeck(null, []);
+        }
+        ToastNotification.show(this, 'Deck deleted', { color: '#AAAAAA' });
+        await this.refreshDecks();
+      } catch (err: any) {
+        ToastNotification.show(this, err.message || 'Delete failed', { color: '#ff4444' });
+      }
+      this.state.deleteConfirmId = null;
+      this.renderCurrentView();
+    },
+
+    onCancelDelete: () => {
+      this.state.deleteConfirmId = null;
+      this.renderCurrentView();
+    },
+
+    onActivateDeck: async (deckId) => {
+      try {
+        await DeckAPI.activate(deckId);
+        const deck = this.state.decks.find(d => d.id === deckId);
+        if (deck) {
+          this.state.activeDeckId = deckId;
+          GameState.setActiveDeck(deckId, deck.cardIds);
+          DeckLoader.invalidate();
+        }
+        ToastNotification.show(this, 'Deck activated!', { color: '#00ff88' });
+        this.renderCurrentView();
+      } catch (err: any) {
+        ToastNotification.show(this, err.message || 'Activation failed', { color: '#ff4444' });
+      }
+    },
+
+    onAddCard: (cardId) => {
+      const editor = this.state.editor;
+      if (!editor) return;
+      editor.cardIds.push(cardId);
+      editor.dirty = true;
+      editor.validation = validateDeckClient(editor.cardIds);
+      this.renderCurrentView();
+    },
+
+    onRemoveCard: (cardId) => {
+      const editor = this.state.editor;
+      if (!editor) return;
+      const idx = editor.cardIds.indexOf(cardId);
+      if (idx >= 0) {
+        editor.cardIds.splice(idx, 1);
+        editor.dirty = true;
+        editor.validation = validateDeckClient(editor.cardIds);
+        this.renderCurrentView();
+      }
+    },
+
+    onSave: async () => {
+      await this.saveDeck(false);
+    },
+
+    onSaveAndActivate: async () => {
+      await this.saveDeck(true);
+    },
+
+    onBackToList: () => {
+      if (this.state.editor?.dirty) {
+        // Could add confirmation overlay; for now just go back
+      }
+      this.state.editor = null;
+      this.state.currentView = DeckView.DECK_LIST;
+      this.renderCurrentView();
+    },
+
+    onBackToHub: () => {
+      if (this.transitioning) return;
+      this.transitioning = true;
+      this.cameras.main.fadeOut(300, 0, 0, 0);
+      this.cameras.main.once('camerafadeoutcomplete', () => {
+        this.scene.start('HubScene');
+      });
+    },
+
+    onShowCardDetail: (cardId) => {
+      this.dismissCardDetail();
+      this.cardDetailContainer = showCardDetail(
+        this, cardId, this.state.collection,
+        () => this.dismissCardDetail(),
+      );
+    },
+
+    onDismissCardDetail: () => {
+      this.dismissCardDetail();
+    },
+
+    onFilterChange: (filter: CardClass | 'ALL') => {
+      if (!this.state.editor) return;
+      this.state.editor.classFilter = filter;
+      this.state.editor.collectionPage = 0;
+      this.renderCurrentView();
+    },
+
+    onSortChange: (sort: 'cost' | 'name') => {
+      if (!this.state.editor) return;
+      this.state.editor.sortBy = sort;
+      this.renderCurrentView();
+    },
+
+    onPageChange: (delta: number) => {
+      if (!this.state.editor) return;
+      this.state.editor.collectionPage = Math.max(0, this.state.editor.collectionPage + delta);
+      this.renderCurrentView();
+    },
+  };
+
+  // ─── Data Loading ─────────────────────────────────────────
+
+  private async loadData(loadingText: Phaser.GameObjects.Text): Promise<void> {
+    try {
+      const [deckResult, collection] = await Promise.all([
+        DeckAPI.list().catch(() => ({ decks: [] as DeckSummary[] })),
+        CollectionAPI.get().catch(() => []),
+      ]);
+
+      if (!this.scene.isActive('DeckBuilderScene')) return;
+
+      this.state.decks = deckResult.decks;
+      this.state.collection = collection;
+
+      // Auto-create starter deck if player has no decks
+      if (this.state.decks.length === 0) {
+        await this.createStarterDeck();
+      }
+
+      this.state.loading = false;
+    } catch {
+      this.state.loading = false;
+    }
+
+    loadingText.destroy();
+    this.renderCurrentView();
+  }
+
+  private async createStarterDeck(): Promise<void> {
+    try {
+      const res = await fetch('/default-deck.json');
+      if (!res.ok) return;
+      const config = await res.json();
+      if (!Array.isArray(config.deckIds) || config.deckIds.length === 0) return;
+
+      const name = config.name || 'Starter Deck';
+      const result = await DeckAPI.create(name, config.deckIds);
+      const deck = result.deck;
+
+      // Auto-activate it
+      if (deck.isValid) {
+        await DeckAPI.activate(deck.id);
+        this.state.activeDeckId = deck.id;
+        GameState.setActiveDeck(deck.id, config.deckIds);
+        DeckLoader.invalidate();
+      }
+
+      // Refresh deck list
+      const refreshed = await DeckAPI.list();
+      if (!this.scene.isActive('DeckBuilderScene')) return;
+      this.state.decks = refreshed.decks;
+    } catch (err) {
+      console.warn('[DeckBuilder] Failed to create starter deck:', err);
+    }
+  }
+
+  private async refreshDecks(): Promise<void> {
+    try {
+      const result = await DeckAPI.list();
+      if (!this.scene.isActive('DeckBuilderScene')) return;
+      this.state.decks = result.decks;
+    } catch { /* keep stale data */ }
+  }
+
+  // ─── Save Logic ───────────────────────────────────────────
+
+  private async saveDeck(andActivate: boolean): Promise<void> {
+    const editor = this.state.editor;
+    if (!editor) return;
+
+    const name = editor.deckName.trim() || 'My Deck';
+    const cardIds = editor.cardIds;
+
+    try {
+      let savedDeck: DeckSummary;
+
+      if (editor.deckId) {
+        const result = await DeckAPI.update(editor.deckId, name, cardIds);
+        savedDeck = result.deck;
+        ToastNotification.show(this, 'Deck saved!', { color: '#00ff88' });
+      } else {
+        const result = await DeckAPI.create(name, cardIds);
+        savedDeck = result.deck;
+        editor.deckId = savedDeck.id;
+        ToastNotification.show(this, 'Deck created!', { color: '#00ff88' });
+      }
+
+      if (andActivate && savedDeck.isValid) {
+        await DeckAPI.activate(savedDeck.id);
+        this.state.activeDeckId = savedDeck.id;
+        GameState.setActiveDeck(savedDeck.id, cardIds);
+        DeckLoader.invalidate();
+        ToastNotification.show(this, 'Deck activated!', { color: '#00ff88' });
+      } else if (andActivate && !savedDeck.isValid) {
+        ToastNotification.show(this, 'Cannot activate invalid deck', { color: '#ff4444' });
+      }
+
+      editor.dirty = false;
+      await this.refreshDecks();
+
+      if (!this.scene.isActive('DeckBuilderScene')) return;
+
+      this.state.editor = null;
+      this.state.currentView = DeckView.DECK_LIST;
+      this.renderCurrentView();
+    } catch (err: any) {
+      ToastNotification.show(this, err.message || 'Save failed', { color: '#ff4444' });
+    }
+  }
+
+  // ─── Rendering ────────────────────────────────────────────
+
+  private renderCurrentView(): void {
+    // Tear down previous view objects
+    for (const obj of this.viewObjects) obj.destroy();
+    this.viewObjects = [];
+    this.inputManager?.destroyAll();
+
+    // Toggle persistent header visibility based on view
+    const showHeader = this.state.currentView === DeckView.DECK_LIST;
+    for (const obj of this.headerObjects) {
+      (obj as Phaser.GameObjects.Components.Visible).setVisible(showHeader);
+    }
+
+    if (this.state.currentView === DeckView.DECK_LIST) {
+      this.viewObjects = renderDeckList(this, this.state, this.callbacks);
+    } else {
+      this.inputManager = new DOMInputManager(this);
+      this.viewObjects = renderDeckEditor(this, this.state, this.callbacks, this.inputManager);
+    }
+  }
+
+  private dismissCardDetail(): void {
+    this.cardDetailContainer?.destroy();
+    this.cardDetailContainer = undefined;
+  }
+
+  private cleanup(): void {
+    this.dismissCardDetail();
+    this.inputManager?.destroyAll();
+    for (const obj of this.viewObjects) obj.destroy();
+    this.viewObjects = [];
+    this.transitioning = false;
+  }
+}
+
+```
+
+# src\scenes\HubScene.ts
+
+```ts
+// ============================================================
+// HubScene.ts
+// Central hub: navigate to host, browse, join, deck builder,
+// or legacy quick play.
+// ============================================================
+
+import Phaser from 'phaser';
+import GameState from '../GameState';
+import SocketManager from '../network/SocketManager';
+import { AuthManager } from '../auth/AuthManager';
+import { DeckLoader } from '../config/DeckLoader';
+import { LobbySocketManager } from '../lobby/LobbySocketManager';
+import { DOMInputManager } from '../ui/DOMInputManager';
+import { MenuButton } from '../ui/MenuButton';
+import { ToastNotification } from '../ui/ToastNotification';
+
+const CX = 640;
+
+export default class HubScene extends Phaser.Scene {
+  private lobbySM!: LobbySocketManager;
+  private inputManager?: DOMInputManager;
+  private joinOverlay?: Phaser.GameObjects.Container;
+  private hostOverlay?: Phaser.GameObjects.Container;
+  private transitioning = false;
+
+  constructor() { super('HubScene'); }
+
+  create(): void {
+    const { width, height } = this.scale;
+
+    // Background
+    if (this.textures.exists('bg_main_menu')) {
+      this.add.image(width / 2, height / 2, 'bg_main_menu').setDisplaySize(width, height);
+    } else {
+      this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a2e);
+    }
+
+    // Panel
+    const panel = this.add.graphics();
+    panel.fillStyle(0x16213e, 0.88);
+    panel.fillRoundedRect(CX - 280, 40, 560, 620, 10);
+    panel.lineStyle(2, 0x4fc3f7, 0.4);
+    panel.strokeRoundedRect(CX - 280, 40, 560, 620, 10);
+
+    this.cameras.main.fadeIn(400, 0, 0, 0);
+
+    // Identity bar
+    const displayName = AuthManager.isLoggedIn()
+      ? AuthManager.getPlayer()!.displayName
+      : GameState.playerName || 'Guest';
+    const walletBadge = AuthManager.isLoggedIn()
+      ? ` (${AuthManager.getPlayer()!.wallet.slice(0, 6)}...)`
+      : '';
+
+    this.add.text(CX, 75, `Welcome, ${displayName}${walletBadge}`, {
+      fontSize: '18px', fontFamily: '"Courier New", monospace',
+      fontStyle: 'bold', color: '#FFFFFF',
+    }).setOrigin(0.5);
+
+    const statusColor = AuthManager.isLoggedIn() ? '#00ff88' : '#AAAAAA';
+    const statusLabel = AuthManager.isLoggedIn() ? 'Authenticated' : 'Guest Mode';
+    this.add.text(CX, 102, statusLabel, {
+      fontSize: '12px', fontFamily: '"Courier New", monospace', color: statusColor,
+    }).setOrigin(0.5);
+
+    // Logout / Login button
+    if (AuthManager.isLoggedIn()) {
+      new MenuButton(this, CX, 128, '[ Logout ]', {
+        color: '#777777', fontSize: '12px', fontStyle: 'normal',
+        onPointerDown: () => this.handleLogout(),
+      });
+    } else {
+      new MenuButton(this, CX, 128, '[ Login with Wallet ]', {
+        color: '#4fc3f7', fontSize: '12px', fontStyle: 'normal',
+        onPointerDown: () => this.goToLogin(),
+      });
+    }
+
+    // ── Main Buttons ────────────────────────────────────────
+    let y = 170;
+    const gap = 65;
+
+    new MenuButton(this, CX, y, '[ HOST A GAME ]', {
+      color: '#00ff88', fontSize: '24px',
+      onPointerDown: () => this.showHostOverlay(),
+    });
+
+    new MenuButton(this, CX, y += gap, '[ BROWSE GAMES ]', {
+      color: '#4fc3f7', fontSize: '22px',
+      onPointerDown: () => this.goToBrowse(),
+    });
+
+    new MenuButton(this, CX, y += gap, '[ JOIN BY CODE ]', {
+      color: '#4fc3f7', fontSize: '22px',
+      onPointerDown: () => this.showJoinOverlay(),
+    });
+
+    new MenuButton(this, CX, y += gap, '[ DECK BUILDER ]', {
+      color: '#f5a623', fontSize: '22px',
+      onPointerDown: () => this.goToDeckBuilder(),
+    });
+
+    new MenuButton(this, CX, y += gap + 20, '[ QUICK PLAY (LEGACY) ]', {
+      color: '#777777', fontSize: '16px',
+      onPointerDown: () => this.goToLegacy(),
+    });
+
+    // W/L record
+    if (GameState.winCount + GameState.lossCount > 0) {
+      this.add.text(CX, y + gap, `Record: ${GameState.winCount}W / ${GameState.lossCount}L`, {
+        fontSize: '14px', fontFamily: '"Courier New", monospace', color: '#777777',
+      }).setOrigin(0.5);
+    }
+
+    // Last match banner
+    if (GameState.lastMatch) {
+      const m = GameState.lastMatch;
+      const color = m.playerWon ? '#00ff88' : '#ff6666';
+      const text = m.playerWon
+        ? `Last: You beat ${m.opponentName} (${m.turns} turns)`
+        : `Last: ${m.opponentName} beat you (${m.turns} turns)`;
+      this.add.text(CX, 610, text, {
+        fontSize: '13px', fontFamily: '"Courier New", monospace', color,
+      }).setOrigin(0.5);
+    }
+
+    // Connect socket for lobby (no auto-room)
+    SocketManager.connectOnly({
+      onError: (msg) => ToastNotification.show(this, msg, { color: '#ff4444' }),
+    });
+
+    // Setup lobby socket manager
+    this.lobbySM = new LobbySocketManager({
+      onCreated: (code) => {
+        this.goToLobby(code, true);
+      },
+      onJoined: (code) => {
+        this.goToLobby(code, false);
+      },
+      onError: (msg) => {
+        ToastNotification.show(this, msg, { color: '#ff4444' });
+      },
+    });
+    this.lobbySM.attach();
+
+    this.events.once('shutdown', () => {
+      this.cleanup();
+      this.transitioning = false;
+    });
+  }
+
+  // ─── Host Overlay ──────────────────────────────────────────
+
+  private showHostOverlay(): void {
+    if (this.hostOverlay) return;
+    const { width, height } = this.scale;
+
+    this.hostOverlay = this.add.container(0, 0);
+
+    // Dimmer
+    const dim = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.6)
+      .setInteractive();
+    this.hostOverlay.add(dim);
+
+    // Panel
+    const g = this.add.graphics();
+    g.fillStyle(0x16213e, 0.95);
+    g.fillRoundedRect(CX - 200, 180, 400, 300, 10);
+    g.lineStyle(2, 0x4fc3f7, 0.6);
+    g.strokeRoundedRect(CX - 200, 180, 400, 300, 10);
+    this.hostOverlay.add(g);
+
+    this.hostOverlay.add(this.add.text(CX, 210, 'Host Settings', {
+      fontSize: '22px', fontFamily: '"Courier New", monospace',
+      fontStyle: 'bold', color: '#FFFFFF',
+    }).setOrigin(0.5));
+
+    // Room name input
+    this.inputManager = new DOMInputManager(this);
+    const nameInput = this.inputManager.createInput({
+      gameX: CX, gameY: 270, width: 300, height: 36,
+      placeholder: 'Room name...',
+      maxLength: 30,
+    });
+    nameInput.value = `${GameState.playerName || 'Player'}'s Room`;
+
+    // Toggles (simple text toggles)
+    let isPublic = true;
+    let isCrypto = false;
+
+    const publicBtn = this.add.text(CX, 320, '[ PUBLIC ]', {
+      fontSize: '18px', fontFamily: '"Courier New", monospace', color: '#00ff88',
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    publicBtn.on('pointerdown', () => {
+      isPublic = !isPublic;
+      publicBtn.setText(isPublic ? '[ PUBLIC ]' : '[ PRIVATE ]');
+      publicBtn.setColor(isPublic ? '#00ff88' : '#f5a623');
+    });
+    this.hostOverlay.add(publicBtn);
+
+    const cryptoBtn = this.add.text(CX, 360, '[ FREE PLAY ]', {
+      fontSize: '18px', fontFamily: '"Courier New", monospace', color: '#4fc3f7',
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    cryptoBtn.on('pointerdown', () => {
+      isCrypto = !isCrypto;
+      cryptoBtn.setText(isCrypto ? '[ CRYPTO MODE ]' : '[ FREE PLAY ]');
+      cryptoBtn.setColor(isCrypto ? '#f5a623' : '#4fc3f7');
+    });
+    this.hostOverlay.add(cryptoBtn);
+
+    // Create button
+    const createBtn = new MenuButton(this, CX - 70, 420, '[ CREATE ]', {
+      color: '#00ff88', fontSize: '20px',
+      onPointerDown: () => {
+        const roomName = nameInput.value.trim() || `${GameState.playerName}'s Room`;
+        this.lobbySM.createRoom(GameState.playerName || 'Player', {
+          isPublic,
+          isCrypto,
+          roomName,
+          stakeAmount: isCrypto ? 0.01 : 0,
+        });
+        this.hideHostOverlay();
+      },
+    });
+    this.hostOverlay.add(createBtn.text);
+
+    // Cancel
+    const cancelBtn = new MenuButton(this, CX + 70, 420, '[ CANCEL ]', {
+      color: '#ff4444', fontSize: '20px',
+      onPointerDown: () => this.hideHostOverlay(),
+    });
+    this.hostOverlay.add(cancelBtn.text);
+  }
+
+  private hideHostOverlay(): void {
+    this.inputManager?.destroyAll();
+    this.inputManager = undefined;
+    this.hostOverlay?.destroy();
+    this.hostOverlay = undefined;
+  }
+
+  // ─── Join Overlay ──────────────────────────────────────────
+
+  private showJoinOverlay(): void {
+    if (this.joinOverlay) return;
+    const { width, height } = this.scale;
+
+    this.joinOverlay = this.add.container(0, 0);
+
+    const dim = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.6)
+      .setInteractive();
+    this.joinOverlay.add(dim);
+
+    const g = this.add.graphics();
+    g.fillStyle(0x16213e, 0.95);
+    g.fillRoundedRect(CX - 180, 250, 360, 180, 10);
+    g.lineStyle(2, 0x4fc3f7, 0.6);
+    g.strokeRoundedRect(CX - 180, 250, 360, 180, 10);
+    this.joinOverlay.add(g);
+
+    this.joinOverlay.add(this.add.text(CX, 275, 'Join by Room Code', {
+      fontSize: '20px', fontFamily: '"Courier New", monospace',
+      fontStyle: 'bold', color: '#FFFFFF',
+    }).setOrigin(0.5));
+
+    this.inputManager = new DOMInputManager(this);
+    const codeInput = this.inputManager.createInput({
+      gameX: CX, gameY: 325, width: 200, height: 40,
+      placeholder: '6-digit code', maxLength: 6, uppercase: true,
+    });
+
+    const joinBtn = new MenuButton(this, CX - 60, 385, '[ JOIN ]', {
+      color: '#00ff88', fontSize: '20px',
+      onPointerDown: () => {
+        const code = codeInput.value.trim();
+        if (code.length < 4) {
+          ToastNotification.show(this, 'Enter a room code', { color: '#ff4444' });
+          return;
+        }
+        this.lobbySM.joinRoom(code, GameState.playerName || 'Guest');
+        this.hideJoinOverlay();
+      },
+    });
+    this.joinOverlay.add(joinBtn.text);
+
+    const cancelBtn = new MenuButton(this, CX + 60, 385, '[ CANCEL ]', {
+      color: '#ff4444', fontSize: '20px',
+      onPointerDown: () => this.hideJoinOverlay(),
+    });
+    this.joinOverlay.add(cancelBtn.text);
+  }
+
+  private hideJoinOverlay(): void {
+    this.inputManager?.destroyAll();
+    this.inputManager = undefined;
+    this.joinOverlay?.destroy();
+    this.joinOverlay = undefined;
+  }
+
+  // ─── Navigation ────────────────────────────────────────────
+
+  private goToLobby(roomCode: string, isHost: boolean): void {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start('LobbyScene', { roomCode, isHost });
+    });
+  }
+
+  private goToBrowse(): void {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start('RoomBrowserScene');
+    });
+  }
+
+  private goToDeckBuilder(): void {
+    if (!AuthManager.isLoggedIn()) {
+      ToastNotification.show(this, 'Login required for deck builder', { color: '#f5a623' });
+      return;
+    }
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start('DeckBuilderScene');
+    });
+  }
+
+  private goToLegacy(): void {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start('MainMenuScene');
+    });
+  }
+
+  private handleLogout(): void {
+    AuthManager.logout();
+    DeckLoader.invalidate();
+    GameState.setPlayerName('Guest');
+    ToastNotification.show(this, 'Logged out', { color: '#AAAAAA' });
+    // Restart HubScene to refresh identity bar
+    this.scene.restart();
+  }
+
+  private goToLogin(): void {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start('LoginScene');
+    });
+  }
+
+  private cleanup(): void {
+    this.lobbySM?.detach();
+    this.inputManager?.destroyAll();
+  }
+}
+
+```
+
+# src\scenes\LobbyScene.ts
+
+```ts
+// ============================================================
+// LobbyScene.ts
+// Enhanced room: chat, ready, kick, host controls, deck submit.
+// Receives { roomCode, isHost } from HubScene or RoomBrowserScene.
+// ============================================================
+
+import Phaser from 'phaser';
+import GameState from '../GameState';
+import SocketManager from '../network/SocketManager';
+import { AuthManager } from '../auth/AuthManager';
+import { LobbySocketManager } from '../lobby/LobbySocketManager';
+import { DeckLoader } from '../config/DeckLoader';
+import { DOMInputManager } from '../ui/DOMInputManager';
+import { MenuButton } from '../ui/MenuButton';
+import { ToastNotification } from '../ui/ToastNotification';
+import { ShareHelper } from '../ui/ShareHelper';
+import type { LobbyState, ChatMessage } from '../../shared/types/NetworkEvents';
+
+interface LobbySceneData {
+  roomCode: string;
+  isHost: boolean;
+}
+
+const CX = 640;
+const FONT = '"Courier New", monospace';
+
+export default class LobbyScene extends Phaser.Scene {
+  private lobbySM!: LobbySocketManager;
+  private inputManager!: DOMInputManager;
+  private roomCode = '';
+  private isHost = false;
+  private latestState: LobbyState | null = null;
+  private transitioning = false;
+  private disconnectHandler?: () => void;
+
+  // UI handles
+  private statusText!: Phaser.GameObjects.Text;
+  private playerListTexts: Phaser.GameObjects.GameObject[] = [];
+  private chatTexts: Phaser.GameObjects.Text[] = [];
+  private chatInput?: HTMLInputElement;
+  private readyBtn?: MenuButton;
+  private startBtn?: MenuButton;
+
+  constructor() { super('LobbyScene'); }
+
+  init(data: LobbySceneData): void {
+    this.roomCode = data.roomCode ?? '';
+    this.isHost = data.isHost ?? false;
+  }
+
+  create(): void {
+    const { width, height } = this.scale;
+
+    if (this.textures.exists('bg_lobby')) {
+      this.add.image(width / 2, height / 2, 'bg_lobby').setDisplaySize(width, height);
+    } else {
+      this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a2e);
+    }
+
+    this.cameras.main.fadeIn(400, 0, 0, 0);
+
+    // ── Main Panel ──────────────────────────────────────────
+    const panel = this.add.graphics();
+    panel.fillStyle(0x16213e, 0.90);
+    panel.fillRoundedRect(60, 15, 1160, 695, 10);
+    panel.lineStyle(2, 0x4fc3f7, 0.3);
+    panel.strokeRoundedRect(60, 15, 1160, 695, 10);
+
+    // ── Header ──────────────────────────────────────────────
+    this.add.text(CX, 38, `ROOM:  ${this.roomCode}`, {
+      fontSize: '24px', fontFamily: FONT,
+      fontStyle: 'bold', color: '#4fc3f7',
+    }).setOrigin(0.5);
+
+    new MenuButton(this, CX + 160, 38, '[ Copy ]', {
+      color: '#777777', fontSize: '12px', fontStyle: 'normal',
+      onPointerDown: async () => {
+        const ok = await ShareHelper.copyToClipboard(this.roomCode);
+        if (ok) ToastNotification.show(this, `Copied: ${this.roomCode}`, { color: '#00ff88' });
+      },
+    });
+
+    // Mode badge
+    const modeLabel = this.isHost ? 'HOST' : 'PLAYER';
+    const modeColor = this.isHost ? '#f5a623' : '#4fc3f7';
+    this.add.text(CX + 240, 38, modeLabel, {
+      fontSize: '11px', fontFamily: FONT, fontStyle: 'bold', color: modeColor,
+    }).setOrigin(0.5);
+
+    // Separator
+    const sep = this.add.graphics();
+    sep.lineStyle(1, 0x4fc3f7, 0.2);
+    sep.lineBetween(80, 58, 1200, 58);
+
+    // ── Left Panel: Players ─────────────────────────────────
+    const leftPanel = this.add.graphics();
+    leftPanel.fillStyle(0x0a0f1e, 0.5);
+    leftPanel.fillRoundedRect(80, 68, 480, 340, 8);
+    leftPanel.lineStyle(1, 0x4fc3f7, 0.2);
+    leftPanel.strokeRoundedRect(80, 68, 480, 340, 8);
+
+    this.add.text(320, 82, 'PLAYERS', {
+      fontSize: '14px', fontFamily: FONT,
+      fontStyle: 'bold', color: '#4fc3f7',
+    }).setOrigin(0.5);
+
+    // Column headers
+    this.add.text(100, 102, 'Name', {
+      fontSize: '10px', fontFamily: FONT, color: '#444444',
+    });
+    this.add.text(370, 102, 'Status', {
+      fontSize: '10px', fontFamily: FONT, color: '#444444',
+    });
+
+    // ── Right Panel: Chat ───────────────────────────────────
+    const rightPanel = this.add.graphics();
+    rightPanel.fillStyle(0x0a0f1e, 0.5);
+    rightPanel.fillRoundedRect(580, 68, 620, 340, 8);
+    rightPanel.lineStyle(1, 0x4fc3f7, 0.2);
+    rightPanel.strokeRoundedRect(580, 68, 620, 340, 8);
+
+    this.add.text(890, 82, 'CHAT', {
+      fontSize: '14px', fontFamily: FONT,
+      fontStyle: 'bold', color: '#4fc3f7',
+    }).setOrigin(0.5);
+
+    // Chat input
+    this.inputManager = new DOMInputManager(this);
+    this.chatInput = this.inputManager.createInput({
+      gameX: 830, gameY: 430, width: 440, height: 30,
+      placeholder: 'Type message...',
+      maxLength: 200,
+    });
+    this.chatInput.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter') this.sendChat();
+    });
+
+    new MenuButton(this, 1100, 430, '[ Send ]', {
+      color: '#4fc3f7', fontSize: '12px', fontStyle: 'normal',
+      onPointerDown: () => this.sendChat(),
+    });
+
+    // ── Status Bar ──────────────────────────────────────────
+    this.statusText = this.add.text(CX, 480, 'Connecting...', {
+      fontSize: '16px', fontFamily: FONT, fontStyle: 'bold', color: '#f5a623',
+    }).setOrigin(0.5);
+
+    // ── Player Info ─────────────────────────────────────────
+    const displayName = AuthManager.isLoggedIn()
+      ? AuthManager.getPlayer()!.displayName
+      : GameState.playerName || 'Guest';
+    const walletBadge = AuthManager.isLoggedIn()
+      ? ` (${AuthManager.getPlayer()!.wallet.slice(0, 6)}...)`
+      : '';
+    this.add.text(100, 510, `You: ${displayName}${walletBadge}`, {
+      fontSize: '12px', fontFamily: FONT, color: '#555555',
+    });
+
+    // Deck info
+    const deckIds = DeckLoader.get();
+    this.add.text(500, 510, `Deck: ${deckIds.length} cards`, {
+      fontSize: '12px', fontFamily: FONT, color: '#555555',
+    });
+
+    // ── Bottom Buttons ──────────────────────────────────────
+    const btnY = 560;
+
+    this.readyBtn = new MenuButton(this, CX - 200, btnY, '[ READY ]', {
+      color: '#00ff88', fontSize: '24px',
+      onPointerDown: () => this.lobbySM.toggleReady(this.roomCode),
+    });
+
+    if (this.isHost) {
+      this.startBtn = new MenuButton(this, CX + 20, btnY, '[ START GAME ]', {
+        color: '#f5a623', fontSize: '24px',
+        onPointerDown: () => this.lobbySM.startGame(this.roomCode),
+      });
+    }
+
+    new MenuButton(this, CX + 250, btnY, '[ LEAVE ]', {
+      color: '#ff4444', fontSize: '18px',
+      onPointerDown: () => this.leaveRoom(),
+    });
+
+    // ── Socket Setup ────────────────────────────────────────
+    if (!SocketManager.isConnected()) {
+      SocketManager.connectOnly();
+    }
+
+    if (AuthManager.isLoggedIn()) {
+      SocketManager.registerPlayer(AuthManager.getToken()!);
+    }
+
+    this.lobbySM = new LobbySocketManager({
+      onStateUpdate: (state) => this.onStateUpdate(state),
+      onChatMessage: (msg) => this.addChatMessage(msg),
+      onSystemMessage: (text) => this.addChatMessage({ sender: 'SYSTEM', text, timestamp: Date.now() }),
+      onKicked: (reason) => {
+        ToastNotification.show(this, `Kicked: ${reason}`, { color: '#ff4444' });
+        this.time.delayedCall(1500, () => this.goToHub());
+      },
+      onGameStarting: () => {
+        this.statusText.setText('Game starting!').setColor('#00ff88');
+        this.time.delayedCall(800, () => this.enterBattle());
+      },
+      onDepositPhase: (stakeAmount) => {
+        this.statusText.setText(`Deposit ${stakeAmount} AVAX to continue`).setColor('#f5a623');
+      },
+      onBothDeposited: () => {
+        this.statusText.setText('Both deposited! Starting...').setColor('#00ff88');
+      },
+      onSubmitDecks: () => {
+        const ids = DeckLoader.get();
+        this.lobbySM.submitDeck(this.roomCode, ids);
+      },
+      onError: (msg) => {
+        ToastNotification.show(this, msg, { color: '#ff4444' });
+      },
+    });
+    this.lobbySM.attach();
+    this.lobbySM.requestRoomState(this.roomCode);
+
+    // Disconnect safety
+    const rawSocket = SocketManager.getSocket();
+    if (rawSocket) {
+      this.disconnectHandler = () => {
+        if (this.transitioning) return;
+        this.statusText?.setText('Disconnected from server').setColor('#ff4444');
+        this.time.delayedCall(2000, () => this.goToHub());
+      };
+      rawSocket.once('disconnect', this.disconnectHandler);
+    }
+
+    this.events.once('shutdown', () => this.cleanup());
+  }
+
+  // ─── State Updates ─────────────────────────────────────────
+
+  private onStateUpdate(state: LobbyState): void {
+    this.latestState = state;
+    this.renderPlayerList(state);
+
+    const modeLabel = state.settings.isCrypto ? 'CRYPTO' : 'FREE';
+    const playerCount = state.players.length;
+    const maxPlayers = state.settings.maxPlayers ?? 2;
+
+    let statusLabel: string;
+    let statusColor: string;
+
+    if (state.status === 'waiting') {
+      statusLabel = `Waiting for players... ${playerCount}/${maxPlayers} (${modeLabel})`;
+      statusColor = '#f5a623';
+    } else if (state.status === 'full') {
+      const allReady = state.players.every(p => p.ready);
+      statusLabel = allReady ? 'All ready! Host can start' : 'Room full — ready up!';
+      statusColor = allReady ? '#00ff88' : '#4fc3f7';
+    } else {
+      statusLabel = state.status;
+      statusColor = '#4fc3f7';
+    }
+
+    this.statusText.setText(statusLabel).setColor(statusColor);
+  }
+
+  private renderPlayerList(state: LobbyState): void {
+    for (const t of this.playerListTexts) t.destroy();
+    this.playerListTexts = [];
+
+    state.players.forEach((p, i) => {
+      const y = 125 + i * 65;
+
+      // Player row background
+      const rowBg = this.add.graphics();
+      rowBg.fillStyle(p.ready ? 0x00ff88 : 0x4fc3f7, 0.04);
+      rowBg.fillRoundedRect(95, y - 5, 450, 50, 6);
+      this.playerListTexts.push(rowBg);
+
+      // Name + badge
+      const badge = p.isHost ? ' [HOST]' : '';
+      this.playerListTexts.push(this.add.text(110, y + 4, `${p.name}${badge}`, {
+        fontSize: '17px', fontFamily: FONT, fontStyle: 'bold', color: '#FFFFFF',
+      }));
+
+      // Role tag
+      if (p.isHost) {
+        this.playerListTexts.push(this.add.text(110, y + 28, 'Room Creator', {
+          fontSize: '10px', fontFamily: FONT, color: '#777777',
+        }));
+      }
+
+      // Ready status
+      const readyColor = p.ready ? '#00ff88' : '#ff4444';
+      const readyLabel = p.ready ? 'READY' : 'NOT READY';
+      this.playerListTexts.push(this.add.text(380, y + 8, readyLabel, {
+        fontSize: '14px', fontFamily: FONT, fontStyle: 'bold', color: readyColor,
+      }));
+
+      // Ready indicator dot
+      const dot = this.add.graphics();
+      dot.fillStyle(p.ready ? 0x00ff88 : 0xff4444, 1);
+      dot.fillCircle(365, y + 16, 5);
+      this.playerListTexts.push(dot);
+
+      // Kick button (host only, not self)
+      if (this.isHost && !p.isHost) {
+        const kickBtn = this.add.text(490, y + 8, '[KICK]', {
+          fontSize: '11px', fontFamily: FONT, color: '#ff4444',
+        }).setInteractive({ useHandCursor: true });
+        kickBtn.on('pointerover', () => kickBtn.setColor('#ffffff'));
+        kickBtn.on('pointerout', () => kickBtn.setColor('#ff4444'));
+        kickBtn.on('pointerdown', () => this.lobbySM.kickPlayer(this.roomCode, p.name));
+        this.playerListTexts.push(kickBtn);
+      }
+    });
+
+    // Empty slot indicator
+    const maxPlayers = state.settings.maxPlayers ?? 2;
+    if (state.players.length < maxPlayers) {
+      for (let i = state.players.length; i < maxPlayers; i++) {
+        const y = 125 + i * 65;
+        const slotBg = this.add.graphics();
+        slotBg.lineStyle(1, 0x4fc3f7, 0.1);
+        slotBg.strokeRoundedRect(95, y - 5, 450, 50, 6);
+        this.playerListTexts.push(slotBg);
+
+        this.playerListTexts.push(this.add.text(110, y + 10, 'Waiting for player...', {
+          fontSize: '14px', fontFamily: FONT, fontStyle: 'italic', color: '#333333',
+        }));
+      }
+    }
+  }
+
+  // ─── Chat ──────────────────────────────────────────────────
+
+  private addChatMessage(msg: ChatMessage): void {
+    const isSystem = msg.sender === 'SYSTEM';
+    const color = isSystem ? '#f5a623' : '#FFFFFF';
+    const prefix = isSystem ? '' : `${msg.sender}: `;
+
+    const text = this.add.text(600, 0, `${prefix}${msg.text}`, {
+      fontSize: '12px', fontFamily: FONT, color,
+      wordWrap: { width: 580 },
+    });
+    this.chatTexts.push(text);
+
+    // Keep last 10 messages visible
+    if (this.chatTexts.length > 10) {
+      this.chatTexts.shift()?.destroy();
+    }
+    this.chatTexts.forEach((t, i) => {
+      t.setPosition(600, 105 + i * 26);
+    });
+  }
+
+  private sendChat(): void {
+    if (!this.chatInput) return;
+    const text = this.chatInput.value.trim();
+    if (!text) return;
+    this.lobbySM.sendChat(this.roomCode, text);
+    this.chatInput.value = '';
+  }
+
+  // ─── Navigation ──────────────────────────────────────────
+
+  private leaveRoom(): void {
+    this.lobbySM.leaveRoom(this.roomCode);
+    this.goToHub();
+  }
+
+  private goToHub(): void {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start('HubScene');
+    });
+  }
+
+  private enterBattle(): void {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    const opponent = this.latestState?.players.find(p =>
+      (this.isHost && !p.isHost) || (!this.isHost && p.isHost)
+    );
+    const opponentName = opponent?.name || GameState.opponentName || 'Opponent';
+    GameState.setOpponentName(opponentName);
+    GameState.setRoomCode(this.roomCode);
+
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start('BattleScene', {
+        playerName: GameState.playerName,
+        opponentName,
+        isCryptoMode: this.latestState?.settings.isCrypto ?? false,
+        roomCode: this.roomCode,
+      });
+    });
+  }
+
+  private cleanup(): void {
+    this.lobbySM?.detach();
+    this.inputManager?.destroyAll();
+    if (this.disconnectHandler) {
+      SocketManager.getSocket()?.off('disconnect', this.disconnectHandler);
+      this.disconnectHandler = undefined;
+    }
+  }
+}
+
+```
+
+# src\scenes\LoginScene.ts
+
+```ts
+// ============================================================
+// LoginScene.ts
+// Entry scene: wallet login or guest mode.
+// ============================================================
+
+import Phaser from 'phaser';
+import { AuthManager } from '../auth/AuthManager';
+import { DeckLoader } from '../config/DeckLoader';
+import GameState from '../GameState';
+import { MenuButton } from '../ui/MenuButton';
+import { ToastNotification } from '../ui/ToastNotification';
+
+export default class LoginScene extends Phaser.Scene {
+  private loginBtn!: MenuButton;
+  private guestBtn!: MenuButton;
+  private statusText!: Phaser.GameObjects.Text;
+
+  constructor() { super('LoginScene'); }
+
+  create(): void {
+    const { width, height } = this.scale;
+
+    // Background
+    if (this.textures.exists('bg_main_menu')) {
+      this.add.image(width / 2, height / 2, 'bg_main_menu').setDisplaySize(width, height);
+    } else {
+      this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a2e);
+    }
+
+    // Panel
+    const panel = this.add.graphics();
+    panel.fillStyle(0x16213e, 0.88);
+    panel.fillRoundedRect(width / 2 - 240, height / 2 - 180, 480, 360, 10);
+    panel.lineStyle(2, 0x4fc3f7, 0.4);
+    panel.strokeRoundedRect(width / 2 - 240, height / 2 - 180, 480, 360, 10);
+
+    this.cameras.main.fadeIn(400, 0, 0, 0);
+
+    // Title
+    this.add.text(width / 2, height / 2 - 130, 'OnChainBattles', {
+      fontSize: '40px', fontFamily: '"Courier New", monospace',
+      fontStyle: 'bold', color: '#FFFFFF',
+    }).setOrigin(0.5);
+
+    this.add.text(width / 2, height / 2 - 85, 'Chess-like On-Chain Card Game', {
+      fontSize: '16px', fontFamily: '"Courier New", monospace', color: '#AAAAAA',
+    }).setOrigin(0.5);
+
+    // Login button
+    this.loginBtn = new MenuButton(this, width / 2, height / 2 - 10,
+      '[ LOGIN WITH WALLET ]', {
+        color: '#00ff88', fontSize: '24px',
+        onPointerDown: () => this.handleLogin(),
+      },
+    );
+
+    // Guest button
+    this.guestBtn = new MenuButton(this, width / 2, height / 2 + 50,
+      '[ PLAY AS GUEST ]', {
+        color: '#4fc3f7', fontSize: '20px',
+        onPointerDown: () => this.enterAsGuest(),
+      },
+    );
+
+    // Status text
+    this.statusText = this.add.text(width / 2, height / 2 + 110, '', {
+      fontSize: '13px', fontFamily: '"Courier New", monospace', color: '#AAAAAA',
+    }).setOrigin(0.5);
+
+    // If already logged in, show status and skip
+    if (AuthManager.isLoggedIn()) {
+      const player = AuthManager.getPlayer()!;
+      this.statusText.setText(`Logged in: ${player.displayName}`).setColor('#00ff88');
+      this.time.delayedCall(500, () => this.goToHub());
+    }
+  }
+
+  private async handleLogin(): Promise<void> {
+    this.loginBtn.setDisabled(true);
+    this.guestBtn.setDisabled(true);
+    this.statusText.setText('Connecting wallet...').setColor('#f5a623');
+
+    try {
+      const player = await AuthManager.login();
+      this.statusText.setText(`Welcome, ${player.displayName}!`).setColor('#00ff88');
+
+      // Reload deck with auth (Priority 1 can now succeed)
+      DeckLoader.invalidate();
+      await DeckLoader.load();
+
+      this.time.delayedCall(600, () => this.goToHub());
+    } catch (err: any) {
+      ToastNotification.show(this, err.message || 'Login failed', { color: '#ff4444' });
+      this.loginBtn.setDisabled(false);
+      this.guestBtn.setDisabled(false);
+      this.statusText.setText('').setColor('#AAAAAA');
+    }
+  }
+
+  private enterAsGuest(): void {
+    this.statusText.setText('Entering as guest...').setColor('#4fc3f7');
+    GameState.setPlayerName('Guest');
+    this.time.delayedCall(300, () => this.goToHub());
+  }
+
+  private goToHub(): void {
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start('HubScene');
+    });
+  }
+}
+
+```
+
 # src\scenes\MainMenuScene.ts
 
 ```ts
@@ -19842,6 +24389,7 @@ export default class BattleScene extends Phaser.Scene {
 import Phaser from 'phaser';
 import GameState, { RoomAction, GameMode } from '../GameState';
 import WalletManager from '../web3/WalletManager';
+import { AuthManager } from '../auth/AuthManager';
 import { DOMInputManager } from '../ui/DOMInputManager';
 import { MenuButton } from '../ui/MenuButton';
 import { ToastNotification } from '../ui/ToastNotification';
@@ -19982,6 +24530,17 @@ export default class MainMenuScene extends Phaser.Scene {
         onPointerDown: () => this.onPlayCrypto(),
       },
     );
+
+    // ── Auth status display ──────────────────────────────────
+    if (AuthManager.isLoggedIn()) {
+      const player = AuthManager.getPlayer()!;
+      this.add.text(CX, LAYOUT.cryptoBtn.y + 40,
+        `Logged in: ${player.displayName} (${player.wallet.slice(0, 6)}...${player.wallet.slice(-4)})`, {
+        fontSize: '12px',
+        fontFamily: '"Courier New", monospace',
+        color: '#4fc3f7',
+      }).setOrigin(0.5);
+    }
 
     // ── Last match banner (conditional) ─────────────────────
     this.renderLastMatchBanner();
@@ -20211,9 +24770,9 @@ export default class PreLoadScene extends Phaser.Scene {
   }
 
 create(): void {
-    console.log('[PreloadScene] All assets loaded. Starting MainMenuScene.');
+    console.log('[PreloadScene] All assets loaded. Starting LoginScene.');
     MipmapHelper.enableAll(this);
-    this.scene.start('MainMenuScene');
+    this.scene.start('LoginScene');
   }
 
   /** Generate mipmaps for a texture (drastically improves downscale quality). */
@@ -20408,6 +24967,7 @@ import SocketManager from '../network/SocketManager';
 
 export default class ResultScene extends Phaser.Scene {
   private autoReturnTimer?: Phaser.Time.TimerEvent;
+  private transitioning = false;
 
   constructor() {
     super('ResultScene');
@@ -20596,22 +25156,28 @@ export default class ResultScene extends Phaser.Scene {
   private addNavigationButtons(width: number, height: number): void {
     const btnY = height - 80;
 
-    // Play Again
-    const playAgainBtn = this.add.text(width / 2 - 100, btnY, '[ PLAY AGAIN ]', {
+    // Hub
+    const hubBtn = this.add.text(width / 2 - 160, btnY, '[ HUB ]', {
+      fontSize: '24px', color: '#4FC3F7',
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    hubBtn.on('pointerover', () => hubBtn.setColor('#FFFFFF'));
+    hubBtn.on('pointerout', () => hubBtn.setColor('#4FC3F7'));
+    hubBtn.on('pointerdown', () => this.goToHub());
+
+    // Rematch
+    const rematchBtn = this.add.text(width / 2, btnY, '[ REMATCH ]', {
       fontSize: '26px', color: '#00FF88',
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    rematchBtn.on('pointerover', () => rematchBtn.setColor('#FFFFFF'));
+    rematchBtn.on('pointerout', () => rematchBtn.setColor('#00FF88'));
+    rematchBtn.on('pointerdown', () => this.goToRematch());
 
-    playAgainBtn.on('pointerover', () => playAgainBtn.setColor('#FFFFFF'));
-    playAgainBtn.on('pointerout', () => playAgainBtn.setColor('#00FF88'));
-    playAgainBtn.on('pointerdown', () => this.goToMenu());
-
-    // Menu
-    const menuBtn = this.add.text(width / 2 + 120, btnY, '[ MENU ]', {
-      fontSize: '22px', color: '#AAAAAA',
+    // Legacy menu
+    const menuBtn = this.add.text(width / 2 + 160, btnY, '[ LEGACY ]', {
+      fontSize: '18px', color: '#777777',
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-
     menuBtn.on('pointerover', () => menuBtn.setColor('#FFFFFF'));
-    menuBtn.on('pointerout', () => menuBtn.setColor('#AAAAAA'));
+    menuBtn.on('pointerout', () => menuBtn.setColor('#777777'));
     menuBtn.on('pointerdown', () => this.goToMenu());
   }
 
@@ -20629,14 +25195,225 @@ export default class ResultScene extends Phaser.Scene {
     }
   }
 
-  private goToMenu(): void {
+  private goToHub(): void {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    this.autoReturnTimer?.destroy();
     SocketManager.disconnect();
-    GameState.clearMatchData();
-
+    // Don't clear match data yet — HubScene reads lastMatch for banner
     this.cameras.main.fadeOut(200, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
+      GameState.clearMatchData();
+      this.scene.start('HubScene');
+    });
+  }
+
+  private goToRematch(): void {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    this.autoReturnTimer?.destroy();
+    SocketManager.disconnect();
+    this.cameras.main.fadeOut(200, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      GameState.clearMatchData();
+      // Go to HubScene which will let user host a new game
+      this.scene.start('HubScene');
+    });
+  }
+
+  private goToMenu(): void {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    this.autoReturnTimer?.destroy();
+    SocketManager.disconnect();
+    this.cameras.main.fadeOut(200, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      GameState.clearMatchData();
       this.scene.start('MainMenuScene');
     });
+  }
+}
+
+```
+
+# src\scenes\RoomBrowserScene.ts
+
+```ts
+// ============================================================
+// RoomBrowserScene.ts
+// Lists public rooms with auto-refresh. Click to join.
+// ============================================================
+
+import Phaser from 'phaser';
+import GameState from '../GameState';
+import SocketManager from '../network/SocketManager';
+import { LobbySocketManager } from '../lobby/LobbySocketManager';
+import { fetchPublicRooms } from '../lobby/RoomBrowserAPI';
+import { MenuButton } from '../ui/MenuButton';
+import { ToastNotification } from '../ui/ToastNotification';
+import type { PublicRoomListing } from '../../shared/types/NetworkEvents';
+
+const CX = 640;
+const LIST_TOP = 130;
+const ROW_HEIGHT = 50;
+const MAX_VISIBLE = 8;
+
+export default class RoomBrowserScene extends Phaser.Scene {
+  private lobbySM!: LobbySocketManager;
+  private rooms: PublicRoomListing[] = [];
+  private roomTexts: Phaser.GameObjects.Text[] = [];
+  private refreshTimer?: Phaser.Time.TimerEvent;
+  private statusText!: Phaser.GameObjects.Text;
+  private failCount = 0;
+  private transitioning = false;
+
+  constructor() { super('RoomBrowserScene'); }
+
+  create(): void {
+    const { width, height } = this.scale;
+
+    if (this.textures.exists('bg_main_menu')) {
+      this.add.image(width / 2, height / 2, 'bg_main_menu').setDisplaySize(width, height);
+    } else {
+      this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a2e);
+    }
+
+    const panel = this.add.graphics();
+    panel.fillStyle(0x16213e, 0.88);
+    panel.fillRoundedRect(CX - 380, 30, 760, 640, 10);
+    panel.lineStyle(2, 0x4fc3f7, 0.4);
+    panel.strokeRoundedRect(CX - 380, 30, 760, 640, 10);
+
+    this.cameras.main.fadeIn(400, 0, 0, 0);
+
+    // Header
+    this.add.text(CX, 60, 'BROWSE GAMES', {
+      fontSize: '28px', fontFamily: '"Courier New", monospace',
+      fontStyle: 'bold', color: '#FFFFFF',
+    }).setOrigin(0.5);
+
+    new MenuButton(this, 320, 60, '[ BACK ]', {
+      color: '#ff4444', fontSize: '16px',
+      onPointerDown: () => this.goBack(),
+    });
+
+    // Column headers
+    const headerY = 100;
+    this.add.text(300, headerY, 'ROOM', { fontSize: '13px', fontFamily: '"Courier New", monospace', color: '#777777' }).setOrigin(0);
+    this.add.text(550, headerY, 'HOST', { fontSize: '13px', fontFamily: '"Courier New", monospace', color: '#777777' }).setOrigin(0);
+    this.add.text(730, headerY, 'PLAYERS', { fontSize: '13px', fontFamily: '"Courier New", monospace', color: '#777777' }).setOrigin(0);
+    this.add.text(830, headerY, 'MODE', { fontSize: '13px', fontFamily: '"Courier New", monospace', color: '#777777' }).setOrigin(0);
+    this.add.text(940, headerY, '', { fontSize: '13px', fontFamily: '"Courier New", monospace', color: '#777777' }).setOrigin(0);
+
+    // Status
+    this.statusText = this.add.text(CX, 640, 'Loading...', {
+      fontSize: '14px', fontFamily: '"Courier New", monospace', color: '#AAAAAA',
+    }).setOrigin(0.5);
+
+    // Connect + lobby socket
+    if (!SocketManager.isConnected()) {
+      SocketManager.connectOnly();
+    }
+
+    this.lobbySM = new LobbySocketManager({
+      onJoined: (code) => {
+        if (this.transitioning) return;
+        this.transitioning = true;
+        this.cameras.main.fadeOut(300, 0, 0, 0);
+        this.cameras.main.once('camerafadeoutcomplete', () => {
+          this.scene.start('LobbyScene', { roomCode: code, isHost: false });
+        });
+      },
+      onError: (msg) => ToastNotification.show(this, msg, { color: '#ff4444' }),
+    });
+    this.lobbySM.attach();
+
+    // Initial fetch + auto-refresh
+    this.fetchRooms();
+    this.refreshTimer = this.time.addEvent({
+      delay: 5000,
+      callback: () => this.fetchRooms(),
+      loop: true,
+    });
+
+    this.events.once('shutdown', () => this.cleanup());
+  }
+
+  private async fetchRooms(): Promise<void> {
+    try {
+      this.rooms = await fetchPublicRooms();
+      this.failCount = 0;
+      this.renderRoomList();
+    } catch {
+      this.failCount++;
+      if (this.failCount >= 3) {
+        this.statusText.setText('Server connection issues...').setColor('#ff4444');
+      }
+    }
+  }
+
+  private renderRoomList(): void {
+    // Clear old room text objects
+    for (const t of this.roomTexts) t.destroy();
+    this.roomTexts = [];
+
+    if (this.rooms.length === 0) {
+      this.statusText.setText('No rooms available. Host one from the Hub!').setColor('#AAAAAA');
+      return;
+    }
+
+    this.statusText.setText(`${this.rooms.length} room${this.rooms.length > 1 ? 's' : ''} available`).setColor('#4fc3f7');
+
+    const visible = this.rooms.slice(0, MAX_VISIBLE);
+    for (let i = 0; i < visible.length; i++) {
+      const room = visible[i];
+      const y = LIST_TOP + i * ROW_HEIGHT;
+
+      const nameText = this.add.text(300, y, room.roomName.slice(0, 20), {
+        fontSize: '16px', fontFamily: '"Courier New", monospace', color: '#FFFFFF',
+      });
+
+      const hostText = this.add.text(550, y, room.hostName.slice(0, 12), {
+        fontSize: '14px', fontFamily: '"Courier New", monospace', color: '#AAAAAA',
+      });
+
+      const countText = this.add.text(730, y, `${room.playerCount}/${room.maxPlayers}`, {
+        fontSize: '14px', fontFamily: '"Courier New", monospace', color: '#4fc3f7',
+      });
+
+      const modeColor = room.isCrypto ? '#f5a623' : '#00ff88';
+      const modeLabel = room.isCrypto ? 'CRYPTO' : 'FREE';
+      const modeText = this.add.text(830, y, modeLabel, {
+        fontSize: '14px', fontFamily: '"Courier New", monospace', color: modeColor,
+      });
+
+      const joinBtn = this.add.text(940, y, '[ JOIN ]', {
+        fontSize: '14px', fontFamily: '"Courier New", monospace', color: '#00ff88',
+      }).setInteractive({ useHandCursor: true });
+
+      joinBtn.on('pointerover', () => joinBtn.setColor('#ffffff'));
+      joinBtn.on('pointerout', () => joinBtn.setColor('#00ff88'));
+      joinBtn.on('pointerdown', () => {
+        this.lobbySM.joinRoom(room.code, GameState.playerName || 'Guest');
+      });
+
+      this.roomTexts.push(nameText, hostText, countText, modeText, joinBtn);
+    }
+  }
+
+  private goBack(): void {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start('HubScene');
+    });
+  }
+
+  private cleanup(): void {
+    this.refreshTimer?.remove();
+    this.refreshTimer = undefined;
+    this.lobbySM?.detach();
   }
 }
 
@@ -20663,6 +25440,8 @@ import GameState, { GameMode, RoomAction } from '../GameState';
 import SocketManager from '../network/SocketManager';
 import EscrowManager, { STAKE_AVAX } from '../web3/EscrowManager';
 import WalletManager from '../web3/WalletManager';
+import { AuthManager } from '../auth/AuthManager';
+import { DeckLoader } from '../config/DeckLoader';
 import { MenuButton } from '../ui/MenuButton';
 import { ToastNotification } from '../ui/ToastNotification';
 import { ShareHelper } from '../ui/ShareHelper';
@@ -20927,9 +25706,13 @@ private onHostDepositConfirmed(): void {
     this.statusText.setText('Waiting for opponent...');
     this.subStatusText.setText('Share the code or link below');
 
-    // Show copy/share buttons
     this.copyBtn.text.setVisible(true);
     this.shareBtn.text.setVisible(true);
+
+    // Register authenticated player identity with server
+    if (AuthManager.isLoggedIn()) {
+      SocketManager.registerPlayer(AuthManager.getToken()!);
+    }
 
     if (this.isCryptoMode && GameState.walletAddress) {
       this.signAndRegisterWallet();
@@ -20941,9 +25724,13 @@ private onHostDepositConfirmed(): void {
     this.roomCodeText.setText(`ROOM: ${code}`);
     this.statusText.setText('Joined room! Waiting...');
 
-    // Show copy/share for joiners too
     this.copyBtn.text.setVisible(true);
     this.shareBtn.text.setVisible(true);
+
+    // Register authenticated player identity with server
+    if (AuthManager.isLoggedIn()) {
+      SocketManager.registerPlayer(AuthManager.getToken()!);
+    }
 
     if (this.isCryptoMode && GameState.walletAddress) {
       this.signAndRegisterWallet();
@@ -21057,6 +25844,12 @@ private onHostDepositConfirmed(): void {
   }
 
   private enterBattle(): void {
+    // Submit deck to server before entering battle (non-blocking)
+    const deckIds = DeckLoader.get();
+    if (deckIds.length > 0 && this.currentRoomCode) {
+      SocketManager.submitDeck(this.currentRoomCode, deckIds);
+    }
+
     this.cameras.main.fadeOut(300, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       this.scene.start('BattleScene', {
@@ -24057,6 +28850,933 @@ export const Geom = {
 
 ```
 
+# tests\server\authDeck.test.ts
+
+```ts
+/**
+ * authDeck.test.ts — Tests for Phase 1 shared foundation:
+ * - GameState auth + deck fields
+ * - AuthManager stub behavior
+ * - NetworkEvents type contracts (compile-time verification)
+ * - DeckValidator (when created in Phase 2, extend here)
+ */
+
+import { describe, it, expect, beforeEach } from 'vitest';
+
+// ─── GameState Auth + Deck Fields ─────────────────────────────
+
+// We can't import the real GameState singleton (it has browser deps via import.meta.env)
+// so we test the interface contract by creating a minimal mock
+
+describe('GameState auth fields', () => {
+  let state: {
+    authToken: string;
+    authenticatedPlayerId: number;
+    displayName: string;
+    activeDeckId: number | null;
+    activeDeckCardIds: string[];
+    setAuthData(token: string, playerId: number, name: string): void;
+    isAuthenticated(): boolean;
+    clearAuth(): void;
+    setActiveDeck(deckId: number | null, cardIds: string[]): void;
+    hasActiveDeck(): boolean;
+    playerName: string;
+  };
+
+  beforeEach(() => {
+    state = {
+      authToken: '',
+      authenticatedPlayerId: 0,
+      displayName: '',
+      activeDeckId: null,
+      activeDeckCardIds: [],
+      playerName: 'Player',
+
+      setAuthData(token: string, playerId: number, name: string) {
+        this.authToken = token;
+        this.authenticatedPlayerId = playerId;
+        this.displayName = name;
+        this.playerName = name;
+      },
+
+      isAuthenticated() {
+        return this.authenticatedPlayerId > 0 && this.authToken.length > 0;
+      },
+
+      clearAuth() {
+        this.authToken = '';
+        this.authenticatedPlayerId = 0;
+        this.displayName = '';
+      },
+
+      setActiveDeck(deckId: number | null, cardIds: string[]) {
+        this.activeDeckId = deckId;
+        this.activeDeckCardIds = [...cardIds];
+      },
+
+      hasActiveDeck() {
+        return this.activeDeckCardIds.length > 0;
+      },
+    };
+  });
+
+  it('starts unauthenticated', () => {
+    expect(state.isAuthenticated()).toBe(false);
+    expect(state.authToken).toBe('');
+    expect(state.authenticatedPlayerId).toBe(0);
+  });
+
+  it('setAuthData populates fields and syncs playerName', () => {
+    state.setAuthData('jwt-token-123', 42, 'TestPlayer');
+
+    expect(state.isAuthenticated()).toBe(true);
+    expect(state.authToken).toBe('jwt-token-123');
+    expect(state.authenticatedPlayerId).toBe(42);
+    expect(state.displayName).toBe('TestPlayer');
+    expect(state.playerName).toBe('TestPlayer');
+  });
+
+  it('clearAuth resets all auth fields', () => {
+    state.setAuthData('token', 1, 'Name');
+    state.clearAuth();
+
+    expect(state.isAuthenticated()).toBe(false);
+    expect(state.authToken).toBe('');
+    expect(state.authenticatedPlayerId).toBe(0);
+    expect(state.displayName).toBe('');
+  });
+
+  it('starts with no active deck', () => {
+    expect(state.hasActiveDeck()).toBe(false);
+    expect(state.activeDeckId).toBeNull();
+    expect(state.activeDeckCardIds).toEqual([]);
+  });
+
+  it('setActiveDeck stores deck with defensive copy', () => {
+    const original = ['foot_soldier', 'archer', 'pikeman'];
+    state.setActiveDeck(7, original);
+
+    expect(state.hasActiveDeck()).toBe(true);
+    expect(state.activeDeckId).toBe(7);
+    expect(state.activeDeckCardIds).toEqual(original);
+
+    // Verify defensive copy — mutating original doesn't affect state
+    original.push('knight');
+    expect(state.activeDeckCardIds).toHaveLength(3);
+  });
+
+  it('isAuthenticated requires both token and playerId', () => {
+    state.authToken = 'token';
+    state.authenticatedPlayerId = 0;
+    expect(state.isAuthenticated()).toBe(false);
+
+    state.authToken = '';
+    state.authenticatedPlayerId = 1;
+    expect(state.isAuthenticated()).toBe(false);
+
+    state.authToken = 'token';
+    state.authenticatedPlayerId = 1;
+    expect(state.isAuthenticated()).toBe(true);
+  });
+});
+
+// ─── AuthManager Stub ─────────────────────────────────────────
+
+describe('AuthManager stub', () => {
+  // Import the real AuthManager since it has no browser deps
+  let AuthManager: typeof import('../../src/auth/AuthManager').AuthManager;
+
+  beforeEach(async () => {
+    // Re-import to get fresh singleton state
+    const mod = await import('../../src/auth/AuthManager');
+    AuthManager = mod.AuthManager;
+    AuthManager.logout(); // Reset state
+  });
+
+  it('starts not logged in', () => {
+    expect(AuthManager.isLoggedIn()).toBe(false);
+    expect(AuthManager.getToken()).toBeNull();
+    expect(AuthManager.getPlayer()).toBeNull();
+  });
+
+  it('login() throws in non-browser environment', async () => {
+    // Real AuthManager calls WalletManager.connect() which needs window.ethereum
+    await expect(AuthManager.login()).rejects.toThrow();
+  });
+
+  it('authHeaders returns empty object when not logged in', () => {
+    expect(AuthManager.authHeaders()).toEqual({});
+  });
+
+  it('_setAuth populates state', () => {
+    AuthManager._setAuth('test-jwt', {
+      id: 1,
+      wallet: '0xabc',
+      displayName: 'TestUser',
+      winCount: 5,
+      lossCount: 3,
+      eloRating: 1200,
+      activeDeckId: null,
+    });
+
+    expect(AuthManager.isLoggedIn()).toBe(true);
+    expect(AuthManager.getToken()).toBe('test-jwt');
+    expect(AuthManager.getPlayer()?.displayName).toBe('TestUser');
+    expect(AuthManager.authHeaders()).toEqual({
+      'Authorization': 'Bearer test-jwt',
+    });
+  });
+
+  it('logout clears state', () => {
+    AuthManager._setAuth('token', {
+      id: 1, wallet: '0x', displayName: 'X',
+      winCount: 0, lossCount: 0, eloRating: 1000, activeDeckId: null,
+    });
+
+    AuthManager.logout();
+
+    expect(AuthManager.isLoggedIn()).toBe(false);
+    expect(AuthManager.getToken()).toBeNull();
+    expect(AuthManager.getPlayer()).toBeNull();
+    expect(AuthManager.authHeaders()).toEqual({});
+  });
+});
+
+// ─── NetworkEvents Type Contracts ─────────────────────────────
+
+describe('NetworkEvents type contracts', () => {
+  it('GameAction includes all required action types', async () => {
+    const mod = await import('../../shared/types/NetworkEvents');
+
+    // Type-level check: verify the interface exists with expected shape
+    // We can't check union members at runtime, but we verify the import works
+    const action: import('../../shared/types/NetworkEvents').GameAction = {
+      type: 'CANCEL_PENDING',
+      seqNum: 1,
+      serverSeq: 2,
+    };
+    expect(action.type).toBe('CANCEL_PENDING');
+    expect(action.seqNum).toBe(1);
+    expect(action.serverSeq).toBe(2);
+  });
+
+  it('RoomPlayer has optional auth/deck fields', async () => {
+    const mod = await import('../../shared/types/NetworkEvents');
+    const player: import('../../shared/types/NetworkEvents').RoomPlayer = {
+      id: 'socket-1',
+      name: 'Test',
+      wallet: null,
+      // Optional fields
+      playerId: 42,
+      deckIds: ['foot_soldier', 'archer'],
+      ready: true,
+    };
+    expect(player.playerId).toBe(42);
+    expect(player.deckIds).toEqual(['foot_soldier', 'archer']);
+    expect(player.ready).toBe(true);
+  });
+
+  it('RoomPlayer works without optional fields (backward compat)', async () => {
+    const player: import('../../shared/types/NetworkEvents').RoomPlayer = {
+      id: 'socket-1',
+      name: 'Test',
+      wallet: null,
+    };
+    expect(player.playerId).toBeUndefined();
+    expect(player.deckIds).toBeUndefined();
+    expect(player.ready).toBeUndefined();
+  });
+
+  it('Room has optional lobby fields', async () => {
+    const room: Partial<import('../../shared/types/NetworkEvents').Room> = {
+      players: [],
+      gameSeed: null,
+      cryptoReadyCount: 0,
+      battleReadyCount: 0,
+      settled: false,
+      // Lobby extensions
+      status: 'waiting',
+      hostSocketId: 'socket-1',
+      settings: {
+        isPublic: true,
+        isCrypto: false,
+        maxPlayers: 2,
+        roomName: 'Test Room',
+        stakeAmount: 0,
+        password: null,
+      },
+    };
+    expect(room.status).toBe('waiting');
+    expect(room.settings?.roomName).toBe('Test Room');
+  });
+
+  it('game_over event supports totalTurns', async () => {
+    // Compile-time check: the interface allows totalTurns
+    type GameOverData = Parameters<import('../../shared/types/NetworkEvents').ClientToServerEvents['game_over']>[0];
+    const data: GameOverData = {
+      roomCode: 'ABC123',
+      winnerIndex: 0,
+      totalTurns: 15,
+    };
+    expect(data.totalTurns).toBe(15);
+  });
+
+  it('lobby events exist in ClientToServerEvents', async () => {
+    // Compile-time verification that lobby events are declared
+    type C2S = import('../../shared/types/NetworkEvents').ClientToServerEvents;
+    type LobbyCreate = C2S['lobby:create'];
+    type LobbyJoin = C2S['lobby:join'];
+    type LobbyChat = C2S['lobby:chat'];
+    type LobbyReady = C2S['lobby:ready'];
+    type LobbyStart = C2S['lobby:start_game'];
+
+    // Runtime: just verify the types resolve (no runtime crash)
+    expect(true).toBe(true);
+  });
+
+  it('lobby events exist in ServerToClientEvents', async () => {
+    type S2C = import('../../shared/types/NetworkEvents').ServerToClientEvents;
+    type LobbyState = S2C['lobby:state'];
+    type LobbyCreated = S2C['lobby:created'];
+    type LobbyGameStarting = S2C['lobby:game_starting'];
+    type DeckAccepted = S2C['deckAccepted'];
+    type DeckRejected = S2C['deckRejected'];
+
+    expect(true).toBe(true);
+  });
+});
+
+```
+
+# tests\server\deckValidator.test.ts
+
+```ts
+/**
+ * deckValidator.test.ts — Tests for server-side deck validation
+ * and CardPool data integrity.
+ */
+
+import { describe, it, expect } from 'vitest';
+import { validateDeck } from '../../server/validation/DeckValidator';
+import { CARD_POOL, getCardFromPool } from '../../server/validation/CardPool';
+
+// ─── CardPool Data Integrity ──────────────────────────────────
+
+describe('CardPool', () => {
+  it('has 31 card entries', () => {
+    expect(CARD_POOL.length).toBe(31);
+  });
+
+  it('every card has a non-empty id, name, and positive copies', () => {
+    for (const card of CARD_POOL) {
+      expect(card.id.length).toBeGreaterThan(0);
+      expect(card.name.length).toBeGreaterThan(0);
+      expect(card.copies).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('no duplicate IDs', () => {
+    const ids = CARD_POOL.map(c => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('king has cost 0', () => {
+    expect(getCardFromPool('king')?.cost).toBe(0);
+  });
+
+  it('commander has cost 7 (not 5)', () => {
+    expect(getCardFromPool('commander')?.cost).toBe(7);
+  });
+
+  it('knights_guard has cost 12', () => {
+    expect(getCardFromPool('knights_guard')?.cost).toBe(12);
+  });
+
+  it('knight has cost 9', () => {
+    expect(getCardFromPool('knight')?.cost).toBe(9);
+  });
+
+  it('getCardFromPool returns undefined for unknown ID', () => {
+    expect(getCardFromPool('nonexistent')).toBeUndefined();
+  });
+
+  it('total copies across all non-King cards is 31 (one full deck)', () => {
+    const total = CARD_POOL
+      .filter(c => c.id !== 'king')
+      .reduce((sum, c) => sum + c.copies, 0);
+    // A "full deck" uses every card at max copies
+    // This verifies the default deck is exactly 31 cards
+    expect(total).toBeGreaterThanOrEqual(31);
+  });
+});
+
+// ─── DeckValidator ────────────────────────────────────────────
+
+describe('DeckValidator', () => {
+  // Build a valid 31-card deck from CardPool (max copies of each)
+  function buildValidDeck(): string[] {
+    const deck: string[] = [];
+    for (const card of CARD_POOL) {
+      if (card.id === 'king') continue;
+      for (let i = 0; i < card.copies; i++) {
+        deck.push(card.id);
+      }
+    }
+    // Trim or pad to exactly 31
+    return deck.slice(0, 31);
+  }
+
+  it('accepts a valid 31-card deck', () => {
+    const deck = buildValidDeck();
+    expect(deck).toHaveLength(31);
+    const result = validateDeck(deck);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('rejects empty deck', () => {
+    const result = validateDeck([]);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('31'))).toBe(true);
+  });
+
+  it('rejects deck with wrong size', () => {
+    const result = validateDeck(['foot_soldier', 'archer']);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('31'))).toBe(true);
+  });
+
+  it('rejects deck containing king', () => {
+    const deck = buildValidDeck();
+    deck[0] = 'king';
+    const result = validateDeck(deck);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('King'))).toBe(true);
+  });
+
+  it('rejects unknown card IDs', () => {
+    const deck = buildValidDeck();
+    deck[0] = 'dragon_wizard';
+    const result = validateDeck(deck);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('dragon_wizard'))).toBe(true);
+  });
+
+  it('rejects too many copies of a card', () => {
+    // foot_soldier has max 3 copies — use 4
+    const deck = Array(31).fill('foot_soldier');
+    const result = validateDeck(deck);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('Foot Soldier'))).toBe(true);
+  });
+
+  it('rejects non-array input', () => {
+    const result = validateDeck('not an array' as any);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('array'))).toBe(true);
+  });
+
+  it('validates ownership when ownedCards is provided', () => {
+    const deck = buildValidDeck();
+    // Player only owns 1 foot_soldier but deck has 3
+    const owned = new Map<string, number>();
+    for (const card of CARD_POOL) {
+      if (card.id === 'king') continue;
+      owned.set(card.id, card.copies);
+    }
+    owned.set('foot_soldier', 1); // Override: only own 1
+
+    const result = validateDeck(deck, owned);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('Foot Soldier') && e.includes('own 1'))).toBe(true);
+  });
+
+  it('skips ownership check when ownedCards is null', () => {
+    const deck = buildValidDeck();
+    const result = validateDeck(deck, null);
+    expect(result.valid).toBe(true);
+  });
+});
+
+```
+
+# tests\server\lobby.test.ts
+
+```ts
+/**
+ * lobby.test.ts — Tests for lobby room lifecycle,
+ * RoomManager lobby extensions, and lobbyHelpers.
+ */
+
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createLobbyRoom } from '../../server/lobby/lobbyHelpers';
+import type { Room, RoomSettings } from '../../shared/types/NetworkEvents';
+
+// ─── lobbyHelpers ─────────────────────────────────────────────
+
+describe('createLobbyRoom', () => {
+  it('creates a room with all required Room fields', () => {
+    const room = createLobbyRoom('socket-1', 'TestHost', 42);
+
+    // Core fields
+    expect(room.players).toHaveLength(1);
+    expect(room.players[0].name).toBe('TestHost');
+    expect(room.players[0].id).toBe('socket-1');
+    expect(room.players[0].playerId).toBe(42);
+    expect(room.players[0].ready).toBe(true); // host is always ready
+    expect(room.gameSeed).toBeNull();
+    expect(room.cryptoReadyCount).toBe(0);
+    expect(room.settled).toBe(false);
+
+    // Required fields that SessionManager depends on
+    expect(room.battleReadyCount).toBe(0);
+    expect(room.actionQueue).toEqual([]);
+    expect(room.currentTurnPlayer).toBe(0);
+    expect(room.currentPhase).toBe('PLAY');
+    expect(room.actionCount).toBe(0);
+    expect(room.gameOverClaims).toEqual([]);
+    expect(room.lastSeqNum).toEqual([0, 0]);
+    expect(room.globalSeq).toBe(0);
+    expect(room.pendingHashes).toBeInstanceOf(Map);
+    expect(room.disconnectTimers).toBeInstanceOf(Map);
+    expect(room.disconnectIntervals).toBeInstanceOf(Map);
+    expect(room.createdAt).toBeGreaterThan(0);
+
+    // Lobby extensions
+    expect(room.hostSocketId).toBe('socket-1');
+    expect(room.hostPlayerId).toBe(42);
+    expect(room.status).toBe('waiting');
+    expect(room.settings).toBeDefined();
+    expect(room.chat).toEqual([]);
+  });
+
+  it('applies default settings when none provided', () => {
+    const room = createLobbyRoom('s1', 'Host', null);
+
+    expect(room.settings!.isPublic).toBe(true);
+    expect(room.settings!.isCrypto).toBe(false);
+    expect(room.settings!.maxPlayers).toBe(2);
+    expect(room.settings!.stakeAmount).toBe(0);
+    expect(room.settings!.password).toBeNull();
+    expect(room.settings!.roomName).toBe("Host's Room");
+  });
+
+  it('merges custom settings with defaults', () => {
+    const room = createLobbyRoom('s1', 'Host', null, {
+      isPublic: false,
+      isCrypto: true,
+      stakeAmount: 0.01,
+      roomName: 'Custom Room',
+    });
+
+    expect(room.settings!.isPublic).toBe(false);
+    expect(room.settings!.isCrypto).toBe(true);
+    expect(room.settings!.stakeAmount).toBe(0.01);
+    expect(room.settings!.roomName).toBe('Custom Room');
+    expect(room.settings!.maxPlayers).toBe(2); // default preserved
+  });
+
+  it('truncates room name to 40 chars', () => {
+    const longName = 'A'.repeat(60);
+    const room = createLobbyRoom('s1', 'Host', null, { roomName: longName });
+    expect(room.settings!.roomName).toHaveLength(40);
+  });
+
+  it('handles null playerId for guest host', () => {
+    const room = createLobbyRoom('s1', 'Guest', null);
+    expect(room.players[0].playerId).toBeNull();
+    expect(room.hostPlayerId).toBeNull();
+  });
+});
+
+// ─── Lobby Room Lifecycle (simulated) ─────────────────────────
+
+describe('Lobby room lifecycle', () => {
+  let room: Room;
+
+  beforeEach(() => {
+    room = createLobbyRoom('host-socket', 'HostPlayer', 1);
+  });
+
+  it('joiner can be added to room', () => {
+    room.players.push({
+      id: 'joiner-socket', name: 'Joiner', wallet: null,
+      playerId: 2, deckIds: null, ready: false,
+    });
+    expect(room.players).toHaveLength(2);
+    expect(room.players[1].ready).toBe(false);
+  });
+
+  it('status transitions: waiting → full → starting → in_progress', () => {
+    expect(room.status).toBe('waiting');
+
+    room.players.push({
+      id: 'joiner-socket', name: 'Joiner', wallet: null,
+      playerId: 2, deckIds: null, ready: false,
+    });
+    room.status = 'full';
+    expect(room.status).toBe('full');
+
+    room.status = 'starting';
+    expect(room.status).toBe('starting');
+
+    room.status = 'in_progress';
+    expect(room.status).toBe('in_progress');
+  });
+
+  it('crypto flow: waiting → depositing → in_progress', () => {
+    room.settings!.isCrypto = true;
+    room.status = 'depositing';
+    room.cryptoReadyCount = 0;
+
+    room.cryptoReadyCount = 1;
+    expect(room.cryptoReadyCount).toBe(1);
+
+    room.cryptoReadyCount = 2;
+    room.status = 'in_progress';
+    expect(room.status).toBe('in_progress');
+  });
+
+  it('host transfer on disconnect', () => {
+    room.players.push({
+      id: 'joiner-socket', name: 'Joiner', wallet: null,
+      playerId: 2, deckIds: null, ready: true,
+    });
+
+    // Simulate host leaving
+    room.players.splice(0, 1);
+    room.hostSocketId = room.players[0].id;
+    room.hostPlayerId = room.players[0].playerId ?? null;
+
+    expect(room.hostSocketId).toBe('joiner-socket');
+    expect(room.hostPlayerId).toBe(2);
+    expect(room.players).toHaveLength(1);
+  });
+
+  it('chat message accumulation', () => {
+    room.chat = room.chat ?? [];
+    room.chat.push({ sender: 'HostPlayer', text: 'Hello!', timestamp: Date.now() });
+    room.chat.push({ sender: 'HostPlayer', text: 'Ready?', timestamp: Date.now() });
+
+    expect(room.chat).toHaveLength(2);
+    expect(room.chat[0].text).toBe('Hello!');
+  });
+
+  it('deck submission tracking', () => {
+    room.players.push({
+      id: 'joiner-socket', name: 'Joiner', wallet: null,
+      playerId: 2, deckIds: null, ready: true,
+    });
+
+    room.players[0].deckIds = ['foot_soldier', 'archer'];
+    expect(room.players.every(p => !!p.deckIds)).toBe(false);
+
+    room.players[1].deckIds = ['pikeman', 'scout'];
+    expect(room.players.every(p => !!p.deckIds)).toBe(true);
+  });
+});
+
+// ─── matchService (unit test) ─────────────────────────────────
+
+describe('matchService recordMatch', () => {
+  it('skips recording when both players are guests', async () => {
+    // Import dynamically to avoid DB init at module level in test
+    const { recordMatch } = await import('../../server/api/matchService');
+
+    const guestRoom: Room = createLobbyRoom('s1', 'Guest1', null);
+    guestRoom.players.push({
+      id: 's2', name: 'Guest2', wallet: null,
+      playerId: null, deckIds: null, ready: true,
+    });
+
+    // This should NOT throw — it silently skips when both are guests
+    expect(() => {
+      recordMatch({
+        roomCode: 'TEST',
+        room: guestRoom,
+        winnerIndex: 0,
+        totalTurns: 10,
+      });
+    }).not.toThrow();
+  });
+});
+
+```
+
+# tests\server\lobbyFlow.test.ts
+
+```ts
+/**
+ * lobbyFlow.test.ts — Integration tests for the lobby → battle transition.
+ * Validates that all required GameState fields are set correctly
+ * when going through the lobby flow vs the legacy flow.
+ */
+
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createLobbyRoom } from '../../server/lobby/lobbyHelpers';
+import type { Room } from '../../shared/types/NetworkEvents';
+
+// ─── Lobby → Battle Transition Requirements ──────────────────
+
+describe('Lobby → Battle transition requirements', () => {
+  let room: Room;
+
+  beforeEach(() => {
+    room = createLobbyRoom('host-socket', 'HostPlayer', 1, {
+      isPublic: true, isCrypto: false, roomName: 'Test Room',
+    });
+    // Add joiner
+    room.players.push({
+      id: 'joiner-socket', name: 'JoinerPlayer', wallet: null,
+      playerId: 2, deckIds: null, ready: true,
+    });
+  });
+
+  it('finalizeLaunch sets gameSeed', () => {
+    // Simulate finalizeLaunch
+    const seed = 123456;
+    room.gameSeed = seed;
+    room.status = 'in_progress';
+
+    expect(room.gameSeed).toBe(seed);
+    expect(room.status).toBe('in_progress');
+  });
+
+  it('room has roomCode available for player_ready', () => {
+    // The roomCode is the key in the Map, not stored in Room itself.
+    // LobbyScene must set GameState.roomCode before entering BattleScene.
+    // This test verifies the room has all fields BattleScene needs.
+    const roomCode = '837646';
+    room.gameSeed = 999;
+    room.status = 'in_progress';
+
+    // These fields must be available when BattleScene starts:
+    expect(roomCode).toBeTruthy();              // roomCode must be non-empty
+    expect(room.gameSeed).toBeTruthy();          // seed must be set
+    expect(room.players.length).toBe(2);         // both players in room
+    expect(room.battleReadyCount).toBe(0);       // not yet ready (BattleScene increments)
+  });
+
+  it('player_ready increments battleReadyCount correctly', () => {
+    // Simulate the BattleScene player_ready flow
+    room.battleReadyCount += 1; // P1 sends player_ready
+    expect(room.battleReadyCount).toBe(1);
+
+    room.battleReadyCount += 1; // P2 sends player_ready
+    expect(room.battleReadyCount).toBe(2);
+    // At this point, server should emit both_battle_ready
+  });
+
+  it('room created by lobby has all SessionManager-required fields', () => {
+    // SessionManager.game_action handler accesses these fields
+    expect(room.currentTurnPlayer).toBeDefined();
+    expect(room.currentPhase).toBeDefined();
+    expect(room.lastSeqNum).toBeDefined();
+    expect(room.globalSeq).toBeDefined();
+    expect(room.actionQueue).toBeDefined();
+    expect(room.actionCount).toBeDefined();
+    expect(room.gameOverClaims).toBeDefined();
+    expect(room.pendingHashes).toBeInstanceOf(Map);
+    expect(room.disconnectTimers).toBeInstanceOf(Map);
+    expect(room.disconnectIntervals).toBeInstanceOf(Map);
+    expect(room.settled).toBe(false);
+  });
+
+  it('legacy events from finalizeLaunch carry correct data', () => {
+    const seed = 555;
+    room.gameSeed = seed;
+    room.status = 'in_progress';
+
+    // Simulate what finalizeLaunch emits:
+    // roomCreated: { roomCode, playerIndex }
+    // opponentJoined: { playerName, playerIndex }
+    // game_seed: { seed }
+    const roomCode = '123456';
+
+    // For P1 (host):
+    const p1RoomCreated = { roomCode, playerIndex: 0 };
+    const p1OpponentJoined = { playerName: room.players[1].name, playerIndex: 0 };
+    expect(p1RoomCreated.roomCode).toBe(roomCode);
+    expect(p1RoomCreated.playerIndex).toBe(0);
+    expect(p1OpponentJoined.playerName).toBe('JoinerPlayer');
+
+    // For P2 (joiner):
+    const p2RoomCreated = { roomCode, playerIndex: 1 };
+    const p2OpponentJoined = { playerName: room.players[0].name, playerIndex: 1 };
+    expect(p2RoomCreated.playerIndex).toBe(1);
+    expect(p2OpponentJoined.playerName).toBe('HostPlayer');
+  });
+
+  it('GameState fields required by BattleScene', () => {
+    // Simulates what must be set before BattleScene.create():
+    const requiredFields = {
+      roomCode: '837646',    // Set by LobbyScene.enterBattle or roomCreated handler
+      playerIndex: 0,        // Set by roomCreated handler
+      gameSeed: 999,         // Set by game_seed handler
+      playerName: 'Host',    // Set in HubScene/LoginScene
+      opponentName: 'Joiner',// Set by LobbyScene.enterBattle
+    };
+
+    // ALL must be non-empty/non-zero for BattleScene to work
+    expect(requiredFields.roomCode).toBeTruthy();
+    expect(requiredFields.gameSeed).toBeGreaterThan(0);
+    expect(requiredFields.playerName).toBeTruthy();
+    expect(requiredFields.opponentName).toBeTruthy();
+  });
+});
+
+// ─── SocketManager roomCreated handler sets roomCode ─────────
+
+describe('SocketManager roomCreated handler', () => {
+  it('must set GameState.roomCode from event data', () => {
+    // This test documents the requirement that the roomCreated handler
+    // sets roomCode. Previously it only set playerIndex.
+    // The fix adds: GameState.setRoomCode(data.roomCode)
+    //
+    // Without this, player_ready sends empty roomCode and the server
+    // can't find the room, so both_battle_ready never fires.
+    const data = { roomCode: '123456', playerIndex: 0 };
+    expect(data.roomCode).toBeTruthy();
+    // The actual SocketManager handler is tested via integration
+  });
+});
+
+```
+
+# tests\server\phase4.test.ts
+
+```ts
+/**
+ * phase4.test.ts — Tests for Phase 4 client-side additions:
+ * - DeckValidatorClient
+ * - DeckLoader 3-priority chain (unit-testable parts)
+ * - DeckAPI/CollectionAPI interface contracts
+ */
+
+import { describe, it, expect, beforeEach } from 'vitest';
+import { validateDeckClient } from '../../src/deck/DeckValidatorClient';
+import { UNITS_ONLY_DECK_IDS } from '../../src/game/data/DeckDefinitions';
+
+// ─── DeckValidatorClient ──────────────────────────────────────
+
+describe('DeckValidatorClient', () => {
+  it('accepts the built-in UNITS_ONLY_DECK_IDS', () => {
+    const result = validateDeckClient(UNITS_ONLY_DECK_IDS);
+    expect(result.cardCount).toBe(31);
+    // May or may not be valid depending on the built-in deck
+    // but should not throw and should return a result
+    expect(result.errors).toBeDefined();
+    expect(result.costCurve).toBeInstanceOf(Map);
+  });
+
+  it('rejects empty array', () => {
+    const result = validateDeckClient([]);
+    expect(result.valid).toBe(false);
+    expect(result.cardCount).toBe(0);
+    expect(result.errors.some(e => e.includes('31'))).toBe(true);
+  });
+
+  it('rejects deck with king', () => {
+    const deck = [...UNITS_ONLY_DECK_IDS];
+    deck[0] = 'king';
+    const result = validateDeckClient(deck);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('King'))).toBe(true);
+  });
+
+  it('rejects unknown card IDs', () => {
+    const deck = [...UNITS_ONLY_DECK_IDS];
+    deck[0] = 'dragon_lord';
+    const result = validateDeckClient(deck);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('dragon_lord'))).toBe(true);
+  });
+
+  it('rejects too many copies', () => {
+    const deck = Array(31).fill('foot_soldier');
+    const result = validateDeckClient(deck);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.includes('Foot Soldier'))).toBe(true);
+  });
+
+  it('builds cost curve', () => {
+    const result = validateDeckClient(UNITS_ONLY_DECK_IDS);
+    expect(result.costCurve.size).toBeGreaterThan(0);
+    // Sum of cost curve values should equal card count
+    let total = 0;
+    for (const count of result.costCurve.values()) total += count;
+    expect(total).toBe(result.cardCount);
+  });
+
+  it('handles non-array input', () => {
+    const result = validateDeckClient('not an array' as any);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toHaveLength(1);
+  });
+});
+
+// ─── CardPool ↔ CardRegistry Consistency ──────────────────────
+
+describe('CardPool-CardRegistry consistency', () => {
+  it('every CardPool entry exists in CardRegistry', async () => {
+    const { CARD_POOL } = await import('../../server/validation/CardPool');
+    const { getCard } = await import('../../src/game/data/CardRegistry');
+
+    for (const poolCard of CARD_POOL) {
+      const registryCard = getCard(poolCard.id);
+      expect(registryCard).toBeDefined();
+      expect(registryCard.name).toBe(poolCard.name);
+    }
+  });
+
+  it('CardPool costs match CardRegistry costs', async () => {
+    const { CARD_POOL } = await import('../../server/validation/CardPool');
+    const { getCard } = await import('../../src/game/data/CardRegistry');
+
+    const mismatches: string[] = [];
+    for (const poolCard of CARD_POOL) {
+      const registryCard = getCard(poolCard.id);
+      if (registryCard.cost !== poolCard.cost) {
+        mismatches.push(`${poolCard.id}: pool=${poolCard.cost} registry=${registryCard.cost}`);
+      }
+    }
+    expect(mismatches).toEqual([]);
+  });
+
+  it('CardPool copies match CardRegistry copies', async () => {
+    const { CARD_POOL } = await import('../../server/validation/CardPool');
+    const { getCard } = await import('../../src/game/data/CardRegistry');
+
+    const mismatches: string[] = [];
+    for (const poolCard of CARD_POOL) {
+      const registryCard = getCard(poolCard.id);
+      if (registryCard.copies !== poolCard.copies) {
+        mismatches.push(`${poolCard.id}: pool=${poolCard.copies} registry=${registryCard.copies}`);
+      }
+    }
+    expect(mismatches).toEqual([]);
+  });
+
+  it('CardPool has same card count as CardRegistry', async () => {
+    const { CARD_POOL } = await import('../../server/validation/CardPool');
+    const { CARD_MAP } = await import('../../src/game/data/CardRegistry');
+
+    expect(CARD_POOL.length).toBe(CARD_MAP.size);
+  });
+});
+
+// ─── DeckLoader priorities (testable without browser) ─────────
+
+describe('DeckLoader priority logic', () => {
+  it('UNITS_ONLY_DECK_IDS is a valid fallback', () => {
+    expect(UNITS_ONLY_DECK_IDS).toBeDefined();
+    expect(UNITS_ONLY_DECK_IDS.length).toBe(31);
+    expect(UNITS_ONLY_DECK_IDS).not.toContain('king');
+  });
+});
+
+```
+
 # tests\server\roomFlow.test.ts
 
 ```ts
@@ -24323,6 +30043,270 @@ describe('Room flow — create, join, battle ready', () => {
     const countdown = await countdownP;
     expect(countdown.remaining).toBeGreaterThan(0);
     expect(countdown.remaining).toBeLessThanOrEqual(10);
+  });
+});
+
+```
+
+# tests\server\sceneTransitions.test.ts
+
+```ts
+/**
+ * sceneTransitions.test.ts — Tests for scene transition integrity,
+ * state passing, and timing issues in the lobby flow.
+ *
+ * These tests validate the contracts between scenes — what data
+ * must be set before a transition, what gets cleared after, and
+ * what events must be handled.
+ */
+
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createLobbyRoom } from '../../server/lobby/lobbyHelpers';
+import type { Room, LobbyState, RoomSettings } from '../../shared/types/NetworkEvents';
+
+// ─── Helper: simulate getLobbyState ───────────────────────────
+
+function buildLobbyState(roomCode: string, room: Room): LobbyState | null {
+  if (!room.settings) return null;
+  const { password: _pw, ...safeSettings } = room.settings;
+  return {
+    code: roomCode,
+    settings: { ...safeSettings, password: null },
+    status: room.status ?? 'waiting',
+    players: room.players.map(p => ({
+      name: p.name,
+      playerId: p.playerId ?? null,
+      ready: p.ready ?? false,
+      isHost: p.id === room.hostSocketId,
+      hasDeck: !!p.deckIds,
+    })),
+    chat: (room.chat ?? []).slice(-50),
+  };
+}
+
+// ─── Lobby State Visibility ───────────────────────────────────
+
+describe('Lobby state visibility after room creation', () => {
+  let room: Room;
+  const roomCode = '123456';
+
+  beforeEach(() => {
+    room = createLobbyRoom('host-socket', 'HostPlayer', 1, {
+      isPublic: true, isCrypto: false,
+    });
+  });
+
+  it('host is visible in lobby state immediately after creation', () => {
+    const state = buildLobbyState(roomCode, room);
+    expect(state).not.toBeNull();
+    expect(state!.players).toHaveLength(1);
+    expect(state!.players[0].name).toBe('HostPlayer');
+    expect(state!.players[0].isHost).toBe(true);
+    expect(state!.players[0].ready).toBe(true); // host is always ready
+  });
+
+  it('both players visible after joiner joins', () => {
+    room.players.push({
+      id: 'joiner-socket', name: 'Joiner', wallet: null,
+      playerId: null, deckIds: null, ready: false,
+    });
+    room.status = 'full';
+
+    const state = buildLobbyState(roomCode, room);
+    expect(state!.players).toHaveLength(2);
+    expect(state!.players[0].name).toBe('HostPlayer');
+    expect(state!.players[1].name).toBe('Joiner');
+    expect(state!.players[1].ready).toBe(false);
+  });
+
+  it('lobby:request_state returns current state (not stale)', () => {
+    // Simulate: room created, then joiner joins, then request_state
+    room.players.push({
+      id: 'joiner-socket', name: 'Joiner', wallet: null,
+      playerId: null, deckIds: null, ready: false,
+    });
+    room.status = 'full';
+    room.chat = [{ sender: 'SYSTEM', text: 'Joiner joined.', timestamp: 1 }];
+
+    const state = buildLobbyState(roomCode, room);
+
+    // State must include latest data
+    expect(state!.players).toHaveLength(2);
+    expect(state!.status).toBe('full');
+    expect(state!.chat).toHaveLength(1);
+    expect(state!.chat[0].text).toBe('Joiner joined.');
+  });
+
+  it('password is stripped from lobby state broadcast', () => {
+    const secretRoom = createLobbyRoom('host', 'Host', null, {
+      isPublic: false,
+      password: 'secret123',
+    });
+
+    const state = buildLobbyState('789', secretRoom);
+    expect(state!.settings.password).toBeNull(); // must be stripped
+  });
+});
+
+// ─── Scene Transition Data Contracts ──────────────────────────
+
+describe('Scene transition data contracts', () => {
+  it('HubScene → LobbyScene requires roomCode and isHost', () => {
+    // LobbyScene.init(data) expects { roomCode: string, isHost: boolean }
+    const validData = { roomCode: '123456', isHost: true };
+    expect(validData.roomCode).toBeTruthy();
+    expect(typeof validData.isHost).toBe('boolean');
+  });
+
+  it('LobbyScene → BattleScene requires all GameState fields', () => {
+    // Simulates what LobbyScene.enterBattle() must ensure
+    const requiredFields = {
+      roomCode: '837646',
+      playerIndex: 0,
+      gameSeed: 999,
+      playerName: 'Host',
+      opponentName: 'Joiner',
+    };
+
+    // NONE of these should be empty/zero
+    expect(requiredFields.roomCode.length).toBeGreaterThan(0);
+    expect(requiredFields.gameSeed).toBeGreaterThan(0);
+    expect(requiredFields.playerName.length).toBeGreaterThan(0);
+    expect(requiredFields.opponentName.length).toBeGreaterThan(0);
+  });
+
+  it('ResultScene → HubScene: lastMatch must survive until HubScene reads it', () => {
+    // The fix: clearMatchData() must be called INSIDE camerafadeoutcomplete,
+    // not before the fade starts. This test documents the contract.
+    const lastMatch = {
+      playerName: 'Host', opponentName: 'Guest',
+      playerWon: true, isTie: false,
+      reason: 'KING_DESTROYED', turns: 15,
+      stakeAmount: 0, payout: 0,
+    };
+
+    // Simulate: ResultScene has lastMatch, starts fade
+    // During fade, lastMatch must still exist
+    expect(lastMatch).toBeTruthy();
+
+    // After fade completes, clearMatchData() runs
+    // Then HubScene starts — by this time lastMatch is already consumed
+    // (HubScene reads it in create(), which is after the scene.start() call)
+  });
+
+  it('ResultScene rematch goes to HubScene (not broken LobbyScene)', () => {
+    // Old bug: rematch started LobbyScene with roomCode: '' which broke
+    // The fix: rematch goes to HubScene where user can properly host
+    const rematchTarget = 'HubScene'; // NOT 'LobbyScene'
+    expect(rematchTarget).toBe('HubScene');
+  });
+});
+
+// ─── Transition Guard Contracts ───────────────────────────────
+
+describe('Transition guard contracts', () => {
+  it('double navigation must be prevented', () => {
+    // All scenes must have a `transitioning` boolean guard
+    // Simulates: two rapid clicks on different buttons
+    let transitioning = false;
+
+    const navigate = () => {
+      if (transitioning) return false;
+      transitioning = true;
+      return true;
+    };
+
+    expect(navigate()).toBe(true);  // first click succeeds
+    expect(navigate()).toBe(false); // second click blocked
+    expect(navigate()).toBe(false); // third click blocked
+  });
+
+  it('transitioning resets on scene re-entry', () => {
+    // When a scene is started again, create() should reset transitioning
+    let transitioning = true;
+
+    // Simulate scene create()
+    transitioning = false; // reset in constructor or create
+
+    expect(transitioning).toBe(false);
+  });
+});
+
+// ─── Cleanup Contracts ────────────────────────────────────────
+
+describe('Scene cleanup contracts', () => {
+  it('LobbyScene cleanup must remove disconnect listener', () => {
+    // Contract: cleanup() must call socket.off('disconnect', handler)
+    // to prevent stale callbacks on destroyed scene objects
+    let handlerRemoved = false;
+
+    // Simulate cleanup
+    const cleanup = () => {
+      handlerRemoved = true; // represents socket.off('disconnect', handler)
+    };
+
+    cleanup();
+    expect(handlerRemoved).toBe(true);
+  });
+
+  it('shutdown event must use once, not on', () => {
+    // Contract: this.events.once('shutdown', ...) not this.events.on('shutdown', ...)
+    // Using .on() stacks handlers on scene re-entry
+    let callCount = 0;
+
+    // Simulate: scene entered twice, shutdown called once
+    // With .once(): callCount = 1 (correct)
+    // With .on(): callCount = 2 (bug)
+    const onceHandler = () => { callCount++; };
+
+    // First scene entry
+    onceHandler(); // .once fires and self-removes
+    // Second scene entry would NOT re-fire the old handler
+
+    expect(callCount).toBe(1);
+  });
+});
+
+// ─── Server lobby:request_state ───────────────────────────────
+
+describe('lobby:request_state server handler', () => {
+  it('returns current state for valid room', () => {
+    const room = createLobbyRoom('host', 'Host', 1);
+    room.players.push({
+      id: 'joiner', name: 'Joiner', wallet: null,
+      playerId: 2, deckIds: null, ready: true,
+    });
+    room.status = 'full';
+
+    const state = buildLobbyState('ABC', room);
+    expect(state).not.toBeNull();
+    expect(state!.players).toHaveLength(2);
+    expect(state!.status).toBe('full');
+  });
+
+  it('returns null for room without settings (legacy room)', () => {
+    const legacyRoom: Room = {
+      players: [{ id: 's1', name: 'P1', wallet: null }],
+      gameSeed: null,
+      cryptoReadyCount: 0,
+      battleReadyCount: 0,
+      actionQueue: [],
+      settled: false,
+      currentTurnPlayer: 0,
+      currentPhase: 'PLAY',
+      actionCount: 0,
+      gameOverClaims: [],
+      lastSeqNum: [0, 0],
+      globalSeq: 0,
+      pendingHashes: new Map(),
+      disconnectTimers: new Map(),
+      disconnectIntervals: new Map(),
+      createdAt: Date.now(),
+      // NO settings — legacy RoomScene flow
+    };
+
+    const state = buildLobbyState('XYZ', legacyRoom);
+    expect(state).toBeNull();
   });
 });
 

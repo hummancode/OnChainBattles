@@ -10,6 +10,9 @@ import type { RoomManager } from '../rooms/RoomManager.js';
 import type { PayoutService } from './PayoutService.js';
 import { Logger } from '../utils/Logger.js';
 import { GameLogWriter } from './GameLogWriter.js';
+import { verifyToken } from '../api/middleware.js';
+import { validateDeck } from '../validation/DeckValidator.js';
+import { recordMatch } from '../api/matchService.js';
 
 type TypedServer = Server<ClientToServerEvents, ServerToClientEvents>;
 type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -124,7 +127,7 @@ export class SessionManager {
       log.debug(`Relayed ${action.type} in ${roomCode} (action #${room.actionCount}, serverSeq=${room.globalSeq})`);
     });
 
-    socket.on('game_over', async ({ roomCode, winnerIndex }) => {
+    socket.on('game_over', async ({ roomCode, winnerIndex, totalTurns }) => {
       const room = this.rooms.getRoom(roomCode);
       if (!room) return;
       if (room.settled) return;
@@ -155,7 +158,19 @@ export class SessionManager {
 
       const hasWallets = room.players.some(p => p.wallet !== null);
       if (!hasWallets) {
-        log.info(`Free-play mode game_over in ${roomCode}`);
+        // Free-play: still wait for both claims before recording
+        if (room.gameOverClaims.length < 2) {
+          log.info(`Free-play game_over claim ${room.gameOverClaims.length}/2 in ${roomCode}`);
+          return;
+        }
+        const fc0 = room.gameOverClaims.find(c => c.playerIndex === 0);
+        const fc1 = room.gameOverClaims.find(c => c.playerIndex === 1);
+        const agreedWinner = (fc0 && fc1 && fc0.claimedWinner === fc1.claimedWinner)
+          ? fc0.claimedWinner : winnerIndex;
+        log.info(`Free-play mode game_over in ${roomCode}, winner: P${agreedWinner + 1}`);
+        try { recordMatch({ roomCode, room, winnerIndex: agreedWinner, totalTurns: totalTurns ?? 0 }); }
+        catch (err: unknown) { log.error('Failed to record match:', err); }
+        if (room.status) room.status = 'finished';
         room.settled = true;
         return;
       }
@@ -168,6 +183,11 @@ export class SessionManager {
       room.settled = true;
 
       if (claim0.claimedWinner === claim1.claimedWinner) {
+        // Record match to database
+        try { recordMatch({ roomCode, room, winnerIndex: claim0.claimedWinner, totalTurns: totalTurns ?? 0 }); }
+        catch (err: unknown) { log.error('Failed to record match:', err); }
+        if (room.status) room.status = 'finished';
+
         const winner = room.players[claim0.claimedWinner];
         if (winner?.wallet) {
           log.info(`Both agree: P${claim0.claimedWinner + 1} (${winner.name}) wins room ${roomCode}`);
@@ -232,6 +252,37 @@ export class SessionManager {
       } else if (count >= 2) {
         this.io.to(roomCode).emit('bothCryptoReady');
         log.info(`Both players crypto-ready in room ${roomCode}`);
+      }
+    });
+
+    // ── Auth: register player identity ──
+    socket.on('registerPlayer' as any, ({ token }: { token: string }) => {
+      const payload = verifyToken(token);
+      if (!payload) return;
+      const found = this.rooms.findBySocket(socket.id);
+      if (found) {
+        this.rooms.setPlayerAuth(socket.id, found.roomCode, payload.playerId);
+        log.info(`Player #${payload.playerId} identified on ${socket.id}`);
+      }
+    });
+
+    // ── Deck: validate and store deck for match ──
+    socket.on('submitDeck' as any, ({ roomCode, deckIds }: { roomCode: string; deckIds: string[] }) => {
+      const result = validateDeck(deckIds, null);
+      if (!result.valid) {
+        socket.emit('deckRejected', { errors: result.errors });
+        return;
+      }
+
+      const stored = this.rooms.setPlayerDeck(socket.id, roomCode, deckIds);
+      if (!stored) return;
+
+      socket.emit('deckAccepted', { cardCount: deckIds.length });
+      log.info(`Deck accepted for socket ${socket.id} in ${roomCode}`);
+
+      if (this.rooms.allDecksReady(roomCode)) {
+        this.io.to(roomCode).emit('bothDecksReady');
+        log.info(`Both decks ready in ${roomCode}`);
       }
     });
   }
@@ -325,7 +376,8 @@ export class SessionManager {
     socket.to(roomCode).emit('opponentReconnected');
     log.info(`${playerName} rejoined room: ${roomCode}`);
 
-    // Re-register session handlers on the new socket
-    this.registerHandlers(socket);
+    // NOTE: handlers are NOT re-registered here — app.ts already calls
+    // registerHandlers() + lobby.registerHandlers() for every new socket
+    // on 'connection'. Re-registering would cause duplicate handlers.
   }
 }

@@ -31,5 +31,8 @@
 # Game session logs (generated during play, for debugging)
 /logs
 
+# SQLite database (local dev data)
+server/data/
+
 # Claude Code local settings
 .claude/
