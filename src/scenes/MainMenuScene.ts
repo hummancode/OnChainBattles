@@ -159,8 +159,11 @@ export default class MainMenuScene extends Phaser.Scene {
     // ── Auth status display ──────────────────────────────────
     if (AuthManager.isLoggedIn()) {
       const player = AuthManager.getPlayer()!;
+      const badge = player.wallet
+        ? `${player.wallet.slice(0, 6)}...${player.wallet.slice(-4)}`
+        : player.email ?? '';
       this.add.text(CX, LAYOUT.cryptoBtn.y + 40,
-        `Logged in: ${player.displayName} (${player.wallet.slice(0, 6)}...${player.wallet.slice(-4)})`, {
+        `Logged in: ${player.displayName}${badge ? ` (${badge})` : ''}`, {
         fontSize: '12px',
         fontFamily: '"Courier New", monospace',
         color: '#4fc3f7',

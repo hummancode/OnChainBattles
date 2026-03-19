@@ -9,6 +9,7 @@ import type { PendingCommand } from './PendingCommand';
 import type { GameEvent } from '../types/EventTypes';
 import type { IBoard } from '../interfaces/IBoard';
 import { AbilityType } from '../types/AbilityTypes';
+import { applyEarthquakeDamage } from '../CombatResolver';
 
 export type PendingSelection =
   | { kind: 'TARGET'; instanceId: string }
@@ -50,6 +51,20 @@ export function resolvePending(
     } as GameEvent);
   }
 
+  // ── COLUMN resolution ────────────────────────────────────
+  if (command.kind === 'COLUMN' && selection.kind === 'COLUMN') {
+    if (command.sourceAbility === AbilityType.SPELL_EARTHQUAKE && ctx?.board) {
+      events.push(...applyEarthquakeDamage(selection.col, 3, ctx.board as any));
+    }
+  }
+
+  // ── DISCARD resolution ──────────────────────────────────
+  if (command.kind === 'DISCARD' && selection.kind === 'DISCARD') {
+    // The actual discard is handled by GameEngine.selectDiscard()
+    // which calls PlayerState.discardFromHand() after resolution.
+    // We just need to signal success so deferred events fire.
+  }
+
   // Append deferred events (e.g., Mystic LEG drain)
   events.push(...command.deferredEvents);
   return events;
@@ -89,39 +104,20 @@ function resolveTarget(
     return;
   }
 
-  // ── Disease: damage structure + adjacent ────────────────────
+  // ── Disease: apply recurring damage timed effect ────────────
   if (ability === AbilityType.SPELL_DAMAGE_STRUCTURE_ADJ) {
     if (!ctx?.board) return;
     const structure = ctx.board.getUnitById(targetId);
     if (!structure) return;
-    // Apply Disease timed effect — the actual damage ticks happen in EndPhase
-    // For now, emit a structure-targeted event the engine can track
+    // Create DISEASE_APPLIED event — engine will add DISEASE_TICK timed effect.
+    // Actual damage ticks happen each LEG phase via runDiseaseTicks().
     events.push({
-      type: 'UNIT_ATTACKED',
-      attackerInstanceId: '',
+      type: 'DISEASE_APPLIED',
+      caster: cmd.owner,
       targetInstanceId: structure.instanceId,
-      attackerCol: structure.position.col,
-      attackerRow: structure.position.row,
-      targetCol: structure.position.col,
-      targetRow: structure.position.row,
-      damage: 1,
-      targetNewHP: Math.max(0, structure.currentDef - 1),
-      targetPlayer: structure.owner,
-      isKingHit: false,
-      maxHP: structure.maxDef,
+      damage: 2,  // default; engine can override from card params
+      duration: 3, // default; engine can override from card params
     } as GameEvent);
-    // If structure dies from this
-    if (structure.currentDef - 1 <= 0) {
-      events.push({
-        type: 'UNIT_DIED',
-        instanceId: structure.instanceId,
-        cardId: structure.cardId,
-        owner: structure.owner,
-        col: structure.position.col,
-        row: structure.position.row,
-        cause: 'DISEASE',
-      } as GameEvent);
-    }
     return;
   }
 

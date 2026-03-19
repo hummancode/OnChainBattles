@@ -116,6 +116,12 @@ export class GameEngine implements IGameEngineAPI {
 
   /** Start a new game. Deals opening hands and pre-places Kings. */
   startGame(): void {
+    // Idempotency guard: if kings already exist, game has started
+    if (this.board.getKing(Player.P1) || this.board.getKing(Player.P2)) {
+      console.warn('[GameEngine] startGame() called on already-started engine — ignoring');
+      return;
+    }
+
     const deck = DeckLoader.get();
 
     this.players[Player.P1].loadDeck([...deck], Player.P1);
@@ -278,6 +284,8 @@ export class GameEngine implements IGameEngineAPI {
   selectTarget(instanceId: string): void {
     if (!this.pending || this.pending.kind !== 'TARGET') return;
     if (!this.pending.validTargetIds.includes(instanceId)) return;
+    // Verify target still exists on board (may have died since pending was created)
+    if (!this.board.getUnitById(instanceId)) return;
     const cmd = this.pending;
     this.clearPending();
     const events = resolvePending(cmd, { kind: 'TARGET', instanceId }, { board: this.board });
@@ -298,7 +306,7 @@ export class GameEngine implements IGameEngineAPI {
     if (col < 0 || col >= this.board.cols) return;
     const cmd = this.pending;
     this.clearPending();
-    const events = resolvePending(cmd, { kind: 'COLUMN', col });
+    const events = resolvePending(cmd, { kind: 'COLUMN', col }, { board: this.board });
     for (const e of events) { this.applyEvent(e); this.emit(e); }
   }
 
@@ -308,8 +316,19 @@ export class GameEngine implements IGameEngineAPI {
     if (handIndex < 0 || handIndex >= ps.hand.length) return;
     const cmd = this.pending;
     this.clearPending();
-    const events = resolvePending(cmd, { kind: 'DISCARD', handIndex });
-    for (const e of events) { this.applyEvent(e); this.emit(e); }
+
+    // Actually discard the card from hand
+    const cardId = ps.hand.splice(handIndex, 1)[0];
+    ps.discard.push(cardId);
+    this.emit({
+      type: 'CARD_DISCARDED',
+      player: this.activePlayer,
+      cardId,
+      handIndex,
+    } as GameEvent);
+
+    // Apply deferred events (e.g., War Horn movement buff)
+    for (const e of cmd.deferredEvents) { this.applyEvent(e); this.emit(e); }
   }
 
   /** Cancel the current pending interaction (e.g., user pressed Cancel / ESC).
@@ -504,6 +523,18 @@ export class GameEngine implements IGameEngineAPI {
         const actual  = Math.min(event.amount, fromMod.legPool);
         fromMod.removeLEG(actual);
         toMod.addLEG(actual);
+        break;
+      }
+
+      case 'DISEASE_APPLIED': {
+        // Add DISEASE_TICK timed effect to the caster's mods.
+        // Ticks during caster's LEG phase via runDiseaseTicks().
+        this.mods[event.caster].addTimedEffect({
+          type: 'DISEASE_TICK',
+          duration: event.duration,
+          value: event.damage,
+          targetInstanceId: event.targetInstanceId,
+        });
         break;
       }
 

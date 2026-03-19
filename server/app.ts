@@ -7,40 +7,90 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import { instrument } from '@socket.io/admin-ui';
+import path from 'path';
 import dotenv from 'dotenv';
 import { verifyMessage } from 'ethers';
 import type { ClientToServerEvents, ServerToClientEvents } from '../shared/types/NetworkEvents.js';
 import { RoomManager } from './rooms/RoomManager.js';
 import { PayoutService } from './game/PayoutService.js';
+import { PuzzlePayoutService } from './game/PuzzlePayoutService.js';
 import { SessionManager } from './game/SessionManager.js';
 import { getDB, closeDB } from './db/database.js';
 import { runMigrations } from './db/migrations.js';
 import { apiRouter } from './api/index.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
 import { RoomJanitor } from './lobby/RoomJanitor.js';
+import bcryptBoot from 'bcryptjs';
+import { initializeCollection as initCollBoot } from './api/collectionHelpers.js';
 
 dotenv.config();
 
 const app = express();
-app.use(cors({ origin: '*' }));
+
+const allowedOrigins: (string | RegExp)[] = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : [/^http:\/\/localhost:\d+$/];
+
+// Use same origin policy for both Express and Socket.IO
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 app.use('/api', apiRouter);
+app.use('/admin', express.static(path.resolve('server/admin')));
 
 // ── Database ──
 getDB();
 runMigrations();
 
+// ── Admin Bootstrap ──
+{
+  const db = getDB();
+
+  // Dev mode: seed admin@admin.com / admin123 account
+  if (process.env.NODE_ENV !== 'production') {
+    const devAdmin = db.prepare('SELECT id, is_admin FROM players WHERE email = ?').get('admin@admin.com') as Record<string, unknown> | undefined;
+    if (!devAdmin) {
+      const hash = bcryptBoot.hashSync('admin123', 10);
+      const result = db.prepare(
+        'INSERT INTO players (email, password_hash, auth_provider, account_tier, is_admin, display_name) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run('admin@admin.com', hash, 'email', 1, 1, 'Admin');
+      initCollBoot(Number(result.lastInsertRowid));
+      console.log('[Admin] Dev admin created: admin@admin.com / admin123');
+    } else if (!devAdmin.is_admin) {
+      db.prepare('UPDATE players SET is_admin = 1 WHERE id = ?').run(devAdmin.id);
+      console.log('[Admin] Dev admin re-granted: admin@admin.com');
+    }
+  }
+
+  // ADMIN_EMAIL env var override
+  const adminEmail = process.env.ADMIN_EMAIL;
+  if (adminEmail) {
+    const p = db.prepare('SELECT id, is_admin FROM players WHERE email = ?').get(adminEmail) as Record<string, unknown> | undefined;
+    if (p && !p.is_admin) {
+      db.prepare('UPDATE players SET is_admin = 1 WHERE id = ?').run(p.id);
+      console.log(`[Admin] Granted admin to ${adminEmail}`);
+    }
+  }
+}
+
 const httpServer = createServer(app);
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',')
-  : [/^http:\/\/localhost:\d+$/];
 
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   cors: { origin: allowedOrigins },
 });
 
+// ── Socket.IO Admin UI (dev only) ──
+if (process.env.NODE_ENV !== 'production') {
+  instrument(io, {
+    auth: false,
+    mode: 'development',
+  });
+}
+
 const roomManager = new RoomManager();
 const payout = new PayoutService(process.env.FUJI_PRIVATE_KEY!);
+const puzzlePayout = new PuzzlePayoutService(process.env.FUJI_PRIVATE_KEY!);
+app.locals.puzzlePayout = puzzlePayout;
 const session = new SessionManager(io, roomManager, payout);
 const lobby = new LobbyManager(io, roomManager);
 const janitor = new RoomJanitor(roomManager);
@@ -84,14 +134,14 @@ io.on('connection', (socket) => {
   });
 
   // ── Room events ──
-  socket.on('createRoom', ({ roomCode, playerName }) => {
-    roomManager.createRoom(socket.id, roomCode, playerName);
+  socket.on('createRoom', ({ roomCode, playerName, guestSessionId }) => {
+    roomManager.createRoom(socket.id, roomCode, playerName, guestSessionId);
     socket.join(roomCode);
     socket.emit('roomCreated', { roomCode, playerIndex: 0 });
   });
 
-  socket.on('joinRoom', ({ roomCode, playerName }) => {
-    const result = roomManager.joinRoom(socket.id, roomCode, playerName);
+  socket.on('joinRoom', ({ roomCode, playerName, guestSessionId }) => {
+    const result = roomManager.joinRoom(socket.id, roomCode, playerName, guestSessionId);
     if (typeof result === 'string') {
       socket.emit('error', { message: result });
       return;
@@ -136,8 +186,8 @@ io.on('connection', (socket) => {
   });
 
   // ── Rejoin after disconnect ──
-  socket.on('rejoin_room', ({ roomCode, playerName }) => {
-    session.handleRejoin(socket, roomCode, playerName);
+  socket.on('rejoin_room', ({ roomCode, playerName, guestSessionId }) => {
+    session.handleRejoin(socket, roomCode, playerName, guestSessionId);
   });
 
   // ── Game session events ──

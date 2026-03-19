@@ -13,6 +13,7 @@ export const PATTERN_ARCHER_ATTACK: CustomPattern = {
     { dx: 2, dy: -2 }, { dx: -2, dy: -2 }, { dx: 2, dy: 2 }, { dx: -2, dy: 2 },
   ],
   range: 1,
+  canJump: true, // Ranged: ignores blocking units in path
 };
 
 // Assassin: attacks diagonally adjacent

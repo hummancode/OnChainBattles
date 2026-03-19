@@ -71,9 +71,13 @@ export function createSelectionManager(
       SocketManager.sendGameAction({ type: 'CANCEL_PENDING' });
     },
     isAwaitingInput: () => engine.getState().status === 'AWAITING_INPUT',
-    canAct: () => {
+    canAct: (col: number, row: number) => {
       const state = engine.getState();
-      return state.turn?.activePlayer === localPlayerIndex && state.turn?.phase === 'ACT';
+      if (state.turn?.activePlayer !== localPlayerIndex || state.turn?.phase !== 'ACT') return false;
+      const unit = getBoardUnit(col, row);
+      if (!unit) return false;
+      // Unit already moved or acted this turn
+      return !state.turn.unitsActedThisTurn.has(unit.instanceId);
     },
     isPlayerUnit: (col: number, row: number) => {
       const unit = getBoardUnit(col, row);

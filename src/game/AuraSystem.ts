@@ -40,10 +40,12 @@ export class AuraSystem {
     const allUnits = board.getAllUnits();
 
     // ── Step 1: Reset every unit to base stats + clear audit trail ──
+    // Preserve damage taken so DEF aura buffs don't heal units.
+    const damageTaken = new Map<string, number>();
     for (const unit of allUnits) {
+      damageTaken.set(unit.instanceId, Math.max(0, unit.maxDef - unit.currentDef));
       unit.currentAtk      = unit.baseAtk;
       unit.maxDef          = unit.baseDef;               // reset max to base (removes old aura DEF buffs)
-      unit.currentDef      = Math.min(unit.currentDef, unit.maxDef); // cap HP at new max
       unit.currentMovement = unit.baseMovement;
       unit.activeBuffs     = [];
     }
@@ -74,9 +76,12 @@ export class AuraSystem {
 
       unit.currentAtk      = Math.max(0, unit.currentAtk + d.atkDelta);
       if (d.defDelta !== 0) {
-        unit.maxDef     += d.defDelta;
-        unit.currentDef  = Math.min(unit.currentDef + d.defDelta, unit.maxDef);
+        unit.maxDef += d.defDelta;
       }
+      // Restore HP = newMaxDef - savedDamage (damage is preserved across aura recalcs).
+      // Clamp to at least 1: aura removal cannot kill a living unit (only combat can).
+      const dmg = damageTaken.get(unit.instanceId) ?? 0;
+      unit.currentDef = Math.max(1, unit.maxDef - dmg);
       unit.currentMovement = Math.max(0, unit.currentMovement + d.moveDelta);
       unit.activeBuffs     = buffMap.get(unit.instanceId) ?? [];
 

@@ -19,7 +19,8 @@ export function createLobbyRoom(
   hostSocketId: string,
   hostName: string,
   hostPlayerId: number | null,
-  settings: Partial<RoomSettings> = {}
+  settings: Partial<RoomSettings> = {},
+  guestSessionId?: string
 ): Room {
   const merged: RoomSettings = {
     ...DEFAULT_SETTINGS,
@@ -35,6 +36,7 @@ export function createLobbyRoom(
       playerId: hostPlayerId ?? null,
       deckIds: null,
       ready: true,
+      guestSessionId: guestSessionId ?? null,
     }],
     gameSeed: null,
     cryptoReadyCount: 0,

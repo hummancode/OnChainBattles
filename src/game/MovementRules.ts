@@ -60,24 +60,46 @@ export function getValidMoves(unit: Unit, board: Board): Position[] {
  */
 export function getValidAttacks(unit: Unit, board: Board): Position[] {
   const def = getCard(unit.cardId);
+  let attacks: Position[];
 
   if (def.stats?.customAttack) {
-    return resolveCustomPattern(unit, def.stats.customAttack, board, true);
+    attacks = resolveCustomPattern(unit, def.stats.customAttack, board, true);
+  } else if (unit.baseAtkPattern === AtkPattern.NONE) {
+    return [];
+  } else {
+    const { col, row } = unit.position;
+    switch (unit.baseAtkPattern) {
+      case AtkPattern.HV:               attacks = getEnemiesInDirs(col, row, DIRS_HV, board, unit.owner); break;
+      case AtkPattern.OMNI:
+      case AtkPattern.AREA_ADJ:         attacks = getEnemiesInDirs(col, row, DIRS_OMNI, board, unit.owner); break;
+      case AtkPattern.DIAGONAL_RANGED_2: attacks = getRangedEnemies(col, row, DIRS_DIAGONAL, 2, board, unit.owner); break;
+      case AtkPattern.STRAIGHT_RANGED_3: attacks = getRangedEnemies(col, row, DIRS_HV, 3, board, unit.owner); break;
+      case AtkPattern.ON_JUMP:           return [];
+      case AtkPattern.FWD_VERTICAL:      attacks = getForwardEnemy(col, row, unit.owner, board); break;
+      default:                           return [];
+    }
   }
 
-  if (unit.baseAtkPattern === AtkPattern.NONE) return [];
-  const { col, row } = unit.position;
-
-  switch (unit.baseAtkPattern) {
-    case AtkPattern.HV:               return getEnemiesInDirs(col, row, DIRS_HV, board, unit.owner);
-    case AtkPattern.OMNI:
-    case AtkPattern.AREA_ADJ:         return getEnemiesInDirs(col, row, DIRS_OMNI, board, unit.owner);
-    case AtkPattern.DIAGONAL_RANGED_2: return getRangedEnemies(col, row, DIRS_DIAGONAL, 2, board, unit.owner);
-    case AtkPattern.STRAIGHT_RANGED_3: return getRangedEnemies(col, row, DIRS_HV, 3, board, unit.owner);
-    case AtkPattern.ON_JUMP:           return []; // Assassin: attack is part of move
-    case AtkPattern.FWD_VERTICAL:      return getForwardEnemy(col, row, unit.owner, board);
-    default:                           return [];
+  // Directional attack filter: after a charge move, can only attack along
+  // the movement axis. For cardinal moves (dx=0 or dy=0), only the exact
+  // direction matches. For diagonal moves, either axis matches.
+  // No component of the attack direction may oppose the move direction.
+  if (unit.canAttackAfterMove && unit.lastMoveDirection) {
+    const dir = unit.lastMoveDirection;
+    attacks = attacks.filter(pos => {
+      const adx = Math.sign(pos.col - unit.position.col);
+      const ady = Math.sign(pos.row - unit.position.row);
+      // Attack must not oppose any move component
+      if (dir.dx !== 0 && adx !== 0 && adx !== dir.dx) return false;
+      if (dir.dy !== 0 && ady !== 0 && ady !== dir.dy) return false;
+      // Attack must share at least one non-zero component with move
+      const matchX = dir.dx !== 0 && adx === dir.dx;
+      const matchY = dir.dy !== 0 && ady === dir.dy;
+      return matchX || matchY;
+    });
   }
+
+  return attacks;
 }
 
 /**
@@ -111,10 +133,19 @@ export function getAttackRange(unit: Unit, board: Board): Position[] {
 }
 
 /**
- * Valid deploy squares (own half, unoccupied).
+ * Valid deploy squares (own half, unoccupied, same row as a friendly unit).
+ * A square is valid only if at least one friendly unit exists in the same row.
  */
 export function getValidDeploySquares(player: Player, board: Board): Position[] {
-  return board.getFreeSquaresInHalf(player);
+  const freeSquares = board.getFreeSquaresInHalf(player);
+
+  // Build set of rows occupied by friendly units
+  const occupiedRows = new Set<number>();
+  for (const u of board.getUnitsOf(player)) {
+    occupiedRows.add(u.position.row);
+  }
+
+  return freeSquares.filter(pos => occupiedRows.has(pos.row));
 }
 
 // ─────────────────────────────────────────────
@@ -129,6 +160,7 @@ export function isAttackValid(unit: Unit, targetCol: number, targetRow: number, 
   return getValidAttacks(unit, board).some(p => p.col === targetCol && p.row === targetRow);
 }
 
+/** @deprecated Replaced by lastMoveDirection-based directional attack in v0.02 */
 export function isLancerForwardMove(unit: Unit, toRow: number): boolean {
   const dr = unit.owner === Player.P1 ? 1 : -1;
   return (toRow - unit.position.row) * dr > 0;
@@ -163,14 +195,25 @@ function gcd(a: number, b: number): number {
  * Check if the path from (col, row) to (col+dx, row+dy) is clear.
  * Only checks intermediate squares — NOT the destination itself.
  * Returns true if the path is clear.
+ *
+ * @param useFlexiblePaths  When true (custom patterns), short-range
+ *   straight-line offsets (dist=2) use bounding-rectangle logic instead
+ *   of strict single-path decomposition. This allows units with rich
+ *   offset sets (Scout, Knight) to navigate around a single blocker
+ *   via adjacent squares, matching their actual movement capabilities.
  */
-function isPathClear(col: number, row: number, dx: number, dy: number, board: Board): boolean {
+function isPathClear(
+  col: number, row: number, dx: number, dy: number, board: Board,
+  useFlexiblePaths = false,
+): boolean {
   const dist = Math.max(Math.abs(dx), Math.abs(dy));
   if (dist <= 1) return true; // adjacent — no intermediates
 
   const g = gcd(dx, dy);
 
-  if (g >= 2) {
+  // For long-range decomposable paths (dist ≥ 3, e.g. {0,3}, {3,3}),
+  // always use strict single-path decomposition.
+  if (g >= 2 && !(useFlexiblePaths && dist === 2)) {
     // Decomposable (straight/diagonal): single path, ANY blocker stops it
     const sdx = dx / g;
     const sdy = dy / g;
@@ -184,7 +227,29 @@ function isPathClear(col: number, row: number, dx: number, dy: number, board: Bo
     return true;
   }
 
-  // L-shaped: multiple paths through bounding rectangle.
+  // Short-range flexible (dist=2, custom patterns) or L-shaped:
+  // Check if ANY 2-step path through an adjacent intermediate exists.
+  // An intermediate cell (mc, mr) is valid if:
+  //   1. It's adjacent to origin (Chebyshev dist ≤ 1)
+  //   2. It's adjacent to destination (Chebyshev dist ≤ 1)
+  //   3. It's in bounds and unoccupied
+  if (useFlexiblePaths && dist === 2) {
+    const destC = col + dx;
+    const destR = row + dy;
+    for (const [dc, dr] of DIRS_OMNI) {
+      const mc = col + dc;
+      const mr = row + dr;
+      if (!board.isInBounds(mc, mr)) continue;
+      // Must be adjacent to destination too
+      if (Math.abs(mc - destC) > 1 || Math.abs(mr - destR) > 1) continue;
+      if (board.getUnit(mc, mr) === null) {
+        return true; // found a free waypoint — path exists
+      }
+    }
+    return false;
+  }
+
+  // L-shaped (gcd=1, non-custom): multiple paths through bounding rectangle.
   // Blocked only if ALL intermediate cells are occupied.
   const minC = Math.min(0, dx), maxC = Math.max(0, dx);
   const minR = Math.min(0, dy), maxR = Math.max(0, dy);
@@ -224,7 +289,8 @@ function resolveCustomPattern(
       if (!board.isInBounds(nc, nr)) break;
 
       // Path blocking: check intermediate squares (unless canJump)
-      if (!canJump && !isPathClear(col, row, dx, dy, board)) break;
+      // Custom patterns use flexible paths — short-range offsets can route around blockers
+      if (!canJump && !isPathClear(col, row, dx, dy, board, true)) break;
 
       const occupant = board.getUnit(nc, nr);
 
@@ -262,7 +328,7 @@ function resolvePatternRange(unit: Unit, pattern: CustomPattern, board: Board): 
       const nr = row + dy;
       if (!board.isInBounds(nc, nr)) break;
       // For range display: show square but stop extending if path blocked
-      if (!canJump && !isPathClear(col, row, dx, dy, board)) break;
+      if (!canJump && !isPathClear(col, row, dx, dy, board, true)) break;
       results.push({ col: nc, row: nr });
       if (board.getUnit(nc, nr) && !canJump) break;
     }

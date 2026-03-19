@@ -20,7 +20,7 @@ import { ThemeLoader } from '../config/ThemeLoader';
 import { UnitThumbnail } from './UnitThumbnail';
 import { setContainerHitArea } from '../utils/PhaserUtils';
 
-type HighlightType = 'none' | 'move' | 'attack' | 'attackRange' | 'aura' | 'selected' | 'hover';
+type HighlightType = 'none' | 'move' | 'attack' | 'attackRange' | 'deploy' | 'aura' | 'selected' | 'hover';
 
 export class BoardRenderer {
   private scene: Phaser.Scene;
@@ -41,6 +41,8 @@ export class BoardRenderer {
 
   private cellGraphics: Map<string, Phaser.GameObjects.Graphics> = new Map();
   private highlights: Map<string, Phaser.GameObjects.Graphics> = new Map();
+  /** Type-indexed highlight keys for O(k) clearing instead of O(n) full scan. */
+  private highlightKeysByType: Map<string, Set<string>> = new Map();
   private hoveredCell: string | null = null;
   /** Reusable hover graphic (pooled to avoid create/destroy per hover). */
   private hoverGfx: Phaser.GameObjects.Graphics | null = null;
@@ -102,6 +104,7 @@ export class BoardRenderer {
 const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, cy);
     thumb.col = col;   // Set logical position
     thumb.row = row;
+    thumb.cellKey = this.cellKey(col, row);
 
     // Interactivity — read col/row from thumbnail (survives moves)
     setContainerHitArea(thumb.container, L.width, L.height);
@@ -127,15 +130,12 @@ const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, c
     }
   }
 
-  /** Remove thumbnail by instanceId — works even during tween. */
+  /** Remove thumbnail by instanceId — works even during tween. O(1) via cellKey. */
   clearUnitById(instanceId: string): void {
     const thumb = this.unitsById.get(instanceId);
     if (!thumb) return;
     this.unitsById.delete(instanceId);
-    // Also remove from cell map
-    for (const [key, t] of this.unitsByCell) {
-      if (t === thumb) { this.unitsByCell.delete(key); break; }
-    }
+    if (thumb.cellKey) this.unitsByCell.delete(thumb.cellKey);
     thumb.destroy();
   }
 
@@ -175,6 +175,11 @@ const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, c
     positions.forEach(p => this.addHighlight(p.col, p.row, 'attackRange'));
   }
 
+  highlightDeploy(positions: Array<{ col: number; row: number }>): void {
+    this.clearHighlightType('deploy');
+    positions.forEach(p => this.addHighlight(p.col, p.row, 'deploy'));
+  }
+
   setSelected(col: number | null, row: number | null): void {
     if (this.selectedCell) this.clearHighlightType('selected');
     if (col !== null && row !== null) {
@@ -188,19 +193,19 @@ const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, c
   clearAllHighlights(): void {
     this.highlights.forEach(g => g.destroy());
     this.highlights.clear();
+    this.highlightKeysByType.clear();
     this.selectedCell = null;
     if (this.hoverGfx) this.hoverGfx.setVisible(false);
   }
 
   clearHighlightType(type: HighlightType): void {
-    const suffix = `_${type}`;
-    const markerSuffix = `_${type}_marker`;
-    for (const [key, g] of this.highlights) {
-      if (key.endsWith(suffix) || key.endsWith(markerSuffix)) {
-        g.destroy();
-        this.highlights.delete(key);
-      }
+    const keys = this.highlightKeysByType.get(type);
+    if (!keys) return;
+    for (const key of keys) {
+      const g = this.highlights.get(key);
+      if (g) { g.destroy(); this.highlights.delete(key); }
     }
+    keys.clear();
   }
 
   // ─────────────────────────────────────────────
@@ -232,10 +237,12 @@ const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, c
 onComplete: () => {
         // Re-key in cell map (instanceId map unchanged — same object)
         this.unitsByCell.delete(fromKey);
-        this.unitsByCell.set(this.cellKey(to.col, to.row), thumb);
-        // Update logical position so pointer closures report correct cell
+        const newKey = this.cellKey(to.col, to.row);
+        this.unitsByCell.set(newKey, thumb);
+        // Update logical position + cellKey so pointer closures report correct cell
         thumb.col = to.col;
         thumb.row = to.row;
+        thumb.cellKey = newKey;
         onComplete?.();
       },
     });
@@ -305,13 +312,18 @@ onComplete: () => {
     const g = this.layout.grid;
     const T = this.theme.board;
     const boardW = g.cols * g.cellSize, boardH = g.rows * g.cellSize;
+    const hasSkin = this.scene.textures.exists('board_skin');
 
-    if (this.scene.textures.exists('board_skin')) {
+    if (hasSkin) {
       this.cellContainer.add(
         this.scene.add.image(g.originX + boardW / 2, g.originY + boardH / 2, 'board_skin')
           .setDisplaySize(boardW, boardH)
       );
     }
+
+    // When board_skin is present, use lower fill opacity and skip grid lines
+    // (the image already has aligned grout lines baked in)
+    const fillAlpha = hasSkin ? 0.35 : 0.6;
 
     for (let row = 0; row < g.rows; row++) {
       for (let col = 0; col < g.cols; col++) {
@@ -321,9 +333,9 @@ onComplete: () => {
         const isEven = (col + row) % 2 === 0;
 
         const cell = this.scene.add.graphics();
-        cell.fillStyle(ThemeLoader.hexToNum(isEven ? T.cellEvenFill : T.cellOddFill), 0.6);
+        cell.fillStyle(ThemeLoader.hexToNum(isEven ? T.cellEvenFill : T.cellOddFill), fillAlpha);
         cell.fillRect(px, py, g.cellSize, g.cellSize);
-        cell.lineStyle(g.gridLineWidth, ThemeLoader.hexToNum(T.gridLineColor), 1);
+        cell.lineStyle(g.gridLineWidth, ThemeLoader.hexToNum(T.gridLineColor), hasSkin ? 0.25 : 1);
         cell.strokeRect(px, py, g.cellSize, g.cellSize);
 
         cell.setInteractive(
@@ -396,6 +408,10 @@ onComplete: () => {
     const py = g.originY + displayRow * g.cellSize;
     const gfx = this.scene.add.graphics();
 
+    // Track key by type for O(k) clearing
+    let typeSet = this.highlightKeysByType.get(type);
+    if (!typeSet) { typeSet = new Set(); this.highlightKeysByType.set(type, typeSet); }
+
     switch (type) {
       case 'move': {
         const { color, alpha } = ThemeLoader.hexToColorAlpha(T.cellValidMove);
@@ -410,7 +426,9 @@ onComplete: () => {
         m.lineBetween(cx + s, cy - s, cx - s, cy + s);
         m.lineStyle(1, 0xFF4444, 0.3); m.strokeCircle(cx, cy, s * 0.8);
         this.attackMarkerContainer.add(m);
-        this.highlights.set(`${this.cellKey(col, row)}_attackRange_marker`, m);
+        const markerKey = `${this.cellKey(col, row)}_attackRange_marker`;
+        this.highlights.set(markerKey, m);
+        typeSet.add(markerKey);
         break;
       }
       case 'attack': {
@@ -422,7 +440,9 @@ onComplete: () => {
         m.lineBetween(cx + s * 0.5, cy - s * 0.5, cx - s * 0.5, cy + s * 0.5);
         m.lineStyle(2, 0xFF4444, 0.9); m.strokeCircle(cx, cy, s * 0.7);
         this.attackMarkerContainer.add(m);
-        this.highlights.set(`${this.cellKey(col, row)}_attack_marker`, m);
+        const markerKey = `${this.cellKey(col, row)}_attack_marker`;
+        this.highlights.set(markerKey, m);
+        typeSet.add(markerKey);
         break;
       }
       case 'aura': {
@@ -435,6 +455,12 @@ onComplete: () => {
         gfx.strokeRect(px + 1, py + 1, g.cellSize - 2, g.cellSize - 2);
         break;
       }
+      case 'deploy': {
+        gfx.fillStyle(0x00ff88, 0.25); gfx.fillRect(px, py, g.cellSize, g.cellSize);
+        gfx.lineStyle(3, 0x00ff88, 0.9);
+        gfx.strokeRect(px + 2, py + 2, g.cellSize - 4, g.cellSize - 4);
+        break;
+      }
       case 'hover': {
         const { color, alpha } = ThemeLoader.hexToColorAlpha(T.cellHover);
         gfx.fillStyle(color, alpha); gfx.fillRect(px, py, g.cellSize, g.cellSize);
@@ -443,6 +469,7 @@ onComplete: () => {
     }
     this.highlightContainer.add(gfx);
     this.highlights.set(key, gfx);
+    typeSet.add(key);
   }
 
   // ─────────────────────────────────────────────
@@ -515,11 +542,12 @@ onComplete: () => {
         this.showDamageNumber(col, row, amount, true);
       }),
 
-      EventBus.on(EV.HIGHLIGHTS_CHANGED, ({ moves, attacks, attackRange, auras }) => {
+      EventBus.on(EV.HIGHLIGHTS_CHANGED, ({ moves, attacks, attackRange, deploy, auras }) => {
         this.clearAllHighlights();
         if (attackRange) this.highlightAttackRange(attackRange);
         if (moves)       this.highlightMoves(moves);
         if (attacks)     this.highlightAttacks(attacks);
+        if (deploy?.length) this.highlightDeploy(deploy);
         if (auras)       this.highlightAuras(auras);
       }),
 
@@ -527,7 +555,16 @@ onComplete: () => {
       EventBus.on(EV.UNIT_EXHAUSTED, () => { /* future: thumbnail.setExhausted(true) */ }),
       EventBus.on(EV.UNIT_REFRESHED, () => { /* future: thumbnail.setExhausted(false) */ }),
 
-      // UNIT_STATS_CHANGED: look up by instanceId — always resolves, even mid-tween
+      // UNIT_STATS_BATCH: bulk update all unit stats in one pass (from aura recalc)
+      EventBus.on('UNIT_STATS_BATCH' as any, ({ units }: {
+        units: Array<{ instanceId: string; atk: number; currentHP: number; maxHP: number; canAct: boolean }>;
+      }) => {
+        for (const u of units) {
+          this.updateStatsByInstanceId(u.instanceId, u.atk, u.currentHP, u.maxHP, u.canAct);
+        }
+      }),
+
+      // UNIT_STATS_CHANGED: single unit update — look up by instanceId, works mid-tween
       EventBus.on('UNIT_STATS_CHANGED' as any, ({ instanceId, atk, currentHP, maxHP, canAct }: {
         instanceId: string; atk?: number; currentHP?: number; maxHP?: number; canAct: boolean;
       }) => {

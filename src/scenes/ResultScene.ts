@@ -15,7 +15,7 @@
 // ============================================================
 
 import Phaser from 'phaser';
-import GameState, { GameMode } from '../GameState';
+import GameState from '../GameState';
 import SocketManager from '../network/SocketManager';
 
 export default class ResultScene extends Phaser.Scene {
@@ -89,7 +89,7 @@ export default class ResultScene extends Phaser.Scene {
     yPos += 36;
 
     // ── Mode badge (FREE PLAY / CRYPTO) ────────────────────────
-    const isCrypto = GameState.currentMode === GameMode.CryptoPlay;
+    const isCrypto = match.stakeAmount > 0;
 
     const modeLabel = isCrypto
       ? `CRYPTO PLAY  ·  Staked: ${match.stakeAmount} AVAX each`

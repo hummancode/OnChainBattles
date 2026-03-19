@@ -2,9 +2,11 @@ import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
 import { AbilityType } from '../../types/AbilityTypes';
 import type { PendingCommand } from '../../pending/PendingCommand';
 import type { AbilityContext, AbilityResult } from '../types';
+import { Player } from '../../types/GameTypes';
 
 function spellDamageStructure(ctx: AbilityContext): AbilityResult {
-  const structures = ctx.board.getStructures();
+  const enemyPlayer = ctx.owner === Player.P1 ? Player.P2 : Player.P1;
+  const structures = ctx.board.getStructures(enemyPlayer);
   const validTargetIds = structures.map(u => u.instanceId);
 
   if (validTargetIds.length === 0) return { events: [] };

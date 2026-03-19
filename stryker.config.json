@@ -1,0 +1,29 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker/master/packages/core/schema/stryker-core.schema.json",
+  "testRunner": "vitest",
+  "checkers": [],
+  "mutate": [
+    "src/game/pending/PendingCommandResolver.ts",
+    "src/game/CombatResolver.ts",
+    "src/game/phases/ActPhase.ts",
+    "src/game/phases/PlayPhase.ts",
+    "src/game/GameModifiers.ts",
+    "src/game/Board.ts",
+    "src/game/PlayerState.ts",
+    "server/validation/DeckValidator.ts",
+    "server/api/middleware.ts",
+    "server/utils/sanitize.ts"
+  ],
+  "thresholds": {
+    "high": 80,
+    "low": 60,
+    "break": 50
+  },
+  "incremental": true,
+  "concurrency": 4,
+  "timeoutMS": 30000,
+  "reporters": ["clear-text", "html"],
+  "htmlReporter": {
+    "fileName": "reports/mutation/index.html"
+  }
+}

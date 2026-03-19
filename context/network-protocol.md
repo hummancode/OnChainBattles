@@ -13,10 +13,10 @@
 | END_ACT_PHASE | BattleScene | (none) | engine.endActPhase() |
 
 ## Not yet networked
-- selectColumn (no cards use COLUMN pending currently)
-- selectDiscard (no cards use DISCARD pending currently)
+- selectColumn (no cards use COLUMN pending in current card pool)
+- selectDiscard (War Horn uses DISCARD pending, but not yet networked — works in local play only)
 
-## Connection Flow
+## Connection Flow (Legacy: MainMenuScene → RoomScene)
 ```
 RoomScene:  createRoom / joinRoom
             ↓
@@ -33,8 +33,47 @@ Server:      player_ready (queues game_actions until both ready)
 BattleScene: engine.startGame()
 ```
 
+## Connection Flow (Lobby: HubScene → RoomBrowserScene → LobbyScene)
+```
+HubScene:   → RoomBrowserScene (room list via /api/rooms)
+             ↓
+RoomBrowserScene: create or join room
+             ↓
+LobbyScene:  deck selection, ready up, chat
+             → deck_submitted (validated server-side)
+             → player_ready
+             ↓
+Server:      both_battle_ready → flush queue
+             ↓
+BattleScene: create() → engine.startGame()
+```
+
+## Disconnect / Reconnect Flow
+```
+Player disconnects → server starts 10s grace period
+  → opponent receives: opponentDisconnected
+  → countdown: disconnectCountdown (every 1s)
+
+If player rejoins within 10s:
+  → rejoin_room { roomCode, playerName }
+  → server: reassignSocket, cancel grace timer
+  → rejoinSuccess + opponentReconnected
+  → ⚠ NO state sync — reconnected player has stale/empty engine
+
+If grace period expires:
+  → opponentAbandon → remaining player wins
+  → crypto mode: auto-payout via escrow
+  → room deleted
+```
+
 ## Server-Side Room State
 - `battleReadyCount`: 0→1→2 (both_battle_ready emitted at 2)
 - `actionQueue`: game_actions received before both ready (flushed on ready)
 - `cryptoReadyCount`: for crypto mode deposit flow
 - `settled`: prevents double payout
+- `gameOverClaims[]`: dual-claim consensus for game result
+- `lastSeqNum[]`: per-player action sequence counter (replay protection)
+- `graceTimer`: disconnect grace period handle (10s)
+
+## Known Gap: No State Recovery
+Server does not send game state to reconnecting clients. Engine state (board, units, hand, modifiers) is lost on page refresh. See `context/known-issues.md` for details.

@@ -21,6 +21,7 @@ import { opponent } from '../GameContext';
 import { TurnPhase } from '../types/GameTypes';
 import { getCard } from '../data/CardRegistry';
 import { resolveCastleAreaAttack, applyDamage, applyAutoHeal } from '../CombatResolver';
+import { getValidDeploySquares as getValidDeploySquaresForSpawn } from '../MovementRules';
 
 const CROWN_CAP = 10;
 
@@ -144,7 +145,7 @@ function runCastleEffects(ctx: GameContext, ap: number): void {
 
     if (castle.spawnCounter >= interval) {
       castle.spawnCounter = 0;
-      const freeSquares = ctx.board.getFreeSquaresInHalf(ap);
+      const freeSquares = getValidDeploySquaresForSpawn(ap, ctx.board);
       if (freeSquares.length > 0) {
         const spawnPos = freeSquares[0];
         const spawnUnit = ctx.createUnit('foot_soldier', ap, spawnPos);

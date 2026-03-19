@@ -364,10 +364,12 @@ export class OverlayRenderer {
       L.dimmer.height,
       0x000000, 0
     ).setInteractive();
-    blocker.on('pointerdown', () => {
+    const blockerHandler = () => {
       this.close();
       EventBus.emit(EV.DETAIL_HIDE, {});
-    });
+    };
+    blocker.on('pointerdown', blockerHandler);
+    this.overlayInputCleanups.push(() => blocker.off('pointerdown', blockerHandler));
     container.add(blocker);
     container.bringToTop(detail);
 

@@ -1,6 +1,49 @@
 {
   "patches": [
     {
+      "version": "0.02",
+      "date": "2026-03-16",
+      "summary": "v0.02",
+      "notes": [
+        {
+          "id": "20260314153456714843",
+          "category": "New Content",
+          "text": "cards can be only placed on the friendly side of the board as always; however new rule; you can only place to a friendly board square if a friendly unit exists in the row that square exists.",
+          "created": "2026-03-14T15:34:56.714909",
+          "edited": "2026-03-16T21:01:53.493315"
+        },
+        {
+          "id": "20260314155314283792",
+          "category": "Mechanics",
+          "text": "let lancer can attack only on the direction it moved, y+ => attack on that direction only. x+ => only on x+ can do attack. Lets remove the property of the lancer that i can only go forward.",
+          "created": "2026-03-14T15:53:14.283844",
+          "edited": null
+        },
+        {
+          "id": "20260314160907195736",
+          "category": "New Content",
+          "text": "About row placement for units; let available places for units to be placed clear in UI. My solution when i click a  card in UI, a green frame appears on top it: As this stage, let the rows/squares card can be placed be highligten.",
+          "created": "2026-03-14T16:09:07.195786",
+          "edited": null
+        },
+        {
+          "id": "20260316210311388798",
+          "category": "Balance",
+          "text": "Messenger: no longer sees a card, or draws a card.Just aura to the king.",
+          "created": "2026-03-16T21:03:11.388854",
+          "edited": null
+        },
+        {
+          "id": "20260316220433659580",
+          "category": "Balance",
+          "text": "militia is 1 ATK , 2 DEF.",
+          "created": "2026-03-16T22:04:33.666243",
+          "edited": null
+        }
+      ],
+      "released_at": "2026-03-16T22:20:08.500256"
+    },
+    {
       "version": "0.01",
       "date": "2026-03-12",
       "summary": "v0.01",
@@ -37,28 +80,6 @@
       "released_at": "2026-03-12T23:02:58.165219"
     }
   ],
-  "unreleased": [
-    {
-      "id": "20260314153456714843",
-      "category": "New Content",
-      "text": "cards can be placed on the one side of the board as always, however new requirement: u can place on that square if a friendly unit/card exists.",
-      "created": "2026-03-14T15:34:56.714909",
-      "edited": null
-    },
-    {
-      "id": "20260314155314283792",
-      "category": "Mechanics",
-      "text": "let lancer can attack only on the direction it moved, y+ => attack on that direction only. x+ => only on x+ can do attack. Lets remove the property of the lancer that i can only go forward.",
-      "created": "2026-03-14T15:53:14.283844",
-      "edited": null
-    },
-    {
-      "id": "20260314160907195736",
-      "category": "New Content",
-      "text": "About row placement for units; let available places for units to be placed clear in UI. My solution when i click a  card in UI, a green frame appears on top it: As this stage, let the rows/squares card can be placed be highligten.",
-      "created": "2026-03-14T16:09:07.195786",
-      "edited": null
-    }
-  ],
+  "unreleased": [],
   "revoked": []
 }

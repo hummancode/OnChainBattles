@@ -22,6 +22,7 @@
 import type { GameEvent } from './types/EventTypes';
 import type { GameStateSnapshot, StatBuff, GameModifiers, PlayerStateSnapshot } from './types/GameTypes';
 import { getCard } from './data/CardRegistry';
+import type { RenderPerfSnapshot } from '../renderers/RenderProfiler';
 
 const AUTO_SAVE_INTERVAL_MS = 30_000;
 
@@ -85,6 +86,7 @@ export interface FullSnapshot {
   activePlayer: number;
   units: UnitSnap[];
   players: [PlayerSnap, PlayerSnap];
+  renderPerf?: RenderPerfSnapshot;
 }
 
 export interface SessionLog {
@@ -106,16 +108,19 @@ export class GameLogger {
   private stopped = false;
   private autoSaveTimer: ReturnType<typeof setInterval> | null = null;
   private getState: () => GameStateSnapshot;
+  private getRenderPerf: (() => RenderPerfSnapshot | null) | null = null;
   private storageKey: string;
 
   constructor(
     roomCode: string,
     localPlayerIndex: number,
     seed: number,
-    getState: () => GameStateSnapshot
+    getState: () => GameStateSnapshot,
+    getRenderPerf?: () => RenderPerfSnapshot | null,
   ) {
     this.startMs = Date.now();
     this.getState = getState;
+    this.getRenderPerf = getRenderPerf ?? null;
     this.meta = {
       roomCode,
       localPlayerIndex,
@@ -151,12 +156,17 @@ export class GameLogger {
     }
   }
 
-  /** Take a full game state snapshot. */
+  /** Take a full game state snapshot (includes render perf if available). */
   takeSnapshot(): void {
     if (this.stopped) return;
     try {
       const state = this.getState();
-      this.snapshots.push(buildFullSnapshot(state, Date.now() - this.startMs));
+      const snap = buildFullSnapshot(state, Date.now() - this.startMs);
+      if (this.getRenderPerf) {
+        const perf = this.getRenderPerf();
+        if (perf) snap.renderPerf = perf;
+      }
+      this.snapshots.push(snap);
     } catch { /* engine not ready yet */ }
   }
 
@@ -232,11 +242,13 @@ export class GameLogger {
 // SNAPSHOT BUILDERS
 // ─────────────────────────────────────────────
 
-// Events that warrant a full snapshot
+// Events that warrant a full snapshot.
+// Restricted to structural changes only — frequent events like
+// UNIT_ATTACKED, AURA_APPLIED, LEG_GAINED are logged as entries
+// but don't trigger expensive snapshots every time.
 const SNAPSHOT_EVENTS = new Set([
-  'TURN_STARTED', 'UNIT_PLACED', 'UNIT_DIED', 'UNIT_ATTACKED',
-  'UNIT_MOVED', 'UNIT_TRANSFORMED', 'AURA_APPLIED', 'GAME_OVER',
-  'LEG_GAINED', 'LEG_SPENT', 'LEG_RATE_CHANGED',
+  'TURN_STARTED', 'UNIT_PLACED', 'UNIT_DIED',
+  'UNIT_TRANSFORMED', 'GAME_OVER',
 ]);
 
 function buildFullSnapshot(state: GameStateSnapshot, ts: number): FullSnapshot {

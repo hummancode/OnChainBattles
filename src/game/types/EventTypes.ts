@@ -285,6 +285,14 @@ export interface EvStructureSpawned {
   owner: Player;
 }
 
+export interface EvDiseaseApplied {
+  type: 'DISEASE_APPLIED';
+  caster: Player;            // Disease ticks on caster's LEG phase
+  targetInstanceId: string;
+  damage: number;
+  duration: number;
+}
+
 // ─────────────────────────────────────────────
 // UNION TYPE
 // EventBus.emit() and .on() are typed against this union.
@@ -320,6 +328,7 @@ export type GameEvent =
   | EvGameOver
   | EvDeckShuffled
   | EvScoutResult
-  | EvStructureSpawned;
+  | EvStructureSpawned
+  | EvDiseaseApplied;
 
 export type GameEventType = GameEvent['type'];

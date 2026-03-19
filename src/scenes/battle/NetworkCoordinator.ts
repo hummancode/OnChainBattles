@@ -70,6 +70,9 @@ let disconnectCountdownText: Phaser.GameObjects.Text | null = null;
 export function handleOpponentDisconnect(deps: NetworkCoordinatorDeps): void {
   const { scene } = deps;
 
+  // Clean up any previous disconnect overlay (prevents stacking on rapid disconnect events)
+  for (const obj of disconnectOverlay) obj.destroy();
+
   // Show a non-blocking "waiting" banner with countdown (opponent may reconnect)
   const bg = scene.add.rectangle(640, 30, 500, 50, 0x000000, 0.85).setDepth(999);
   const txt = scene.add.text(640, 30, 'Opponent disconnected — reconnect: 10s', {
@@ -115,6 +118,8 @@ export function handleFinalDisconnect(deps: NetworkCoordinatorDeps): void {
     stakeAmount: GameState.currentStake,
     payout: GameState.currentMode === 'CryptoPlay' ? GameState.currentStake * 2 * 0.95 : 0,
   });
+
+  GameState.clearBattleSession();
 
   scene.add.rectangle(640, 360, 600, 120, 0x000000, 0.85);
   scene.add.text(640, 345, 'Opponent disconnected', { fontSize: '26px', color: '#FF6666', align: 'center' }).setOrigin(0.5);

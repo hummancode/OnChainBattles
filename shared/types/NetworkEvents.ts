@@ -70,15 +70,15 @@ export interface GameStateReport {
 
 export interface ClientToServerEvents {
   // Existing room events
-  createRoom:     (data: { roomCode: string; playerName: string }) => void;
-  joinRoom:       (data: { roomCode: string; playerName: string }) => void;
+  createRoom:     (data: { roomCode: string; playerName: string; guestSessionId?: string }) => void;
+  joinRoom:       (data: { roomCode: string; playerName: string; guestSessionId?: string }) => void;
   registerWallet: (data: { roomCode: string; walletAddress: string; message: string; signature: string }) => void;
   cryptoReady:    (data: { roomCode: string }) => void;
   player_ready:   (data: { roomCode: string }) => void;
   game_action:    (data: { roomCode: string; action: GameAction }) => void;
   game_over:      (data: { roomCode: string; winnerIndex: number; totalTurns?: number }) => void;
   state_hash:     (data: { roomCode: string; hash: string; afterGlobalSeq: number }) => void;
-  rejoin_room:    (data: { roomCode: string; playerName: string }) => void;
+  rejoin_room:    (data: { roomCode: string; playerName: string; guestSessionId?: string }) => void;
   game_state_report: (data: { roomCode: string; report: GameStateReport }) => void;
 
   // Auth/Deck events
@@ -86,8 +86,8 @@ export interface ClientToServerEvents {
   submitDeck:     (data: { roomCode: string; deckIds: string[] }) => void;
 
   // Lobby events
-  'lobby:create':         (data: { playerName: string; settings?: Partial<RoomSettings> }) => void;
-  'lobby:join':           (data: { roomCode: string; playerName: string; password?: string }) => void;
+  'lobby:create':         (data: { playerName: string; settings?: Partial<RoomSettings>; guestSessionId?: string }) => void;
+  'lobby:join':           (data: { roomCode: string; playerName: string; password?: string; guestSessionId?: string }) => void;
   'lobby:leave':          (data: { roomCode: string }) => void;
   'lobby:chat':           (data: { roomCode: string; text: string }) => void;
   'lobby:ready':          (data: { roomCode: string }) => void;
@@ -120,7 +120,7 @@ export interface ServerToClientEvents {
   opponentReconnected:  () => void;
   opponentAbandon:      () => void;
   disconnectCountdown:  (data: { remaining: number }) => void;
-  rejoinSuccess:        (data: { roomCode: string; playerIndex: number }) => void;
+  rejoinSuccess:        (data: { roomCode: string; playerIndex: number; gameSeed: number }) => void;
   hostDepositConfirmed: () => void;
   bothCryptoReady:      () => void;
   payout_result:        (data: PayoutResult) => void;
@@ -221,6 +221,7 @@ export interface RoomPlayer {
   playerId?: number | null;
   deckIds?: string[] | null;
   ready?: boolean;
+  guestSessionId?: string | null;
 }
 
 export interface GameOverClaim {

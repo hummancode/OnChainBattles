@@ -43,7 +43,7 @@ class GameStateClass {
     gameSeed: number = 0;        // Shared shuffle seed from server
 
     // ─── Match ────────────────────────────────────────────────
-    currentStake: number = 1;
+    currentStake: number = 0;
     winCount: number = 0;
     lossCount: number = 0;
     lastMatch: BoardGameResult | null = null;
@@ -56,6 +56,8 @@ class GameStateClass {
     authToken: string = '';
     authenticatedPlayerId: number = 0;
     displayName: string = '';
+    accountTier: number = 0;    // 0=guest, 1=free, 2=economy
+    authEmail: string = '';
 
     // ─── Deck (populated by deck selection flow) ─────────────
     activeDeckId: number | null = null;
@@ -138,6 +140,8 @@ class GameStateClass {
         this.lastMatch = null;
         this.depositTxHash = null;
         this.payoutResult = null;
+        this.currentStake = 0;
+        this.currentMode = GameMode.FreePlay;
     }
 
     // ─── Auth ─────────────────────────────────────────────────
@@ -157,6 +161,8 @@ class GameStateClass {
         this.authToken = '';
         this.authenticatedPlayerId = 0;
         this.displayName = '';
+        this.accountTier = 0;
+        this.authEmail = '';
         console.log('[GameState] Auth cleared.');
     }
 
@@ -169,6 +175,52 @@ class GameStateClass {
 
     hasActiveDeck(): boolean {
         return this.activeDeckCardIds.length > 0;
+    }
+
+    // ─── Battle Session Persistence ─────────────────────────────
+    private static readonly BATTLE_SESSION_KEY = 'ocb_battle_session';
+
+    /** Save battle context to sessionStorage so page refresh can rejoin. */
+    persistBattleSession(): void {
+        if (!this.roomCode) return;
+        try {
+            sessionStorage.setItem(GameStateClass.BATTLE_SESSION_KEY, JSON.stringify({
+                roomCode: this.roomCode,
+                playerIndex: this.playerIndex,
+                gameSeed: this.gameSeed,
+                playerName: this.playerName,
+                opponentName: this.opponentName,
+            }));
+            console.log(`[GameState] Battle session persisted: room=${this.roomCode}`);
+        } catch { /* storage disabled */ }
+    }
+
+    /** Restore battle context from sessionStorage. Returns true if session found. */
+    restoreBattleSession(): boolean {
+        try {
+            const raw = sessionStorage.getItem(GameStateClass.BATTLE_SESSION_KEY);
+            if (!raw) return false;
+            const data = JSON.parse(raw);
+            if (!data.roomCode) return false;
+            this.roomCode = data.roomCode;
+            this.playerIndex = data.playerIndex ?? 0;
+            this.gameSeed = data.gameSeed ?? 0;
+            this.playerName = data.playerName ?? 'Guest';
+            this.opponentName = data.opponentName ?? '';
+            console.log(`[GameState] Battle session restored: room=${this.roomCode}, player=${this.playerName}`);
+            return true;
+        } catch { return false; }
+    }
+
+    clearBattleSession(): void {
+        try { sessionStorage.removeItem(GameStateClass.BATTLE_SESSION_KEY); } catch { /* */ }
+    }
+
+    hasBattleSession(): boolean {
+        try {
+            const raw = sessionStorage.getItem(GameStateClass.BATTLE_SESSION_KEY);
+            return !!raw && !!JSON.parse(raw).roomCode;
+        } catch { return false; }
     }
 
     // ─── Debug ────────────────────────────────────────────────

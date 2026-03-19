@@ -25,6 +25,9 @@ export class UnitThumbnail {
   col: number = 0;
   row: number = 0;
 
+  /** Cell map key — maintained by BoardRenderer for O(1) reverse lookup. */
+  cellKey: string = '';
+
   // Direct references to mutable children — never string lookups
   private atkBadgeBg: Phaser.GameObjects.Graphics | null = null;
   private atkBadgeText: Phaser.GameObjects.Text | null = null;

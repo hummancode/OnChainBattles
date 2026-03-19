@@ -25,7 +25,7 @@ describe('onDeployDraw — Scout and Messenger', () => {
     expect(ev.topCards).toBeDefined();
   });
 
-  it('messenger deploy draws 1 card', () => {
+  it('messenger deploy does NOT draw (v0.02 nerf)', () => {
     const msgIdx = t.findInHand('messenger');
     if (msgIdx < 0) return;
 
@@ -35,17 +35,12 @@ describe('onDeployDraw — Scout and Messenger', () => {
     const affordable = t.engine.getAffordableCards();
     if (!affordable.includes(msgIdx)) return;
 
-    const handBefore = t.state().players[Player.P1].hand.length;
-    const deckBefore = t.state().players[Player.P1].deckCount;
-
+    const drawsBefore = t.eventsOfType('CARD_DRAWN').length;
     t.engine.playCard(msgIdx, pos.col, pos.row);
+    const drawsAfter = t.eventsOfType('CARD_DRAWN').length;
 
-    const handAfter = t.state().players[Player.P1].hand.length;
-    const deckAfter = t.state().players[Player.P1].deckCount;
-
-    // Played 1, drew 1 → net hand change = 0
-    expect(handAfter).toBe(handBefore - 1 + 1);
-    expect(deckAfter).toBe(deckBefore - 1);
+    // Messenger no longer draws on deploy
+    expect(drawsAfter).toBe(drawsBefore);
   });
 
   it('foot_soldier has no on-deploy draw (it draws on death)', () => {

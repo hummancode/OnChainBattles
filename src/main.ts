@@ -4,6 +4,8 @@ import PreLoadScene       from './scenes/PreloadScene';
 import LoginScene         from './scenes/LoginScene';
 import HubScene           from './scenes/HubScene';
 import DeckBuilderScene   from './scenes/DeckBuilderScene';
+import PuzzleScene        from './scenes/PuzzleScene';
+import ProfileScene       from './scenes/ProfileScene';
 import RoomBrowserScene   from './scenes/RoomBrowserScene';
 import LobbyScene         from './scenes/LobbyScene';
 import MainMenuScene      from './scenes/MainMenuScene';
@@ -29,6 +31,8 @@ const config: Phaser.Types.Core.GameConfig = {
         LoginScene,
         HubScene,
         DeckBuilderScene,
+        PuzzleScene,
+        ProfileScene,
         RoomBrowserScene,
         LobbyScene,
         MainMenuScene,

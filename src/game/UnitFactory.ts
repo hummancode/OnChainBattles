@@ -69,6 +69,7 @@ export class UnitFactory {
       // Computed capabilities — set below
       canAttackAfterMove: false,
       combatTag:          null,
+      lastMoveDirection:  null,
 
       // Treason tracking
       treasonOwner:     null,

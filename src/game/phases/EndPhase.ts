@@ -32,8 +32,12 @@ export function runEndPhase(ctx: GameContext): boolean {
   // 1. Tick timed effects (duration --)
   mod.tickEffects();
 
-  // 2. Resolve Treason returns
-  resolveTreasonReturns(ctx);
+  // 2. Resolve Treason returns (ownership change requires aura recalc)
+  const hadTreason = resolveTreasonReturns(ctx);
+  if (hadTreason) {
+    const auraEvent = ctx.auras.evaluateAuras(ctx.board, ctx.mods);
+    ctx.emit(auraEvent);
+  }
 
   // 3. Trim hand overflow (Motherland)
   const overflow = ctx.players[ap].trimOverflowHand();
@@ -57,9 +61,11 @@ export function runEndPhase(ctx: GameContext): boolean {
 // SUB-STEPS
 // ─────────────────────────────────────────────
 
-function resolveTreasonReturns(ctx: GameContext): void {
+function resolveTreasonReturns(ctx: GameContext): boolean {
+  let resolved = false;
   for (const unit of ctx.board.getAllUnits()) {
     if (unit.treasonOwner !== null && unit.treasonOwner !== unit.owner) {
+      resolved = true;
       const origPos = unit.originalPos ?? unit.position;
       ctx.board.moveUnit(unit.instanceId, origPos.col, origPos.row);
       unit.owner = unit.treasonOwner;
@@ -74,6 +80,7 @@ function resolveTreasonReturns(ctx: GameContext): void {
       });
     }
   }
+  return resolved;
 }
 
 /**
@@ -115,11 +122,18 @@ function emitKingThreats(ctx: GameContext): void {
 
     for (const u of ctx.board.getUnitsOf(opponent(p))) {
       if (!u.isActive) continue;
+
+      // Quick adjacency pre-check: skip units too far to threaten
+      const dx = Math.abs(u.position.col - kc);
+      const dy = Math.abs(u.position.row - kr);
+      // Most attacks have range <= 3; skip if Manhattan distance > 4
+      if (dx + dy > 4) continue;
+
       const attacks = getValidAttacks(u, ctx.board);
       for (const pos of attacks) {
         if (pos.col === kc && pos.row === kr) {
           threatIds.push(u.instanceId);
-          break; // one match per unit is enough
+          break;
         }
       }
     }

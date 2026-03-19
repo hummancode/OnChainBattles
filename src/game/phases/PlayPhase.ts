@@ -76,9 +76,14 @@ export function executePlayCard(
     if (hasBuildDelay) {
       mod.addTimedEffect({
         type: 'BUILD_DELAY',
-        duration: 1,
+        duration: 2,
         targetInstanceId: unitInstance.instanceId,
       });
+    }
+
+    // SWIFT units can act the turn they're deployed
+    if (def.flags.includes(CardFlag.SWIFT)) {
+      unitInstance.isJustPlaced = false;
     }
 
     ctx.board.placeUnit(unitInstance);

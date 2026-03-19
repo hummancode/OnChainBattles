@@ -15,7 +15,11 @@ export function setupHUDRefresh(
 ): Array<() => void> {
   const oppIdx = localPlayerIndex === 0 ? 1 : 0;
 
-  const refreshHUD = () => {
+  // Debounce: coalesce multiple events in the same frame into one refresh
+  let refreshPending = false;
+
+  const doRefresh = () => {
+    refreshPending = false;
     const state = engine.getState();
     if (!state) return;
 
@@ -50,16 +54,23 @@ export function setupHUDRefresh(
     });
   };
 
+  const scheduleRefresh = () => {
+    if (!refreshPending) {
+      refreshPending = true;
+      requestAnimationFrame(doRefresh);
+    }
+  };
+
   const unsubs: Array<() => void> = [];
-  unsubs.push(EventBus.on(EV.LEG_GAINED,          refreshHUD));
-  unsubs.push(EventBus.on(EV.LEG_SPENT,           refreshHUD));
-  unsubs.push(EventBus.on('LEG_RATE_CHANGED',     refreshHUD));
-  unsubs.push(EventBus.on(EV.UNIT_ATTACKED,       refreshHUD));
-  unsubs.push(EventBus.on(EV.UNIT_HEALED,         refreshHUD));
-  unsubs.push(EventBus.on('PHASE_CHANGED',        refreshHUD));
-  unsubs.push(EventBus.on('TURN_STARTED',         refreshHUD));
-  unsubs.push(EventBus.on(EV.CARD_PLAYED,         refreshHUD));
-  unsubs.push(EventBus.on('OPPONENT_CARD_DRAWN',  refreshHUD));
+  unsubs.push(EventBus.on(EV.LEG_GAINED,          scheduleRefresh));
+  unsubs.push(EventBus.on(EV.LEG_SPENT,           scheduleRefresh));
+  unsubs.push(EventBus.on('LEG_RATE_CHANGED',     scheduleRefresh));
+  unsubs.push(EventBus.on(EV.UNIT_ATTACKED,       scheduleRefresh));
+  unsubs.push(EventBus.on(EV.UNIT_HEALED,         scheduleRefresh));
+  unsubs.push(EventBus.on('PHASE_CHANGED',        scheduleRefresh));
+  unsubs.push(EventBus.on('TURN_STARTED',         scheduleRefresh));
+  unsubs.push(EventBus.on(EV.CARD_PLAYED,         scheduleRefresh));
+  unsubs.push(EventBus.on('OPPONENT_CARD_DRAWN',  scheduleRefresh));
 
   return unsubs;
 }

@@ -146,12 +146,11 @@ export default class LobbyScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     // ── Player Info ─────────────────────────────────────────
-    const displayName = AuthManager.isLoggedIn()
-      ? AuthManager.getPlayer()!.displayName
-      : GameState.playerName || 'Guest';
-    const walletBadge = AuthManager.isLoggedIn()
-      ? ` (${AuthManager.getPlayer()!.wallet.slice(0, 6)}...)`
-      : '';
+    const player = AuthManager.isLoggedIn() ? AuthManager.getPlayer() : null;
+    const displayName = player?.displayName || GameState.playerName || 'Guest';
+    let walletBadge = '';
+    if (player?.wallet) walletBadge = ` (${player.wallet.slice(0, 6)}...)`;
+    else if (player?.email) walletBadge = ` (${player.email})`;
     this.add.text(100, 510, `You: ${displayName}${walletBadge}`, {
       fontSize: '12px', fontFamily: FONT, color: '#555555',
     });

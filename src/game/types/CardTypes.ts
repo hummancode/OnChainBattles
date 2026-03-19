@@ -35,6 +35,7 @@ export enum CardFlag {
   LANCER_CHARGE   = 'LANCER_CHARGE',   // May MOVE + ATTACK in same ACT phase
   CAVALRY_COUNTER = 'CAVALRY_COUNTER', // Pikeman: x3 ATK vs isCavalry
   TAUNT_ROW       = 'TAUNT_ROW',       // Enemies must attack this unit if in range
+  SWIFT           = 'SWIFT',           // Can move/act the turn it's deployed
 }
 
 export enum MovementType {

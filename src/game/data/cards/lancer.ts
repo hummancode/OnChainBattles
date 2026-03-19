@@ -25,5 +25,5 @@ export const LANCER_DEF: CardDefinition = {
   abilities: [
     { type: AbilityType.PASSIVE_LANCER_CHARGE, params: {} },
   ],
-  abilityText: 'Cavalry. Charge: may MOVE and ATTACK in the same turn. Movement must be toward enemy half.',
+  abilityText: 'Cavalry. Charge: may MOVE and ATTACK in the same turn. After moving, can only attack in the direction of movement.',
 };

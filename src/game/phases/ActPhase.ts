@@ -29,7 +29,7 @@ import { Player, EngineStatus } from '../types/GameTypes';
 import { AtkPattern } from '../types/CardTypes';
 import { getCard } from '../data/CardRegistry';
 import { canUnitMove, canUnitAttack } from '../UnitQuery';
-import { isMoveValid, isAttackValid, isLancerForwardMove } from '../MovementRules';
+import { isMoveValid, isAttackValid } from '../MovementRules';
 import { resolveAttackWithCounter } from '../CombatResolver';
 import { resolveOnDeath, resolveOnKill } from '../abilities/AbilityDispatcher';
 
@@ -51,16 +51,15 @@ export function executeMove(ctx: GameContext, unitId: string, col: number, row: 
   // Pattern check (is this square reachable?)
   if (!isMoveValid(unit, col, row, ctx.board)) return false;
 
-  // Lancer charge: movement must be forward
-  const def = getCard(unit.cardId);
-  if (unit.canAttackAfterMove && !isLancerForwardMove(unit, row)) {
-    // If it's a charge unit, movement must be toward enemy
-    // Non-charge units don't reach here (canAttackAfterMove is false)
-  }
-
   const from = { ...unit.position };
   ctx.board.moveUnit(unitId, col, row);
   unit.hasMoved = true;
+
+  // Record move direction for directional attack (Lancer charge)
+  unit.lastMoveDirection = {
+    dx: Math.sign(col - from.col),
+    dy: Math.sign(row - from.row),
+  };
 
   // Non-charge units: moving ends their turn
   if (!unit.canAttackAfterMove) {

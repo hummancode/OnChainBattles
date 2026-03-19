@@ -1,6 +1,7 @@
 import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
 import type { AbilityContext, AbilityResult } from '../types';
 import type { GameEvent } from '../../types/EventTypes';
+import { getValidDeploySquares } from '../../MovementRules';
 
 function peasantRevoltHandler(ctx: AbilityContext): AbilityResult {
   const allStructures = ctx.board.getStructures();
@@ -8,7 +9,7 @@ function peasantRevoltHandler(ctx: AbilityContext): AbilityResult {
 
   const events: GameEvent[] = [];
 
-  const freeSquares = ctx.board.getFreeSquaresInHalf(ctx.owner);
+  const freeSquares = getValidDeploySquares(ctx.owner, ctx.board);
   const toSummon = Math.min(count, freeSquares.length);
   for (let i = 0; i < toSummon; i++) {
     events.push({
@@ -30,6 +31,9 @@ function peasantRevoltHandler(ctx: AbilityContext): AbilityResult {
     newRate:  Math.max(1, oldRate - 1),
     reason:   'REVOLT',
   });
+
+  // Permanent +2 Royal cost penalty
+  ctx.mods[ctx.owner].royalCostPenalty += 2;
 
   return { events };
 }

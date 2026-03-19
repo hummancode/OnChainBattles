@@ -57,6 +57,12 @@ export class SessionManager {
       const room = this.rooms.getRoom(roomCode);
       if (!room) return;
 
+      // ── Layer -1: Game-over guard ─────────────────────
+      if (room.settled || room.gameOverClaims.length > 0) {
+        log.warn(`REJECTED ${action.type} in ${roomCode} — game over (settled=${room.settled}, claims=${room.gameOverClaims.length})`);
+        return;
+      }
+
       if (room.battleReadyCount < 2) {
         room.actionQueue.push(action);
         log.debug(`Queued action (opponent not ready): ${action.type}`);
@@ -342,14 +348,14 @@ export class SessionManager {
     room.disconnectTimers.set(playerIndex, timer);
   }
 
-  handleRejoin(socket: TypedSocket, roomCode: string, playerName: string): void {
+  handleRejoin(socket: TypedSocket, roomCode: string, playerName: string, guestSessionId?: string): void {
     const room = this.rooms.getRoom(roomCode);
     if (!room) {
       socket.emit('error', { message: 'Room expired — cannot rejoin' });
       return;
     }
 
-    const playerIndex = this.rooms.reassignSocket(roomCode, playerName, socket.id);
+    const playerIndex = this.rooms.reassignSocket(roomCode, playerName, socket.id, guestSessionId);
     if (playerIndex === -1) {
       socket.emit('error', { message: 'Player not found in room' });
       return;
@@ -372,7 +378,7 @@ export class SessionManager {
     }
 
     socket.join(roomCode);
-    socket.emit('rejoinSuccess', { roomCode, playerIndex });
+    socket.emit('rejoinSuccess', { roomCode, playerIndex, gameSeed: room.gameSeed ?? 0 });
     socket.to(roomCode).emit('opponentReconnected');
     log.info(`${playerName} rejoined room: ${roomCode}`);
 

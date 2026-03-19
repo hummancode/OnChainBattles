@@ -29,9 +29,9 @@ export class RoomManager {
     }
   }
 
-  createRoom(socketId: string, roomCode: string, playerName: string): Room {
+  createRoom(socketId: string, roomCode: string, playerName: string, guestSessionId?: string): Room {
     const room: Room = {
-      players: [{ id: socketId, name: playerName, wallet: null }],
+      players: [{ id: socketId, name: playerName, wallet: null, guestSessionId: guestSessionId ?? null }],
       gameSeed: null,
       cryptoReadyCount: 0,
       battleReadyCount: 0,
@@ -53,12 +53,12 @@ export class RoomManager {
     return room;
   }
 
-  joinRoom(socketId: string, roomCode: string, playerName: string): Room | string {
+  joinRoom(socketId: string, roomCode: string, playerName: string, guestSessionId?: string): Room | string {
     const room = this.rooms.get(roomCode);
     if (!room) return 'Room not found. Check the code.';
     if (room.players.length >= 2) return 'Room is full.';
 
-    room.players.push({ id: socketId, name: playerName, wallet: null });
+    room.players.push({ id: socketId, name: playerName, wallet: null, guestSessionId: guestSessionId ?? null });
 
     // Generate shared shuffle seed (32-bit, cryptographically random)
     const seed = randomInt(0, 2 ** 32);
@@ -107,10 +107,17 @@ export class RoomManager {
   }
 
   /** Reassign a player's socket ID (after reconnection). Returns player index or -1. */
-  reassignSocket(roomCode: string, playerName: string, newSocketId: string): number {
+  reassignSocket(roomCode: string, playerName: string, newSocketId: string, guestSessionId?: string): number {
     const room = this.rooms.get(roomCode);
     if (!room) return -1;
-    const idx = room.players.findIndex(p => p.name === playerName);
+    // Prefer guestSessionId match (unique), fall back to name match
+    let idx = -1;
+    if (guestSessionId) {
+      idx = room.players.findIndex(p => p.guestSessionId === guestSessionId);
+    }
+    if (idx === -1) {
+      idx = room.players.findIndex(p => p.name === playerName);
+    }
     if (idx === -1) return -1;
     room.players[idx].id = newSocketId;
     log.info(` Reassigned ${playerName} in ${roomCode} → socket ${newSocketId}`);

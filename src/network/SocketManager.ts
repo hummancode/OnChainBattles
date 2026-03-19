@@ -10,6 +10,7 @@
 
 import { io, Socket } from "socket.io-client";
 import GameState, { RoomAction } from "../GameState.ts";
+import { AuthManager } from "../auth/AuthManager.ts";
 import type { GameAction, PayoutResult } from "../../shared/types/NetworkEvents.js";
 
 // Re-export so existing importers don't break
@@ -83,6 +84,7 @@ class SocketManagerClass {
         this.socket?.emit("rejoin_room", {
           roomCode: GameState.roomCode,
           playerName: GameState.playerName,
+          guestSessionId: AuthManager.getGuestSessionId() ?? undefined,
         });
         this.callbacks?.onReconnected?.();
       }
@@ -97,6 +99,32 @@ class SocketManagerClass {
 
     this.socket!.io.on("reconnect_failed", () => {
       console.warn("[SocketManager] All reconnection attempts failed.");
+      this.callbacks?.onReconnectFailed?.();
+    });
+  }
+
+  /** Rejoin flow: connect and emit rejoin_room instead of creating a new room. */
+  connectForRejoin(callbacks: RoomCallbacks): void {
+    this.callbacks = callbacks;
+
+    this.ensureSocket();
+
+    this.socket!.on("connect", () => {
+      console.log("[SocketManager] Connected for rejoin.");
+      this.hasConnectedOnce = true;
+      this.seqCounter = 0;
+      this.socket?.emit("rejoin_room", {
+        roomCode: GameState.roomCode,
+        playerName: GameState.playerName,
+        guestSessionId: AuthManager.getGuestSessionId() ?? undefined,
+      });
+    });
+
+    this.socket!.on("disconnect", () => {
+      if (this.hasConnectedOnce) this.callbacks?.onConnectionLost?.();
+    });
+
+    this.socket!.io.on("reconnect_failed", () => {
       this.callbacks?.onReconnectFailed?.();
     });
   }
@@ -156,6 +184,7 @@ class SocketManagerClass {
     this.socket?.emit("createRoom", {
       roomCode: code,
       playerName: GameState.playerName,
+      guestSessionId: AuthManager.getGuestSessionId() ?? undefined,
     });
   }
 
@@ -164,6 +193,7 @@ class SocketManagerClass {
     this.socket?.emit("joinRoom", {
       roomCode: code,
       playerName: GameState.playerName,
+      guestSessionId: AuthManager.getGuestSessionId() ?? undefined,
     });
   }
 
@@ -313,7 +343,10 @@ class SocketManagerClass {
     });
 
     s.on("rejoinSuccess", (data) => {
-      console.log(`[SocketManager] Rejoin success: room=${data.roomCode}`);
+      console.log(`[SocketManager] Rejoin success: room=${data.roomCode}, playerIndex=${data.playerIndex}`);
+      GameState.setRoomCode(data.roomCode);
+      GameState.setPlayerIndex(data.playerIndex);
+      if (data.gameSeed) GameState.setGameSeed(data.gameSeed);
     });
 
     s.on("error", (data) => {

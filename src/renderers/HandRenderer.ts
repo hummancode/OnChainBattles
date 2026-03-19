@@ -67,22 +67,38 @@ export class HandRenderer {
     this.rebuild();
   }
 
-  /** Add a card to the hand (on draw). */
+  /** Add a card to the hand (on draw). Renders only the new card + repositions existing. */
   addCard(card: CardRenderData): void {
     this.cards.push(card);
-    this.rebuild();
+    const H = this.layout.leftHUD.hand;
+    const newCount = Math.min(this.cards.length, H.maxVisible);
+    const newIndex = newCount - 1;
+
+    // Reposition existing cards to updated fan layout (no destroy/recreate)
+    this.repositionCards(newCount);
+
+    // Render only the new card
+    const pos = this.cardPosition(newIndex, newCount, H);
+    const cardContainer = this.cardRenderer.render(
+      { ...this.cards[newIndex], isSelected: false }, 'full', pos.x, pos.y,
+    );
+    cardContainer.setRotation(Phaser.Math.DegToRad(pos.angle));
+
+    const fullW = this.layout.cards.full.width;
+    const fullH = this.layout.cards.full.height;
+    setContainerHitArea(cardContainer, fullW, fullH);
+    cardContainer.on('pointerover',  () => this.onCardHover(newIndex));
+    cardContainer.on('pointerout',   () => this.onCardHoverEnd(newIndex));
+    cardContainer.on('pointerdown',  () => this.onCardClick(newIndex));
+
+    this.handContainer.add(cardContainer);
+    this.cardContainers.push(cardContainer);
+
     // Animate the new card sliding in
-    const lastContainer = this.cardContainers[this.cardContainers.length - 1];
-    if (lastContainer) {
-      lastContainer.setAlpha(0);
-      this.scene.tweens.add({
-        targets: lastContainer,
-        alpha: 1,
-        y: lastContainer.y,
-        duration: 250,
-        ease: 'Quad.easeOut',
-      });
-    }
+    cardContainer.setAlpha(0);
+    this.scene.tweens.add({
+      targets: cardContainer, alpha: 1, duration: 250, ease: 'Quad.easeOut',
+    });
   }
 
   /** Remove a card from the hand (on play/discard). */
@@ -98,10 +114,14 @@ export class HandRenderer {
         duration: 200,
         ease: 'Quad.easeIn',
         onComplete: () => {
+          container.destroy();
           this.cards.splice(index, 1);
+          this.cardContainers.splice(index, 1);
           if (this.selectedIndex === index) this.selectedIndex = null;
           if (this.selectedIndex !== null && this.selectedIndex > index) this.selectedIndex--;
-          this.rebuild();
+          // Rebind pointer closures (indices shifted) + reposition
+          this.rebindPointerHandlers();
+          this.repositionCards(Math.min(this.cards.length, this.layout.leftHUD.hand.maxVisible));
         },
       });
     } else {
@@ -192,6 +212,35 @@ setContainerHitArea(cardContainer, fullW, fullH);
         ).setOrigin(0.5, 0);
         this.handContainer.add(moreLabel);
       }
+    }
+  }
+
+  /** Tween existing cards to new fan positions without destroy/recreate. */
+  private repositionCards(count: number): void {
+    const H = this.layout.leftHUD.hand;
+    for (let i = 0; i < this.cardContainers.length && i < count; i++) {
+      const pos = this.cardPosition(i, count, H);
+      this.scene.tweens.add({
+        targets: this.cardContainers[i],
+        x: pos.x, y: pos.y,
+        rotation: Phaser.Math.DegToRad(pos.angle),
+        duration: 150, ease: 'Quad.easeOut',
+      });
+    }
+  }
+
+  /** Rebind pointer handlers after splice (indices shifted). */
+  private rebindPointerHandlers(): void {
+    const fullW = this.layout.cards.full.width;
+    const fullH = this.layout.cards.full.height;
+    for (let i = 0; i < this.cardContainers.length; i++) {
+      const c = this.cardContainers[i];
+      c.removeAllListeners();
+      setContainerHitArea(c, fullW, fullH);
+      const idx = i;
+      c.on('pointerover',  () => this.onCardHover(idx));
+      c.on('pointerout',   () => this.onCardHoverEnd(idx));
+      c.on('pointerdown',  () => this.onCardClick(idx));
     }
   }
 

@@ -45,32 +45,46 @@ export default class HubScene extends Phaser.Scene {
     this.cameras.main.fadeIn(400, 0, 0, 0);
 
     // Identity bar
-    const displayName = AuthManager.isLoggedIn()
-      ? AuthManager.getPlayer()!.displayName
-      : GameState.playerName || 'Guest';
-    const walletBadge = AuthManager.isLoggedIn()
-      ? ` (${AuthManager.getPlayer()!.wallet.slice(0, 6)}...)`
-      : '';
+    const isAuth = AuthManager.isLoggedIn();
+    const player = isAuth ? AuthManager.getPlayer()! : null;
+    const displayName = player?.displayName || GameState.playerName || 'Guest';
 
-    this.add.text(CX, 75, `Welcome, ${displayName}${walletBadge}`, {
+    // Wallet/email badge
+    let badge = '';
+    if (player?.wallet) badge = ` (${player.wallet.slice(0, 6)}...)`;
+    else if (player?.email) badge = ` (${player.email})`;
+
+    this.add.text(CX, 75, `Welcome, ${displayName}${badge}`, {
       fontSize: '18px', fontFamily: '"Courier New", monospace',
       fontStyle: 'bold', color: '#FFFFFF',
     }).setOrigin(0.5);
 
-    const statusColor = AuthManager.isLoggedIn() ? '#00ff88' : '#AAAAAA';
-    const statusLabel = AuthManager.isLoggedIn() ? 'Authenticated' : 'Guest Mode';
-    this.add.text(CX, 102, statusLabel, {
-      fontSize: '12px', fontFamily: '"Courier New", monospace', color: statusColor,
-    }).setOrigin(0.5);
+    // Tier badge
+    if (isAuth) {
+      const tierLabels = ['Guest', 'Free Player', 'Economy'];
+      const tierColors = ['#AAAAAA', '#4fc3f7', '#f5a623'];
+      const tier = player!.accountTier ?? 1;
+      this.add.text(CX, 102, tierLabels[tier] ?? 'Free Player', {
+        fontSize: '12px', fontFamily: '"Courier New", monospace', color: tierColors[tier] ?? '#4fc3f7',
+      }).setOrigin(0.5);
+    } else {
+      this.add.text(CX, 102, 'Guest Mode', {
+        fontSize: '12px', fontFamily: '"Courier New", monospace', color: '#AAAAAA',
+      }).setOrigin(0.5);
+    }
 
-    // Logout / Login button
-    if (AuthManager.isLoggedIn()) {
-      new MenuButton(this, CX, 128, '[ Logout ]', {
+    // Action buttons row: profile/logout/login
+    if (isAuth) {
+      new MenuButton(this, CX - 80, 128, '[ Profile ]', {
+        color: '#4fc3f7', fontSize: '12px', fontStyle: 'normal',
+        onPointerDown: () => this.goToProfile(),
+      });
+      new MenuButton(this, CX + 80, 128, '[ Logout ]', {
         color: '#777777', fontSize: '12px', fontStyle: 'normal',
         onPointerDown: () => this.handleLogout(),
       });
     } else {
-      new MenuButton(this, CX, 128, '[ Login with Wallet ]', {
+      new MenuButton(this, CX, 128, '[ Log In ]', {
         color: '#4fc3f7', fontSize: '12px', fontStyle: 'normal',
         onPointerDown: () => this.goToLogin(),
       });
@@ -98,6 +112,11 @@ export default class HubScene extends Phaser.Scene {
     new MenuButton(this, CX, y += gap, '[ DECK BUILDER ]', {
       color: '#f5a623', fontSize: '22px',
       onPointerDown: () => this.goToDeckBuilder(),
+    });
+
+    new MenuButton(this, CX, y += gap, '[ PUZZLES ]', {
+      color: '#e67e22', fontSize: '22px',
+      onPointerDown: () => this.goToPuzzles(),
     });
 
     new MenuButton(this, CX, y += gap + 20, '[ QUICK PLAY (LEGACY) ]', {
@@ -317,6 +336,15 @@ export default class HubScene extends Phaser.Scene {
     });
   }
 
+  private goToProfile(): void {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start('ProfileScene');
+    });
+  }
+
   private goToDeckBuilder(): void {
     if (!AuthManager.isLoggedIn()) {
       ToastNotification.show(this, 'Login required for deck builder', { color: '#f5a623' });
@@ -325,6 +353,15 @@ export default class HubScene extends Phaser.Scene {
     this.cameras.main.fadeOut(300, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       this.scene.start('DeckBuilderScene');
+    });
+  }
+
+  private goToPuzzles(): void {
+    if (this.transitioning) return;
+    this.transitioning = true;
+    this.cameras.main.fadeOut(300, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start('PuzzleScene');
     });
   }
 

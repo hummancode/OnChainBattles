@@ -22,7 +22,7 @@ import { EventBus, EV } from '../events/EventBus';
 import GameState from '../GameState';
 import SocketManager from '../network/SocketManager';
 
-import { wireEngineToEventBus } from './battle/EngineEventBridge';
+import { wireEngineToEventBus, getActiveProfiler } from './battle/EngineEventBridge';
 import { setupSocketCallbacks } from './battle/NetworkCoordinator';
 import { setupHUDRefresh } from './battle/HUDRefreshCoordinator';
 import { createSelectionManager } from './battle/InputCoordinator';
@@ -75,16 +75,20 @@ export default class BattleScene extends Phaser.Scene {
     const opponentName = this.sceneData?.opponentName  ?? GameState.opponentName ?? 'Opponent';
     const localPlayerIndex = GameState.playerIndex ?? 0;
 
+    // Persist battle session so guest can rejoin after page refresh
+    GameState.persistBattleSession();
+
     // ─── Engine + event bridge ────────────────────
     this.engine = new GameEngine();
     this.bridgeUnsub = wireEngineToEventBus(this.engine, localPlayerIndex);
 
-    // ─── Game logger ───────────────────────────────
+    // ─── Game logger (with render profiler) ────────
     this.logger = new GameLogger(
       GameState.roomCode || 'local',
       localPlayerIndex,
       GameState.gameSeed || 0,
       () => this.engine.getState(),
+      () => getActiveProfiler()?.snapshot() ?? null,
     );
     this.engine.on(e => this.logger?.record(e));
 
@@ -95,6 +99,20 @@ export default class BattleScene extends Phaser.Scene {
       console.log(`Exported ${this.logger.entryCount} events`);
     };
     (window as any).gameLog = () => this.logger?.getLog();
+
+    // Render profiler console API
+    (window as any).renderPerf = () => {
+      const profiler = getActiveProfiler();
+      if (!profiler) { console.warn('No active profiler'); return null; }
+      console.log(profiler.summary());
+      return profiler.snapshot();
+    };
+    (window as any).renderPerfReset = () => {
+      const profiler = getActiveProfiler();
+      if (!profiler) { console.warn('No active profiler'); return; }
+      profiler.reset();
+      console.log('[RenderProfiler] Counters reset');
+    };
 
     // ─── HUD refresh ─────────────────────────────
     this.hudUnsubs = setupHUDRefresh(this.engine, localPlayerIndex, playerName, opponentName);
@@ -162,7 +180,24 @@ export default class BattleScene extends Phaser.Scene {
       }
     };
 
-    if (SocketManager.isConnected()) {
+    // ─── Reconnection flow (guest page refresh) ────
+    const isRejoin = !SocketManager.isConnected() && GameState.roomCode && GameState.hasBattleSession();
+
+    if (isRejoin) {
+      console.log('[BattleScene] Guest rejoin: connecting socket for room', GameState.roomCode);
+      // connectForRejoin emits rejoin_room; setupSocketCallbacks (above) sets real handlers
+      SocketManager.connectForRejoin({
+        onRoomCreated: () => {},
+        onRoomJoined: () => {},
+        onOpponentJoined: () => {},
+        onOpponentAction: () => {},
+        onOpponentDisconnected: () => {},
+        onError: (msg) => console.error('[BattleScene] Rejoin error:', msg),
+      });
+      // Start engine after rejoin + both ready
+      SocketManager.onBothBattleReady(() => startEngine());
+      SocketManager.signalBattleReady();
+    } else if (SocketManager.isConnected()) {
       // Multiplayer: wait for both players to be ready
       SocketManager.onBothBattleReady(() => startEngine());
       SocketManager.signalBattleReady();
@@ -248,6 +283,8 @@ export default class BattleScene extends Phaser.Scene {
         };
       };
 
+      const renderPerf = getActiveProfiler()?.snapshot() ?? undefined;
+
       SocketManager.sendStateReport({
         trigger,
         ts: new Date().toISOString(),
@@ -256,6 +293,7 @@ export default class BattleScene extends Phaser.Scene {
         activePlayer: state.turn?.activePlayer ?? 0,
         units,
         players: [buildPlayer(0), buildPlayer(1)],
+        renderPerf,
       });
     } catch (e) {
       console.warn('[BattleScene] Failed to send state report:', e);

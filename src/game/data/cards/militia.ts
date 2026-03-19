@@ -7,7 +7,7 @@ export const MILITIA_DEF: CardDefinition = {
   id: 'militia', name: 'Militia',
   flavorText: 'Where one falls, another rises.',
   class: U, allegiance: STD, subtypes: [], cost: 2, copies: 2,
-  stats: { atk: 1, def: 1, movement: MovementType.OMNI_1, attackPattern: AtkPattern.HV },
+  stats: { atk: 1, def: 2, movement: MovementType.OMNI_1, attackPattern: AtkPattern.HV },
   flags: [],
   abilities: [
     { type: AbilityType.CUSTOM, handler: 'militiaDeployHandler' },

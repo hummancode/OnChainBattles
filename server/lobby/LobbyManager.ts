@@ -9,6 +9,10 @@ import type { ClientToServerEvents, ServerToClientEvents, Room } from '../../sha
 import type { RoomManager } from '../rooms/RoomManager.js';
 import { createLobbyRoom } from './lobbyHelpers.js';
 import { sanitizeText } from '../utils/sanitize.js';
+import { validateDeck } from '../validation/DeckValidator.js';
+import { UNITS_ONLY_DECK_IDS } from '../../src/game/data/DeckDefinitions.js';
+
+const DEFAULT_DECK_IDS = [...UNITS_ONLY_DECK_IDS];
 
 type TypedServer = Server<ClientToServerEvents, ServerToClientEvents>;
 type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -26,14 +30,14 @@ export class LobbyManager {
   ) {}
 
   registerHandlers(socket: TypedSocket): void {
-    socket.on('lobby:create', ({ playerName, settings }) => {
+    socket.on('lobby:create', ({ playerName, settings, guestSessionId }) => {
       // Look up playerId BEFORE removing from rooms
       const found = this.rooms.findBySocket(socket.id);
       const playerId = found?.room.players.find(p => p.id === socket.id)?.playerId ?? null;
 
       this.rooms.removeFromAllRooms(socket.id);
       const code = this.rooms.generateUniqueCode();
-      const room = createLobbyRoom(socket.id, playerName, playerId, settings);
+      const room = createLobbyRoom(socket.id, playerName, playerId, settings, guestSessionId);
       this.rooms.setRoom(code, room);
       socket.join(code);
       socket.emit('lobby:created', { code });
@@ -41,7 +45,7 @@ export class LobbyManager {
       console.log(`[Lobby] Room ${code} created by ${playerName}`);
     });
 
-    socket.on('lobby:join', ({ roomCode, playerName, password }) => {
+    socket.on('lobby:join', ({ roomCode, playerName, password, guestSessionId }) => {
       this.rooms.removeFromAllRooms(socket.id);
       const room = this.rooms.getRoom(roomCode);
       if (!room) { socket.emit('lobby:error', { message: 'Room not found.' }); return; }
@@ -55,6 +59,7 @@ export class LobbyManager {
       room.players.push({
         id: socket.id, name: playerName, wallet: null,
         playerId: null, deckIds: null, ready: false,
+        guestSessionId: guestSessionId ?? null,
       });
       if (room.players.length >= (room.settings?.maxPlayers ?? 2)) {
         room.status = 'full';
@@ -184,6 +189,15 @@ export class LobbyManager {
     socket.on('lobby:deck_submitted', ({ roomCode, deckIds }) => {
       const room = this.rooms.getRoom(roomCode);
       if (!room || room.status !== 'starting') return;
+
+      // Validate deck server-side before accepting
+      const validation = validateDeck(deckIds);
+      if (!validation.valid) {
+        console.warn(`[Lobby] Invalid deck from ${socket.id}: ${validation.errors.join(', ')}`);
+        socket.emit('error', { message: `Invalid deck: ${validation.errors[0]}` });
+        return;
+      }
+
       const player = room.players.find(p => p.id === socket.id);
       if (player) player.deckIds = deckIds;
       if (room.players.every(p => p.deckIds)) {
@@ -219,6 +233,14 @@ export class LobbyManager {
   private finalizeLaunch(roomCode: string, room: Room): void {
     if (room.status === 'in_progress') return;
     room.status = 'in_progress';
+
+    // Substitute default deck for players who didn't submit
+    for (const player of room.players) {
+      if (!player.deckIds) {
+        player.deckIds = DEFAULT_DECK_IDS;
+        console.log(`[Lobby] Player ${player.name} missing deck, using default`);
+      }
+    }
 
     const seed = Math.floor(Math.random() * 999999);
     room.gameSeed = seed;

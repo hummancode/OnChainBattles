@@ -124,6 +124,7 @@ export interface Unit {
    // ── Computed capability (set at creation by UnitFactory) ──
   canAttackAfterMove: boolean; // Lancer charge, future: Berserker, Swift Strike
   combatTag: CombatTag | null; // MELEE or RANGED — derived or overridden. null = no attack.
+  lastMoveDirection: { dx: number; dy: number } | null; // Set after move; used for directional attack (Lancer)
 }
 
 // ─────────────────────────────────────────────

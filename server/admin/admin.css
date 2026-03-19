@@ -1,0 +1,120 @@
+/* OCB Admin Panel — Dark Theme */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Courier New', monospace;
+  background: #0f1523;
+  color: #ccc;
+  min-height: 100vh;
+}
+
+/* ── Nav ─────────────────────────────── */
+nav {
+  background: #16213e;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border-bottom: 1px solid #253348;
+}
+.nav-brand { color: #f5a623; font-weight: bold; font-size: 16px; }
+.nav-link {
+  color: #4fc3f7; text-decoration: none; font-size: 14px;
+  padding: 4px 12px; border-radius: 4px;
+}
+.nav-link:hover, .nav-link.active { background: #1a2a4a; color: #fff; }
+
+/* ── Layout ──────────────────────────── */
+main { max-width: 1100px; margin: 20px auto; padding: 0 20px; }
+h1 { color: #f5a623; font-size: 22px; margin-bottom: 16px; }
+h2 { color: #4fc3f7; font-size: 16px; margin: 20px 0 10px; }
+
+/* ── Buttons ─────────────────────────── */
+.btn {
+  background: #16213e; color: #4fc3f7; border: 1px solid #253348;
+  padding: 8px 16px; font-family: inherit; font-size: 13px;
+  cursor: pointer; border-radius: 4px;
+}
+.btn:hover { background: #1a2a4a; color: #fff; }
+.btn-green { color: #00ff88; border-color: #00ff88; }
+.btn-green:hover { background: #003322; }
+.btn-red { color: #ff4444; border-color: #ff4444; }
+.btn-red:hover { background: #330000; }
+.btn-gold { color: #f5a623; border-color: #f5a623; }
+.btn-gold:hover { background: #332200; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+
+/* ── Forms ────────────────────────────── */
+input, select, textarea {
+  background: #0a0f1e; color: #ccc; border: 1px solid #253348;
+  padding: 8px 12px; font-family: inherit; font-size: 13px;
+  border-radius: 4px; width: 100%;
+}
+input:focus, select:focus, textarea:focus { border-color: #4fc3f7; outline: none; }
+label { color: #888; font-size: 12px; display: block; margin-bottom: 4px; }
+.form-group { margin-bottom: 12px; }
+.form-row { display: flex; gap: 12px; }
+.form-row > * { flex: 1; }
+
+/* ── Tables ───────────────────────────── */
+table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+th {
+  text-align: left; color: #888; font-size: 11px; text-transform: uppercase;
+  padding: 8px; border-bottom: 1px solid #253348;
+}
+td { padding: 8px; border-bottom: 1px solid #1a1a2e; font-size: 13px; }
+tr:hover { background: #1a2040; }
+
+/* ── Cards/Stats ─────────────────────── */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.stat-card {
+  background: #16213e; border: 1px solid #253348; border-radius: 8px;
+  padding: 16px; text-align: center;
+}
+.stat-card .value { font-size: 32px; color: #f5a623; font-weight: bold; }
+.stat-card .label { font-size: 11px; color: #888; margin-top: 4px; }
+
+/* ── Login ────────────────────────────── */
+.login-box {
+  max-width: 360px; margin: 100px auto; background: #16213e;
+  border: 1px solid #253348; border-radius: 10px; padding: 32px;
+}
+.login-box h1 { text-align: center; margin-bottom: 24px; }
+.login-box .btn { width: 100%; margin-top: 8px; }
+
+/* ── Puzzle Board Grid ────────────────── */
+.board-grid {
+  display: grid; grid-template-columns: repeat(7, 52px);
+  gap: 2px; margin: 12px 0;
+}
+.board-cell {
+  width: 52px; height: 52px; background: #1a2040; border: 1px solid #253348;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; cursor: pointer; text-align: center; word-break: break-all;
+  border-radius: 2px; transition: background 0.15s;
+}
+.board-cell:hover { background: #253348; }
+.board-cell.blocked { background: #331111; color: #ff4444; border-color: #552222; }
+.board-cell.preplaced { background: #112233; color: #4fc3f7; border-color: #335577; }
+.board-cell.solution { background: #113311; color: #00ff88; border-color: #225522; }
+
+/* ── Tags ─────────────────────────────── */
+.tag {
+  display: inline-block; padding: 2px 8px; border-radius: 3px;
+  font-size: 11px; font-weight: bold;
+}
+.tag-green { background: #113311; color: #00ff88; }
+.tag-red { background: #331111; color: #ff4444; }
+.tag-gold { background: #332200; color: #f5a623; }
+.tag-blue { background: #112233; color: #4fc3f7; }
+.tag-gray { background: #1a1a2e; color: #888; }
+
+/* ── Misc ─────────────────────────────── */
+.search-bar { display: flex; gap: 8px; margin-bottom: 12px; }
+.search-bar input { max-width: 300px; }
+.error { color: #ff4444; font-size: 13px; margin: 8px 0; }
+.success { color: #00ff88; font-size: 13px; margin: 8px 0; }
+.muted { color: #555; font-size: 12px; }
+.mt { margin-top: 12px; }
+.mb { margin-bottom: 12px; }
+.flex-between { display: flex; justify-content: space-between; align-items: center; }

@@ -1,5 +1,6 @@
 import type { CardDefinition } from '../../types/CardTypes.js';
 import { MovementType, AtkPattern } from '../../types/CardTypes.js';
+import { CardFlag } from '../../types/CardTypes.js';
 import { AbilityType } from '../../types/AbilityTypes';
 import { U, STD } from './_aliases.js';
 
@@ -16,11 +17,9 @@ export const MESSENGER_DEF: CardDefinition = {
         ],
       },
     },
-  flags: [],
+  flags: [CardFlag.SWIFT],
   abilities: [
-    { type: AbilityType.ON_DEPLOY_DRAW,       params: { count: 1 } },
-    { type: AbilityType.ON_DEPLOY_SCOUT_DECK, params: { count: 1 } },
     { type: AbilityType.AURA_SUPPRESS_KING_ATK, params: {} },
   ],
-  abilityText: 'On Deploy: draw 1 card. Reveal top 1 card of opponent\'s deck. Aura: adjacent enemy King ATK = 0.',
+  abilityText: 'Aura: adjacent enemy King ATK = 0.',
 };

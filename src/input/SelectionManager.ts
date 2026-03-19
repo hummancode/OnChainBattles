@@ -368,7 +368,7 @@ private publishHighlights(): void {
         this.pendingValidPositions = ev.validPositions ?? [];
         this.state = { ...this.state, mode: 'awaiting_target' };
         EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
-          moves: this.pendingValidPositions, attacks: [], auras: [],
+          moves: [], attacks: [], deploy: this.pendingValidPositions, auras: [],
         });
       }),
 

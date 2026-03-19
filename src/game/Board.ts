@@ -259,6 +259,7 @@ export class Board implements IBoard {
       u.hasMoved = false;
       u.hasActed = false;
       u.isJustPlaced = false;  // Unit placed last turn can now act
+      u.lastMoveDirection = null;
       // Treason exhausted flag clears at end of opponent turn
     });
   }

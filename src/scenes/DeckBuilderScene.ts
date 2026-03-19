@@ -126,6 +126,7 @@ export default class DeckBuilderScene extends Phaser.Scene {
         if (this.state.activeDeckId === deckId) {
           this.state.activeDeckId = null;
           GameState.setActiveDeck(null, []);
+          AuthManager.setActiveDeckId(null);
         }
         ToastNotification.show(this, 'Deck deleted', { color: '#AAAAAA' });
         await this.refreshDecks();
@@ -148,6 +149,7 @@ export default class DeckBuilderScene extends Phaser.Scene {
         if (deck) {
           this.state.activeDeckId = deckId;
           GameState.setActiveDeck(deckId, deck.cardIds);
+          AuthManager.setActiveDeckId(deckId);
           DeckLoader.invalidate();
         }
         ToastNotification.show(this, 'Deck activated!', { color: '#00ff88' });
@@ -255,6 +257,20 @@ export default class DeckBuilderScene extends Phaser.Scene {
         await this.createStarterDeck();
       }
 
+      // Auto-activate the only valid deck if none is active
+      if (this.state.activeDeckId == null && this.state.decks.length > 0) {
+        const validDecks = this.state.decks.filter(d => d.isValid);
+        if (validDecks.length === 1) {
+          try {
+            await DeckAPI.activate(validDecks[0].id);
+            this.state.activeDeckId = validDecks[0].id;
+            GameState.setActiveDeck(validDecks[0].id, validDecks[0].cardIds);
+            AuthManager.setActiveDeckId(validDecks[0].id);
+            DeckLoader.invalidate();
+          } catch { /* activation failed — user can manually activate */ }
+        }
+      }
+
       this.state.loading = false;
     } catch {
       this.state.loading = false;
@@ -327,6 +343,7 @@ export default class DeckBuilderScene extends Phaser.Scene {
         await DeckAPI.activate(savedDeck.id);
         this.state.activeDeckId = savedDeck.id;
         GameState.setActiveDeck(savedDeck.id, cardIds);
+        AuthManager.setActiveDeckId(savedDeck.id);
         DeckLoader.invalidate();
         ToastNotification.show(this, 'Deck activated!', { color: '#00ff88' });
       } else if (andActivate && !savedDeck.isValid) {

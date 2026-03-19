@@ -11,6 +11,7 @@
 // ============================================================
 
 import SocketManager from '../network/SocketManager';
+import { AuthManager } from '../auth/AuthManager';
 import type { Socket } from 'socket.io-client';
 import type {
   RoomSettings, LobbyState, PublicRoomListing,
@@ -90,11 +91,13 @@ export class LobbySocketManager {
   // ─── Outgoing Events ──────────────────────────────────────
 
   createRoom(playerName: string, settings?: Partial<RoomSettings>): void {
-    this.getSocket()?.emit('lobby:create', { playerName, settings });
+    const guestSessionId = AuthManager.getGuestSessionId() ?? undefined;
+    this.getSocket()?.emit('lobby:create', { playerName, settings, guestSessionId });
   }
 
   joinRoom(roomCode: string, playerName: string, password?: string): void {
-    this.getSocket()?.emit('lobby:join', { roomCode, playerName, password });
+    const guestSessionId = AuthManager.getGuestSessionId() ?? undefined;
+    this.getSocket()?.emit('lobby:join', { roomCode, playerName, password, guestSessionId });
   }
 
   leaveRoom(roomCode: string): void {

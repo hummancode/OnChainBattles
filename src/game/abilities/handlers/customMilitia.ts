@@ -1,12 +1,13 @@
 import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
 import type { PendingCommand } from '../../pending/PendingCommand';
 import type { AbilityContext, AbilityResult } from '../types';
+import { getValidDeploySquares } from '../../MovementRules';
 
 function militiaDeployHandler(ctx: AbilityContext): AbilityResult {
   const hasMilitiaInDeck = ctx.players[ctx.owner].deck.includes('militia');
   if (!hasMilitiaInDeck) return { events: [] };
 
-  const freeSquares = ctx.board.getFreeSquaresInHalf(ctx.owner);
+  const freeSquares = getValidDeploySquares(ctx.owner, ctx.board);
   if (freeSquares.length === 0) return { events: [] };
 
   const pending: PendingCommand = {

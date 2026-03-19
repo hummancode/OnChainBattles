@@ -34,6 +34,7 @@ export function setupGameOverHandler(
     });
 
     SocketManager.sendGameOver(localPlayerIndex, playerWon, turnCount);
+    GameState.clearBattleSession();
 
     scene.time.delayedCall(1500, () => {
       scene.cameras.main.fadeOut(300, 0, 0, 0);
