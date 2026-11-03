@@ -65,7 +65,13 @@ export function createSelectionManager(
       engine.selectPosition(col, row);
       SocketManager.sendGameAction({ type: 'SELECT_POSITION', col, row });
     },
-    selectHandCard: () => {},
+    selectHandCard: (handIndex: number) => {
+      const st = engine.getState();
+      if (engine.getPendingKind() !== 'DISCARD') return;
+      if (st.turn?.activePlayer !== localPlayerIndex) return;
+      engine.selectDiscard(handIndex);
+      SocketManager.sendGameAction({ type: 'SELECT_DISCARD', handIndex });
+    },
     cancelPending: () => {
       engine.cancelPending();
       SocketManager.sendGameAction({ type: 'CANCEL_PENDING' });

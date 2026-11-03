@@ -13,16 +13,16 @@ Used to identify weak areas and improve code quality over time.
 
 | Category | Count | User-Found | Claude-Found | Test-Found |
 |----------|-------|------------|--------------|------------|
-| logic | 18 | 5 | 13 | 0 |
-| network | 7 | 5 | 2 | 0 |
-| state | 10 | 4 | 6 | 0 |
-| rendering | 4 | 1 | 2 | 1 |
-| race-condition | 3 | 2 | 1 | 0 |
+| logic | 19 | 5 | 14 | 0 |
+| network | 11 | 6 | 5 | 0 |
+| state | 12 | 4 | 8 | 0 |
+| rendering | 5 | 1 | 3 | 1 |
+| race-condition | 4 | 2 | 2 | 0 |
 | memory-leak | 3 | 0 | 3 | 0 |
-| web3 | 1 | 0 | 1 | 0 |
+| web3 | 2 | 0 | 2 | 0 |
 | type-safety | 6 | 2 | 4 | 0 |
 | security | 5 | 1 | 4 | 0 |
-| **TOTAL** | **59** | **20** | **38** | **1** |
+| **TOTAL** | **69** | **21** | **47** | **1** |
 
 ---
 
@@ -622,6 +622,106 @@ Used to identify weak areas and improve code quality over time.
 - **Prevention**: Run `tsc --noEmit` in CI alongside tests.
 - **Files**: `src/scenes/DeckBuilderScene.ts`
 
+### BUG-060: War Horn discard soft-locks the game and is not networked
+- **Date**: 2026-11-03
+- **Category**: `state`
+- **Discovered by**: `claude`
+- **Symptom**: After playing War Horn the engine waited for a discard forever; clicking hand cards did nothing. Cancel skipped the discard (free draw 2).
+- **Root cause**: `InputCoordinator.selectHandCard` was a no-op `() => {}`; `selectDiscard` had no network action; `cancelPending()` accepted DISCARD.
+- **Fix**: Hand click during DISCARD pending → `engine.selectDiscard()` + new `SELECT_DISCARD` network action (server-validated, replayed). DISCARD is non-cancellable; overlay shows a mandatory prompt with no Cancel.
+- **Prevention**: Every PendingCommand kind needs: UI input path, network action, replay case, and an explicit cancellable/mandatory decision.
+- **Files**: `src/scenes/battle/InputCoordinator.ts`, `src/network/ActionApplier.ts`, `src/game/GameEngine.ts`, `src/renderers/OverlayRenderer.ts`, `server/game/SessionManager.ts`, `shared/types/NetworkEvents.ts`
+
+### BUG-061: Mutual King death always awarded a winner
+- **Date**: 2026-11-03
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: King vs King with both at 1 HP (dying blow) declared the attacker the winner.
+- **Root cause**: `checkKingDeath` ran for the defender first and set GAME_OVER, so the attacker's own death check short-circuited. EndPhase iterated P1 first with the same bias.
+- **Fix**: Both deaths are evaluated first; both dead → `GAME_OVER` with `isDraw: true, winner: null`. Clients claim `winnerIndex: -1`; server records a draw and calls `refundTie` in crypto mode. ResultScene's existing tie screen is used.
+- **Prevention**: Win checks must collect all terminal conditions before deciding, never return on the first.
+- **Files**: `src/game/phases/ActPhase.ts`, `src/game/phases/EndPhase.ts`, `src/game/types/GameTypes.ts`, `src/scenes/battle/GameOverHandler.ts`, `src/network/SocketManager.ts`, `server/game/SessionManager.ts`
+
+### BUG-062: Page refresh lost the whole match state
+- **Date**: 2026-11-03
+- **Category**: `network`
+- **Discovered by**: `user`
+- **Symptom**: Refreshing during a battle reconnected the socket but showed an empty/initial board.
+- **Root cause**: Server kept no action history; `rejoinSuccess` only carried room/seed.
+- **Fix**: Server keeps an authoritative `actionLog` (every accepted action stamped with `by` + `serverSeq`). `rejoinSuccess` returns decks + log + `lastSeqNum`. BattleScene rebuilds the engine silently (replay before the event bridge is wired) and paints the UI once from state (`BattleStateSync`).
+- **Prevention**: Any client-side simulation must be reconstructible from server data alone.
+- **Files**: `server/game/SessionManager.ts`, `shared/types/NetworkEvents.ts`, `src/scenes/BattleScene.ts`, `src/scenes/battle/BattleStateSync.ts`, `src/network/ActionApplier.ts`
+
+### BUG-063: Offline actions silently discarded on reconnect
+- **Date**: 2026-11-03
+- **Category**: `network`
+- **Discovered by**: `claude`
+- **Symptom**: Actions made while the socket was down vanished after reconnect; the opponent never saw them.
+- **Root cause**: SocketManager cleared `actionBuffer` and reset `seqCounter` to 0 on reconnect; server also reset `lastSeqNum` on rejoin.
+- **Fix**: Nothing is reset. Server returns its `lastSeqNum`; client continues numbering from it and flushes buffered actions with `seqNum > lastSeqNum` (older ones are deduped). Missed opponent actions are applied first via `catchUpFromLog` (serverSeq-based, duplicate-safe).
+- **Prevention**: Never clear a retry buffer without asking the other side what it already has.
+- **Files**: `src/network/SocketManager.ts`, `src/scenes/battle/NetworkCoordinator.ts`, `server/game/SessionManager.ts`
+
+### BUG-064: Players with different decks desync from turn 1
+- **Date**: 2026-11-03
+- **Category**: `network`
+- **Discovered by**: `claude`
+- **Symptom**: (Latent) Both clients' engines diverged whenever the two players used different decks.
+- **Root cause**: `GameEngine.startGame()` loaded the LOCAL `DeckLoader.get()` deck for both P1 and P2.
+- **Fix**: Server sends `[P1 deck, P2 deck]` in `both_battle_ready` (defaults filled for non-submitters); `startGame(decks)` loads each player's own deck.
+- **Prevention**: Every input to a deterministic simulation (seed, decks, actions) must come from one authority.
+- **Files**: `src/game/GameEngine.ts`, `src/scenes/BattleScene.ts`, `server/game/SessionManager.ts`, `src/network/SocketManager.ts`
+
+### BUG-065: Rejoin overwrote real socket callbacks with stubs
+- **Date**: 2026-11-03
+- **Category**: `network`
+- **Discovered by**: `claude`
+- **Symptom**: After a guest refresh, opponent actions were received but ignored.
+- **Root cause**: BattleScene called `setupSocketCallbacks()` and then `connectForRejoin(stubs)`, which replaced the real callbacks.
+- **Fix**: Rejoin is awaited first; real callbacks are installed after.
+- **Prevention**: A function that takes a callbacks object should not silently replace the global set — or call order must be explicit.
+- **Files**: `src/scenes/BattleScene.ts`
+
+### BUG-066: Logged-in players could not rejoin after refresh
+- **Date**: 2026-11-03
+- **Category**: `state`
+- **Discovered by**: `claude`
+- **Symptom**: Refreshing as a logged-in user went to HubScene and the match was lost (forfeit after grace period).
+- **Root cause**: LoginScene checked `isLoggedIn()` → HubScene before the battle-session check, which was also guest-only.
+- **Fix**: Battle-session check runs first for guests and logged-in players.
+- **Prevention**: Order early-return guards from most to least specific.
+- **Files**: `src/scenes/LoginScene.ts`
+
+### BUG-067: Repeated player_ready could start a battle with one player
+- **Date**: 2026-11-03
+- **Category**: `race-condition`
+- **Discovered by**: `claude`
+- **Symptom**: (Latent) A client re-sending player_ready (e.g. rejoin before battle start) incremented the counter twice.
+- **Root cause**: `battleReadyCount += 1` without per-player dedupe.
+- **Fix**: Ready state tracked per player index (`readyPlayers` set); count = set size.
+- **Prevention**: Count unique participants, not messages.
+- **Files**: `server/game/SessionManager.ts`, `shared/types/NetworkEvents.ts`
+
+### BUG-068: Server crashed at startup without FUJI_PRIVATE_KEY
+- **Date**: 2026-11-03
+- **Category**: `web3`
+- **Discovered by**: `claude`
+- **Symptom**: `npm run server` threw `invalid private key` — free-play impossible without a wallet key.
+- **Root cause**: PayoutService/PuzzlePayoutService constructed an ethers Wallet unconditionally.
+- **Fix**: Key validated at boot; if missing, disabled payout stand-ins return `{ success: false }` and the server runs.
+- **Prevention**: Optional integrations must degrade, not crash the process.
+- **Files**: `server/app.ts`, `server/game/DisabledPayout.ts`
+
+### BUG-069: Opponent hand count label stacked on every refresh
+- **Date**: 2026-11-03
+- **Category**: `rendering`
+- **Discovered by**: `claude`
+- **Symptom**: Text above the opponent's hand became an unreadable smear (e.g. '4 cards' + '5 cards' drawn on top of each other). Found via Playwright screenshot.
+- **Root cause**: `rebuildOpponent()` created a new Text object each call and never destroyed the old one.
+- **Fix**: One persistent label updated with `setText()`.
+- **Prevention**: Rebuild functions must destroy or reuse everything they create.
+- **Files**: `src/renderers/HandRenderer.ts`, `tests/renderers/handRenderer.test.ts`
+
 ---
 
 ## Weakness Analysis
@@ -638,6 +738,8 @@ Used to identify weak areas and improve code quality over time.
 4. **Deep vs shallow** — Copy and freeze operations must be recursive (2 bugs).
 5. **State before animation** — Update the view model synchronously; tweens animate detached visuals only and never own state timing (BUG-057).
 6. **Declared-but-unwired** — Every enum variant (e.g. `TimedEffectType`) needs a producer, consumer and expiry path (BUG-056).
+7. **Single authority for simulation inputs** — seed, decks and the ordered action log all come from the server; a client must be able to rebuild the match from server data alone (BUG-062, BUG-064).
+8. **Never drop, always reconcile** — on reconnect ask the server what it has (`lastSeqNum`, `serverSeq`) instead of clearing buffers (BUG-063).
 
 ### User-Found vs Claude-Found
 - **User found 12 bugs** (34%) — gameplay-visible issues (freezes, wrong movement, UI blocking, route/scene bugs).

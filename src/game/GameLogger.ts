@@ -392,7 +392,9 @@ function describeEvent(e: GameEvent): string {
       return `Interaction resolved${e.cancelled ? ' (cancelled)' : ''}`;
 
     case 'GAME_OVER':
-      return `GAME OVER — ${playerLabel(e.result.winner)} wins (${e.result.reason}, ${e.result.turns} turns)`;
+      return e.result.isDraw || e.result.winner === null
+        ? `GAME OVER — DRAW (${e.result.reason}, ${e.result.turns} turns)`
+        : `GAME OVER — ${playerLabel(e.result.winner)} wins (${e.result.reason}, ${e.result.turns} turns)`;
 
     default:
       return e.type;

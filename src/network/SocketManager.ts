@@ -11,7 +11,7 @@
 import { io, Socket } from "socket.io-client";
 import GameState, { RoomAction } from "../GameState.ts";
 import { AuthManager } from "../auth/AuthManager.ts";
-import type { GameAction, PayoutResult } from "../../shared/types/NetworkEvents.js";
+import type { GameAction, PayoutResult, RejoinPayload } from "../../shared/types/NetworkEvents.js";
 
 // Re-export so existing importers don't break
 export type { GameAction };
@@ -29,6 +29,9 @@ export interface RoomCallbacks {
   onConnectionLost?: () => void;
   onReconnected?: () => void;
   onReconnectFailed?: () => void;
+  /** Server confirmed the rejoin and sent the authoritative action log. Fires BEFORE
+   *  buffered offline actions are flushed, so missed opponent actions apply first. */
+  onRejoinSuccess?: (data: RejoinPayload) => void;
   onError: (message: string) => void;
   onBothCryptoReady?: () => void;
   onBothBattleReady?: () => void;
@@ -79,8 +82,8 @@ class SocketManagerClass {
         this.actOnRoomAction();
       } else {
         console.log("[SocketManager] Reconnected! Rejoining room...");
-        this.seqCounter = 0;
-        this.actionBuffer = [];
+        // Keep seqCounter + actionBuffer: rejoinSuccess tells us what the server already
+        // has, and anything newer in the buffer is flushed (offline actions are NOT lost).
         this.socket?.emit("rejoin_room", {
           roomCode: GameState.roomCode,
           playerName: GameState.playerName,
@@ -112,7 +115,6 @@ class SocketManagerClass {
     this.socket!.on("connect", () => {
       console.log("[SocketManager] Connected for rejoin.");
       this.hasConnectedOnce = true;
-      this.seqCounter = 0;
       this.socket?.emit("rejoin_room", {
         roomCode: GameState.roomCode,
         playerName: GameState.playerName,
@@ -255,6 +257,16 @@ class SocketManagerClass {
     });
   }
 
+  /** Both Kings fell in the same exchange — claim a draw (winnerIndex = -1). */
+  sendGameDraw(totalTurns?: number): void {
+    console.log(`[SocketManager] Sending game_over (DRAW), turns: ${totalTurns ?? 0}`);
+    this.socket?.emit('game_over', {
+      roomCode: GameState.roomCode,
+      winnerIndex: -1,
+      totalTurns: totalTurns ?? 0,
+    });
+  }
+
   registerPlayer(token: string): void {
     this.socket?.emit('registerPlayer', { token });
   }
@@ -278,9 +290,40 @@ class SocketManagerClass {
     return this.socket;
   }
 
-  /** One-shot listener for both_battle_ready (used by BattleScene). */
-  onBothBattleReady(cb: () => void): void {
-    this.socket?.once('both_battle_ready', cb);
+  /** One-shot listener for both_battle_ready (used by BattleScene). Receives [P1, P2] decks. */
+  onBothBattleReady(cb: (decks: [string[], string[]] | null) => void): void {
+    this.socket?.once('both_battle_ready', (data) => cb(data?.decks ?? null));
+  }
+
+  /** Resolves with the next rejoinSuccess payload (or null on timeout / error). */
+  waitForRejoin(timeoutMs = 10_000): Promise<RejoinPayload | null> {
+    return new Promise((resolve) => {
+      const s = this.socket;
+      if (!s) { resolve(null); return; }
+      const done = (v: RejoinPayload | null) => {
+        clearTimeout(timer);
+        s.off('rejoinSuccess', onOk);
+        s.off('error', onErr);
+        resolve(v);
+      };
+      const onOk = (d: RejoinPayload) => done(d);
+      const onErr = () => done(null);
+      const timer = setTimeout(() => done(null), timeoutMs);
+      s.once('rejoinSuccess', onOk);
+      s.once('error', onErr);
+    });
+  }
+
+  /** Send buffered offline actions the server hasn't seen yet (seqNum > serverLastSeq). */
+  private flushActionBuffer(serverLastSeq: number): void {
+    const pending = this.actionBuffer.filter(a => (a.seqNum ?? 0) > serverLastSeq);
+    const dropped = this.actionBuffer.length - pending.length;
+    this.actionBuffer = [];
+    if (dropped > 0) console.log(`[SocketManager] ${dropped} buffered action(s) already on server — skipped`);
+    for (const action of pending) {
+      console.log(`[SocketManager] Flushing buffered ${action.type} (seq=${action.seqNum})`);
+      this.socket?.emit('game_action', { roomCode: GameState.roomCode, action });
+    }
   }
 
   disconnect(): void {
@@ -347,6 +390,10 @@ class SocketManagerClass {
       GameState.setRoomCode(data.roomCode);
       GameState.setPlayerIndex(data.playerIndex);
       if (data.gameSeed) GameState.setGameSeed(data.gameSeed);
+      // Continue numbering from what the server accepted (a refreshed page starts at 0).
+      this.seqCounter = Math.max(this.seqCounter, data.lastSeqNum ?? 0);
+      this.callbacks?.onRejoinSuccess?.(data);
+      this.flushActionBuffer(data.lastSeqNum ?? 0);
     });
 
     s.on("error", (data) => {

@@ -260,6 +260,6 @@ describe('Room flow — create, join, battle ready', () => {
 
     const countdown = await countdownP;
     expect(countdown.remaining).toBeGreaterThan(0);
-    expect(countdown.remaining).toBeLessThanOrEqual(10);
+    expect(countdown.remaining).toBeLessThanOrEqual(SessionManager.GRACE_PERIOD_MS / 1000);
   });
 });

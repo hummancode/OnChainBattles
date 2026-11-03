@@ -15,6 +15,7 @@ import type { ClientToServerEvents, ServerToClientEvents } from '../shared/types
 import { RoomManager } from './rooms/RoomManager.js';
 import { PayoutService } from './game/PayoutService.js';
 import { PuzzlePayoutService } from './game/PuzzlePayoutService.js';
+import { createDisabledPayout, createDisabledPuzzlePayout, isValidPrivateKey } from './game/DisabledPayout.js';
 import { SessionManager } from './game/SessionManager.js';
 import { getDB, closeDB } from './db/database.js';
 import { runMigrations } from './db/migrations.js';
@@ -88,8 +89,13 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 const roomManager = new RoomManager();
-const payout = new PayoutService(process.env.FUJI_PRIVATE_KEY!);
-const puzzlePayout = new PuzzlePayoutService(process.env.FUJI_PRIVATE_KEY!);
+const ownerKey = process.env.FUJI_PRIVATE_KEY;
+const payoutsEnabled = isValidPrivateKey(ownerKey);
+if (!payoutsEnabled) {
+  console.warn('[Server] FUJI_PRIVATE_KEY missing/invalid — on-chain payouts DISABLED (free-play still works)');
+}
+const payout = payoutsEnabled ? new PayoutService(ownerKey) : createDisabledPayout();
+const puzzlePayout = payoutsEnabled ? new PuzzlePayoutService(ownerKey) : createDisabledPuzzlePayout();
 app.locals.puzzlePayout = puzzlePayout;
 const session = new SessionManager(io, roomManager, payout);
 const lobby = new LobbyManager(io, roomManager);

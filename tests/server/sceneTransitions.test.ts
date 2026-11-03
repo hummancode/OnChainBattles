@@ -238,6 +238,7 @@ describe('lobby:request_state server handler', () => {
       cryptoReadyCount: 0,
       battleReadyCount: 0,
       actionQueue: [],
+      actionLog: [],
       settled: false,
       currentTurnPlayer: 0,
       currentPhase: 'PLAY',

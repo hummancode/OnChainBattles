@@ -23,7 +23,10 @@ import GameState from '../GameState';
 import SocketManager from '../network/SocketManager';
 
 import { wireEngineToEventBus, getActiveProfiler } from './battle/EngineEventBridge';
-import { setupSocketCallbacks } from './battle/NetworkCoordinator';
+import { setupSocketCallbacks, resetNetworkSyncState } from './battle/NetworkCoordinator';
+import { syncUIFromEngine, resumePendingAfterRejoin } from './battle/BattleStateSync';
+import { replayLog } from '../network/ActionApplier';
+import type { RejoinPayload } from '../../shared/types/NetworkEvents';
 import { setupHUDRefresh } from './battle/HUDRefreshCoordinator';
 import { createSelectionManager } from './battle/InputCoordinator';
 import { setupGameOverHandler } from './battle/GameOverHandler';
@@ -71,6 +74,26 @@ export default class BattleScene extends Phaser.Scene {
       this.add.rectangle(640, 360, 1280, 720, 0x1a1a2e);
     }
 
+    // ─── Page-refresh rejoin: get the authoritative match state FIRST ──
+    // The engine is rebuilt from server decks + action log before any renderer or
+    // event bridge exists, so the replay is silent and the UI is painted once from state.
+    const isRejoin = !SocketManager.isConnected() && !!GameState.roomCode && GameState.hasBattleSession();
+    let rejoin: RejoinPayload | null = null;
+    if (isRejoin) {
+      const reconnectText = this.add.text(640, 360, 'Reconnecting to match...', { fontSize: '24px', color: '#FFAA00' }).setOrigin(0.5);
+      SocketManager.connectForRejoin({
+        onRoomCreated: () => {}, onRoomJoined: () => {}, onOpponentJoined: () => {},
+        onOpponentAction: () => {}, onOpponentDisconnected: () => {},
+        onError: (msg) => console.error('[BattleScene] Rejoin error:', msg),
+      });
+      rejoin = await SocketManager.waitForRejoin();
+      reconnectText.destroy();
+      if (!rejoin) {
+        this.abandonRejoin();
+        return;
+      }
+    }
+
     const playerName   = this.sceneData?.playerName   ?? GameState.playerName   ?? 'You';
     const opponentName = this.sceneData?.opponentName  ?? GameState.opponentName ?? 'Opponent';
     const localPlayerIndex = GameState.playerIndex ?? 0;
@@ -80,6 +103,17 @@ export default class BattleScene extends Phaser.Scene {
 
     // ─── Engine + event bridge ────────────────────
     this.engine = new GameEngine();
+    resetNetworkSyncState(0);
+    if (rejoin?.battleStarted && rejoin.decks) {
+      this.engine.startGame(rejoin.decks);
+      const applied = replayLog(this.engine, rejoin.actionLog);
+      const lastSeq = rejoin.actionLog.reduce((m, a) => Math.max(m, a.serverSeq ?? 0), 0);
+      resetNetworkSyncState(lastSeq);
+      console.log(`[BattleScene] Rejoin: replayed ${applied}/${rejoin.actionLog.length} actions`);
+      if (applied !== rejoin.actionLog.length) {
+        console.error('[BattleScene] Rejoin replay diverged — state may be out of sync');
+      }
+    }
     this.bridgeUnsub = wireEngineToEventBus(this.engine, localPlayerIndex);
 
     // ─── Game logger (with render profiler) ────────
@@ -163,8 +197,8 @@ export default class BattleScene extends Phaser.Scene {
     });
 
     // ─── Start game after both players are ready ──
-    const startEngine = () => {
-      this.engine.startGame();
+    const startEngine = (decks?: [string[], string[]] | null) => {
+      this.engine.startGame(decks ?? undefined);
       const v = this.engine.getState();
       console.log('[BattleScene] Game started —',
         `P1 hand: ${v.players[0]?.hand?.length ?? '?'}`,
@@ -180,31 +214,36 @@ export default class BattleScene extends Phaser.Scene {
       }
     };
 
-    // ─── Reconnection flow (guest page refresh) ────
-    const isRejoin = !SocketManager.isConnected() && GameState.roomCode && GameState.hasBattleSession();
-
-    if (isRejoin) {
-      console.log('[BattleScene] Guest rejoin: connecting socket for room', GameState.roomCode);
-      // connectForRejoin emits rejoin_room; setupSocketCallbacks (above) sets real handlers
-      SocketManager.connectForRejoin({
-        onRoomCreated: () => {},
-        onRoomJoined: () => {},
-        onOpponentJoined: () => {},
-        onOpponentAction: () => {},
-        onOpponentDisconnected: () => {},
-        onError: (msg) => console.error('[BattleScene] Rejoin error:', msg),
-      });
-      // Start engine after rejoin + both ready
-      SocketManager.onBothBattleReady(() => startEngine());
-      SocketManager.signalBattleReady();
+    // ─── Start / resume ────────────────────────────
+    if (rejoin?.battleStarted) {
+      // Engine already rebuilt above — paint it and resume.
+      syncUIFromEngine(this.engine, localPlayerIndex, this.handRenderer);
+      resumePendingAfterRejoin(this.engine, localPlayerIndex);
+      this.showToast('Reconnected — match restored', '#00FF88');
     } else if (SocketManager.isConnected()) {
-      // Multiplayer: wait for both players to be ready
-      SocketManager.onBothBattleReady(() => startEngine());
+      // Multiplayer (fresh or rejoined before battle start): wait for both players.
+      // Decks come from the server so both engines are built identically.
+      SocketManager.onBothBattleReady((decks) => startEngine(decks));
       SocketManager.signalBattleReady();
     } else {
       // Single-player / local testing: start immediately
       startEngine();
     }
+  }
+
+  /** Rejoin failed (room expired / not found): drop the stale session and go home. */
+  private abandonRejoin(): void {
+    GameState.clearBattleSession();
+    SocketManager.disconnect();
+    this.add.text(640, 340, 'Match is no longer available', { fontSize: '26px', color: '#FF6666' }).setOrigin(0.5);
+    this.add.text(640, 380, 'Returning to menu...', { fontSize: '18px', color: '#AAAAAA' }).setOrigin(0.5);
+    this.time.delayedCall(2500, () => this.scene.start('HubScene'));
+  }
+
+  private showToast(message: string, color: string): void {
+    const t = this.add.text(640, 30, message, { fontSize: '16px', color, backgroundColor: '#000000CC', padding: { x: 12, y: 6 } })
+      .setOrigin(0.5).setDepth(999);
+    this.time.delayedCall(2500, () => t.destroy());
   }
 
   shutdown() {

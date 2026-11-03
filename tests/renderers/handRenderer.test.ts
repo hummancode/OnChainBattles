@@ -32,6 +32,7 @@ vi.mock('../../src/renderers/CardRenderer', () => ({
   CardRenderer: class {
     render(data: { id: string }) { return new FakeContainer(data.id); }
     updateState() {}
+    renderBack() { return new FakeContainer('back'); }
   },
 }));
 vi.mock('../../src/utils/PhaserUtils', () => ({ setContainerHitArea: () => {} }));
@@ -41,18 +42,23 @@ import { EventBus, EV } from '../../src/events/EventBus';
 
 function makeScene() {
   const pendingTweens: Array<{ onComplete?: () => void }> = [];
-  return {
+  const scene = {
     pendingTweens,
+    texts: [] as FakeContainer[],
     add: {
       container: () => new FakeContainer(),
-      text: () => new FakeContainer(),
+      text(_x: number, _y: number, str: string) { const t: any = new FakeContainer(str); t.setText = (v: string) => { t.cardId = v; return t; }; (this as any).owner.texts.push(t); return t; },
+      owner: null as any,
     },
     tweens: { add: (cfg: any) => { pendingTweens.push(cfg); return cfg; } },
   };
+  scene.add.owner = scene;
+  return scene;
 }
 
 const layout: any = {
   leftHUD: { hand: { x: 0, y: 0, maxVisible: 10, cardHeight: 100, selectedScale: 1.1, spacing: 20, fanAngle: 0 } },
+  rightHUD: { hand: { x: 0, y: 0, maxVisible: 5, cardHeight: 100, cardWidth: 70, spacing: 5 } },
   cards: { full: { width: 80, height: 100 } },
 };
 const theme: any = { fonts: { small: { family: 'x', size: 10 } }, colors: { TEXT_SECONDARY: '#fff' } };
@@ -97,5 +103,18 @@ describe('HandRenderer — index integrity during removal tweens', () => {
     hand.removeCard(0);
     cA.emit('pointerdown');
     expect(clicks).toEqual([]);
+  });
+});
+
+describe('HandRenderer — opponent hand count label', () => {
+  it('updates a single label instead of stacking a new one per refresh', () => {
+    const scene = makeScene();
+    const hand = new HandRenderer(scene as any, layout, theme);
+    hand.setOpponentHandCount(4);
+    hand.setOpponentHandCount(5);
+    hand.setOpponentHandCount(5);
+    const live = scene.texts.filter(t => !t.destroyed && /cards$/.test(t.cardId));
+    expect(live.map(t => t.cardId)).toEqual(['5 cards']);
+    hand.destroy();
   });
 });

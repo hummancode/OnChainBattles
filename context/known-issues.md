@@ -4,15 +4,18 @@
 
 ### Game Logic
 - Pre-existing 16 unused variable TS warnings (baseline, don't fix — see CLAUDE.md)
-- Mutual king death: attacker always wins (may be intentional design — dying blow counter)
 
 ### Network / Reconnection
 - `selectColumn` not networked yet (no cards use COLUMN pending in current card pool)
-- **Page refresh loses game state** — engine state not persisted to localStorage, no action replay on reconnect
-- **Offline actions silently discarded** — SocketManager clears action buffer on reconnect
-- **No state sync on rejoin** — server sends `rejoinSuccess` but no board state or missed actions
+- Server action log is in-memory only — a server restart still loses live matches (persist to SQLite: see ROADMAP Phase 3)
+- Refresh during an optional pending interaction (Priest/Scout target etc.) cancels it on both clients; the card cost is not refunded
 
-### UI
+### UI (found in Playwright QA, 3 Nov 2026 — see ROADMAP Phase 2)
+- Hand cards overlap heavily; card stat/ability text renders outside card bounds on the left HUD
+- Turn/phase label and END TURN button overlap the board's right edge
+- HP bars show no numbers; both guest players are named "Guest"
+- Opponent hand: 5th card back runs off the bottom of the screen
+- Join-by-code dialog: Enter key does not submit
 - IGameEngineAPI.getValidDeployPositions interface takes unused `cardIndex` param
 
 ### Security (Dev-Only)
@@ -27,6 +30,14 @@
 - **Principle**: Every stat modification must be traceable to its source. No silent deltas.
 
 ---
+
+## Fixed (3 November 2026 — multiplayer reliability, BUG-060…069)
+- **State recovery on refresh/reconnect** — server action log + decks in `rejoinSuccess`; engine rebuilt silently and UI painted from state.
+- **Offline actions** — buffer flushed after rejoin using server `lastSeqNum`; missed opponent actions caught up by `serverSeq`.
+- **Per-player decks** — server sends both decks; engines no longer desync when players use different decks.
+- **Mutual King death = draw** — `isDraw` result, `winnerIndex: -1` claim, crypto refund.
+- **War Horn discard** — was a soft-lock; now networked, mandatory, with on-screen prompt.
+- **Logged-in rejoin**, **player_ready dedupe**, **server boots without wallet key**, **opponent count label smear**.
 
 ## Fixed (3 November 2026)
 - **War Horn +1 movement (BUG-056)** — new `WAR_HORN_SOUNDED` event → 1-turn `WAR_HORN_MOVEMENT` timed effect → AuraSystem move delta. Note: only affects distance-based movers (OMNI_n, VERTICAL_2); fixed-pattern movers (custom patterns, jump, forward-1) ignore `currentMovement`.

@@ -241,6 +241,7 @@ Game changes are tracked in `context/dist/patch_notes.json` (unreleased + releas
 
 Read these for deeper context when needed:
 - `context/bug-registry.md` — structured bug history with root causes and prevention patterns
+- `context/ROADMAP.md` — phased plan (what is done, what is next)
 - `context/known-issues.md` — open issues + recent fix summaries
 - `context/network-protocol.md` — full socket event flow, game action types, connection handshake
 - `context/OCB_CODING_PRINCIPLES.md` — architectural principles and coding guidelines

@@ -8,6 +8,7 @@ import type { GameAction } from '../../network/SocketManager';
 import SocketManager from '../../network/SocketManager';
 import GameState from '../../GameState';
 import { boardHashFromCells } from '../../game/utils/boardHash';
+import { applyAction } from '../../network/ActionApplier';
 
 export interface NetworkCoordinatorDeps {
   engine: GameEngine;
@@ -17,49 +18,41 @@ export interface NetworkCoordinatorDeps {
   localPlayerIndex: number;
 }
 
-function getBoardUnit(engine: GameEngine, col: number, row: number) {
-  const cell = engine.getState().board.find((c) => c.col === col && c.row === row);
-  return cell?.unit ?? null;
+/**
+ * Highest serverSeq of an action already applied to the local engine.
+ * Used after a socket drop to apply only the opponent actions we missed.
+ */
+let lastAppliedServerSeq = 0;
+
+export function resetNetworkSyncState(serverSeq = 0): void {
+  lastAppliedServerSeq = serverSeq;
+}
+
+/**
+ * Socket reconnected (page NOT refreshed): the local engine is intact but may have missed
+ * opponent actions relayed while we were offline. Apply exactly those, in server order.
+ * Our own actions are never re-applied — they're already in the local engine.
+ */
+export function catchUpFromLog(deps: NetworkCoordinatorDeps, log: readonly GameAction[]): number {
+  const missed = log.filter(a =>
+    a.by !== deps.localPlayerIndex && (a.serverSeq ?? 0) > lastAppliedServerSeq);
+  for (const action of missed) replayOpponentAction(deps, action);
+  if (missed.length) console.log(`[NetworkCoordinator] Caught up on ${missed.length} missed opponent action(s)`);
+  return missed.length;
 }
 
 export function replayOpponentAction(deps: NetworkCoordinatorDeps, action: GameAction): void {
   const { engine } = deps;
+  if (action.serverSeq != null) {
+    if (action.serverSeq <= lastAppliedServerSeq) return; // duplicate delivery
+    lastAppliedServerSeq = action.serverSeq;
+  }
   console.log('[NetworkCoordinator] Replaying opponent action:', action.type);
-  switch (action.type) {
-    case 'PLAY_CARD':
-      engine.playCard(action.handIndex!, action.col, action.row); break;
-    case 'MOVE_UNIT': {
-      const unit = getBoardUnit(engine, action.fromCol!, action.fromRow!);
-      if (unit) engine.moveUnit(unit.instanceId, action.col!, action.row!);
-      else console.warn('[NetworkCoordinator] MOVE_UNIT replay: no unit at', action.fromCol, action.fromRow);
-      break;
-    }
-    case 'ATTACK_UNIT': {
-      const attacker = getBoardUnit(engine, action.fromCol!, action.fromRow!);
-      const target   = getBoardUnit(engine, action.targetCol!, action.targetRow!);
-      if (attacker && target) engine.attackUnit(attacker.instanceId, target.instanceId);
-      else console.warn('[NetworkCoordinator] ATTACK_UNIT replay: unit not found');
-      break;
-    }
-    case 'SELECT_POSITION':
-      engine.selectPosition(action.col!, action.row!); break;
-    case 'SELECT_TARGET': {
-      const tgt = getBoardUnit(engine, action.col!, action.row!);
-      if (tgt) engine.selectTarget(tgt.instanceId);
-      else console.warn('[NetworkCoordinator] SELECT_TARGET replay: no unit at', action.col, action.row);
-      break;
-    }
-    case 'CANCEL_PENDING':
-      engine.cancelPending(); break;
-    case 'END_PLAY_PHASE':
-      engine.endPlayPhase();
-      SocketManager.sendStateHash(boardHashFromCells(engine.getState().board), engine.getState().turn?.turnNumber ?? 0);
-      break;
-    case 'END_ACT_PHASE':
-      engine.endActPhase();
-      SocketManager.sendStateHash(boardHashFromCells(engine.getState().board), engine.getState().turn?.turnNumber ?? 0);
-      break;
-    default: console.warn('[NetworkCoordinator] Unknown opponent action:', (action as any).type);
+  if (!applyAction(engine, action)) {
+    console.warn('[NetworkCoordinator] Could not apply opponent action', action);
+  }
+  if (action.type === 'END_PLAY_PHASE' || action.type === 'END_ACT_PHASE') {
+    SocketManager.sendStateHash(boardHashFromCells(engine.getState().board), engine.getState().turn?.turnNumber ?? 0);
   }
 }
 
@@ -75,7 +68,7 @@ export function handleOpponentDisconnect(deps: NetworkCoordinatorDeps): void {
 
   // Show a non-blocking "waiting" banner with countdown (opponent may reconnect)
   const bg = scene.add.rectangle(640, 30, 500, 50, 0x000000, 0.85).setDepth(999);
-  const txt = scene.add.text(640, 30, 'Opponent disconnected — reconnect: 10s', {
+  const txt = scene.add.text(640, 30, 'Opponent disconnected — waiting for reconnect…', {
     fontSize: '16px', color: '#FF6666', align: 'center',
   }).setOrigin(0.5).setDepth(999);
   disconnectOverlay = [bg, txt];
@@ -144,6 +137,10 @@ export function setupSocketCallbacks(deps: NetworkCoordinatorDeps): void {
     onConnectionLost: () => showConnectionOverlay(deps.scene, true),
     onReconnected: () => showConnectionOverlay(deps.scene, false),
     onReconnectFailed: () => handleFinalDisconnect(deps),
+    onRejoinSuccess: (data) => {
+      // Live reconnect only — a refreshed page rebuilds its engine in BattleScene before this.
+      if (data.battleStarted) catchUpFromLog(deps, data.actionLog);
+    },
     onError: (msg) => console.error('[NetworkCoordinator] Socket error:', msg),
     onPayoutResult: () => {},
   });

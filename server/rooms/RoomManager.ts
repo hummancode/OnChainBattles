@@ -36,6 +36,7 @@ export class RoomManager {
       cryptoReadyCount: 0,
       battleReadyCount: 0,
       actionQueue: [],
+      actionLog: [],
       settled: false,
       currentTurnPlayer: 0,
       currentPhase: 'PLAY',

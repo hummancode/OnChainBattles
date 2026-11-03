@@ -8,13 +8,16 @@
 | ATTACK_UNIT | InputCoordinator | fromCol, fromRow, targetCol, targetRow | engine.attackUnit() |
 | SELECT_POSITION | InputCoordinator | col, row | engine.selectPosition() |
 | SELECT_TARGET | InputCoordinator | col, row | engine.selectTarget() |
+| SELECT_DISCARD | InputCoordinator | handIndex | engine.selectDiscard() (mandatory — CANCEL_PENDING ignored) |
 | CANCEL_PENDING | InputCoordinator | (none) | engine.cancelPending() |
+
+All actions are applied through `src/network/ActionApplier.ts` (`applyAction` / `replayLog`) — live relay, refresh replay and reconnect catch-up share one code path.
+The server stamps each accepted action with `serverSeq` (global order) and `by` (sender index) and appends it to `room.actionLog`.
 | END_PLAY_PHASE | BattleScene | (none) | engine.endPlayPhase() |
 | END_ACT_PHASE | BattleScene | (none) | engine.endActPhase() |
 
 ## Not yet networked
 - selectColumn (no cards use COLUMN pending in current card pool)
-- selectDiscard (War Horn uses DISCARD pending, but not yet networked — works in local play only)
 
 ## Connection Flow (Legacy: MainMenuScene → RoomScene)
 ```
@@ -48,17 +51,30 @@ Server:      both_battle_ready → flush queue
 BattleScene: create() → engine.startGame()
 ```
 
+## Battle Start
+```
+both clients → player_ready (deduped per player)
+server       → both_battle_ready { decks: [P1 deck, P2 deck] }   (defaults filled for non-submitters)
+clients      → engine.startGame(decks)   — never their own local deck for the opponent
+```
+
 ## Disconnect / Reconnect Flow
 ```
-Player disconnects → server starts 10s grace period
-  → opponent receives: opponentDisconnected
-  → countdown: disconnectCountdown (every 1s)
+Player disconnects → server starts 30s grace period
+  → opponent receives: opponentDisconnected + disconnectCountdown (every 1s)
 
-If player rejoins within 10s:
-  → rejoin_room { roomCode, playerName }
-  → server: reassignSocket, cancel grace timer
-  → rejoinSuccess + opponentReconnected
-  → ⚠ NO state sync — reconnected player has stale/empty engine
+A) Socket drop, page still open (SocketManager auto-reconnect)
+  → rejoin_room
+  → rejoinSuccess { decks, actionLog, lastSeqNum, battleStarted, ... }
+  → NetworkCoordinator.catchUpFromLog: apply opponent actions with serverSeq > last applied
+  → SocketManager flushes buffered offline actions with seqNum > lastSeqNum
+
+B) Page refresh (LoginScene → BattleScene with stored battle session)
+  → connectForRejoin → await rejoinSuccess
+  → new GameEngine; startGame(decks); replayLog(actionLog)   ← BEFORE event bridge/renderers
+  → wire renderers → BattleStateSync.syncUIFromEngine (board, hand, HUD)
+  → resumePendingAfterRejoin (re-open mandatory DISCARD; cancel optional pendings via network)
+  → seqCounter continues from lastSeqNum
 
 If grace period expires:
   → opponentAbandon → remaining player wins
@@ -67,13 +83,15 @@ If grace period expires:
 ```
 
 ## Server-Side Room State
-- `battleReadyCount`: 0→1→2 (both_battle_ready emitted at 2)
+- `readyPlayers` / `battleReadyCount`: unique ready players (both_battle_ready emitted once, at 2)
+- `actionLog`: every accepted action in server order (`by`, `serverSeq`) — sent on rejoin
 - `actionQueue`: game_actions received before both ready (flushed on ready)
 - `cryptoReadyCount`: for crypto mode deposit flow
 - `settled`: prevents double payout
 - `gameOverClaims[]`: dual-claim consensus for game result
-- `lastSeqNum[]`: per-player action sequence counter (replay protection)
-- `graceTimer`: disconnect grace period handle (10s)
+- `lastSeqNum[]`: per-player action sequence counter (replay protection; NOT reset on rejoin)
+- `graceTimer`: disconnect grace period handle (30s)
+- `game_over.winnerIndex`: 0 | 1, or -1 for a draw (refundTie in crypto mode)
 
-## Known Gap: No State Recovery
-Server does not send game state to reconnecting clients. Engine state (board, units, hand, modifiers) is lost on page refresh. See `context/known-issues.md` for details.
+## Known Gap
+The action log lives in server memory — a server restart loses in-progress matches.

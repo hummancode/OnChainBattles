@@ -37,6 +37,8 @@ export interface TargetSelectConfig {
   cards?: CardRenderData[];                         // cards to show (for discard)
   mode: 'board' | 'hand' | 'graveyard';
   cursorIcon?: CursorIcon;                          // icon that follows the cursor
+  /** false = mandatory choice (no Cancel button / ESC). Default true. */
+  cancellable?: boolean;
 }
 
 export interface GameOverConfig {
@@ -125,29 +127,31 @@ export class OverlayRenderer {
     }).setOrigin(0.5, 0.5);
     container.add(promptText);
 
-    // Cancel button to the right of the banner
-    const cancelBtn = createButton(this.scene, {
-      x: bannerX + bannerW / 2 + 50,
-      y: bannerY + bannerH / 2,
-      w: 70, h: 28,
-      label: 'CANCEL',
-      style: this.theme.buttons.secondary,
-      fontFamily: this.theme.fonts.body.family,
-      onClick: () => {
+    if (config.cancellable !== false) {
+      // Cancel button to the right of the banner
+      const cancelBtn = createButton(this.scene, {
+        x: bannerX + bannerW / 2 + 50,
+        y: bannerY + bannerH / 2,
+        w: 70, h: 28,
+        label: 'CANCEL',
+        style: this.theme.buttons.secondary,
+        fontFamily: this.theme.fonts.body.family,
+        onClick: () => {
+          this.close();
+          EventBus.emit(EV.INTERACTION_RESOLVED, { cancelled: true });
+        },
+      });
+      container.add(cancelBtn);
+
+      // ESC key to cancel — tracked for cleanup in close()
+      const escKey = this.scene.input.keyboard?.addKey('ESC');
+      const escHandler = () => {
         this.close();
         EventBus.emit(EV.INTERACTION_RESOLVED, { cancelled: true });
-      },
-    });
-    container.add(cancelBtn);
-
-    // ESC key to cancel — tracked for cleanup in close()
-    const escKey = this.scene.input.keyboard?.addKey('ESC');
-    const escHandler = () => {
-      this.close();
-      EventBus.emit(EV.INTERACTION_RESOLVED, { cancelled: true });
-    };
-    escKey?.once('down', escHandler);
-    this.overlayInputCleanups.push(() => escKey?.off('down', escHandler));
+      };
+      escKey?.once('down', escHandler);
+      this.overlayInputCleanups.push(() => escKey?.off('down', escHandler));
+    }
 
     this.activeOverlay = container;
     this.rootContainer.add(container);
@@ -611,6 +615,14 @@ export class OverlayRenderer {
           };
           this.showPlacementPreview(cardData, ev.reason ?? 'Choose a position');
         }
+      }),
+
+      EventBus.on(EV.PENDING_DISCARD, (ev: any) => {
+        this.showTargetSelect({
+          prompt: `${ev.reason ?? 'Discard a card.'}  Click a card in your hand.`,
+          mode: 'board',
+          cancellable: false,
+        }, () => {});
       }),
 
       EventBus.on(EV.INTERACTION_RESOLVED, () => {

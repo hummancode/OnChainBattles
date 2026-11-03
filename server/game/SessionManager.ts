@@ -13,6 +13,8 @@ import { GameLogWriter } from './GameLogWriter.js';
 import { verifyToken } from '../api/middleware.js';
 import { validateDeck } from '../validation/DeckValidator.js';
 import { recordMatch } from '../api/matchService.js';
+import { UNITS_ONLY_DECK_IDS } from '../../src/game/data/DeckDefinitions.js';
+import type { Room } from '../../shared/types/NetworkEvents.js';
 
 type TypedServer = Server<ClientToServerEvents, ServerToClientEvents>;
 type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -31,10 +33,20 @@ export class SessionManager {
     socket.on('player_ready', ({ roomCode }) => {
       const room = this.rooms.getRoom(roomCode);
       if (!room) return;
-      room.battleReadyCount += 1;
+      const readyIdx = room.players.findIndex(p => p.id === socket.id);
+      if (readyIdx === -1) return;
+      room.readyPlayers ??= new Set();
+      if (room.readyPlayers.has(readyIdx)) {
+        log.debug(`Duplicate player_ready from P${readyIdx + 1} in ${roomCode} — ignored`);
+        return;
+      }
+      room.readyPlayers.add(readyIdx);
+      room.battleReadyCount = room.readyPlayers.size;
       log.info(`player_ready: ${room.battleReadyCount}/2 in room ${roomCode}`);
-      if (room.battleReadyCount >= 2) {
-        this.io.to(roomCode).emit('both_battle_ready');
+      if (room.battleReadyCount === 2) {
+        // Both clients build their engine from THESE decks — never their own local copy —
+        // so the two simulations are identical (and a rejoining client can rebuild it).
+        this.io.to(roomCode).emit('both_battle_ready', { decks: SessionManager.battleDecks(room) });
 
         // Start server-side game log
         if (!room.gameLog) {
@@ -46,6 +58,7 @@ export class SessionManager {
         }
 
         for (const queued of room.actionQueue) {
+          room.actionLog.push({ ...queued });
           socket.to(roomCode).emit('opponent_action', queued);
           log.debug(`Flushed queued action: ${queued.type}`);
         }
@@ -64,6 +77,11 @@ export class SessionManager {
       }
 
       if (room.battleReadyCount < 2) {
+        const qIdx = room.players.findIndex(p => p.id === socket.id);
+        if (qIdx === -1) return;
+        room.globalSeq += 1;
+        action.serverSeq = room.globalSeq;
+        action.by = qIdx;
         room.actionQueue.push(action);
         log.debug(`Queued action (opponent not ready): ${action.type}`);
         return;
@@ -88,8 +106,8 @@ export class SessionManager {
       }
 
       // ── Layer 2: Phase-appropriate action validation ────
-      const playPhaseActions = ['PLAY_CARD', 'END_PLAY_PHASE', 'SELECT_POSITION', 'SELECT_TARGET', 'CANCEL_PENDING'];
-      const actPhaseActions  = ['MOVE_UNIT', 'ATTACK_UNIT', 'END_ACT_PHASE', 'SELECT_POSITION', 'SELECT_TARGET', 'CANCEL_PENDING'];
+      const playPhaseActions = ['PLAY_CARD', 'END_PLAY_PHASE', 'SELECT_POSITION', 'SELECT_TARGET', 'SELECT_DISCARD', 'CANCEL_PENDING'];
+      const actPhaseActions  = ['MOVE_UNIT', 'ATTACK_UNIT', 'END_ACT_PHASE', 'SELECT_POSITION', 'SELECT_TARGET', 'SELECT_DISCARD', 'CANCEL_PENDING'];
 
       if (room.currentPhase === 'PLAY' && !playPhaseActions.includes(action.type)) {
         log.warn(`REJECTED ${action.type} during PLAY phase`);
@@ -103,6 +121,10 @@ export class SessionManager {
       // ── Layer 2: Field validation ───────────────────────
       if (action.type === 'PLAY_CARD' && (action.handIndex == null || action.col == null || action.row == null)) {
         log.warn('REJECTED PLAY_CARD: missing fields');
+        return;
+      }
+      if (action.type === 'SELECT_DISCARD' && action.handIndex == null) {
+        log.warn('REJECTED SELECT_DISCARD: missing handIndex');
         return;
       }
       if (action.type === 'MOVE_UNIT' && (action.fromCol == null || action.fromRow == null || action.col == null || action.row == null)) {
@@ -125,6 +147,8 @@ export class SessionManager {
       room.actionCount += 1;
       room.globalSeq += 1;
       action.serverSeq = room.globalSeq;
+      action.by = playerIndex;
+      room.actionLog.push({ ...action });
 
       // Log action before relay
       room.gameLog?.record(playerIndex, action);
@@ -141,7 +165,8 @@ export class SessionManager {
       const playerIndex = room.players.findIndex(p => p.id === socket.id);
       if (playerIndex === -1) return;
 
-      if (winnerIndex !== 0 && winnerIndex !== 1) {
+      // -1 = draw (both Kings destroyed in the same exchange)
+      if (winnerIndex !== 0 && winnerIndex !== 1 && winnerIndex !== -1) {
         log.warn(`REJECTED game_over: invalid winnerIndex ${winnerIndex}`);
         return;
       }
@@ -173,7 +198,7 @@ export class SessionManager {
         const fc1 = room.gameOverClaims.find(c => c.playerIndex === 1);
         const agreedWinner = (fc0 && fc1 && fc0.claimedWinner === fc1.claimedWinner)
           ? fc0.claimedWinner : winnerIndex;
-        log.info(`Free-play mode game_over in ${roomCode}, winner: P${agreedWinner + 1}`);
+        log.info(`Free-play mode game_over in ${roomCode}, ${agreedWinner === -1 ? 'DRAW' : `winner: P${agreedWinner + 1}`}`);
         try { recordMatch({ roomCode, room, winnerIndex: agreedWinner, totalTurns: totalTurns ?? 0 }); }
         catch (err: unknown) { log.error('Failed to record match:', err); }
         if (room.status) room.status = 'finished';
@@ -188,7 +213,20 @@ export class SessionManager {
 
       room.settled = true;
 
-      if (claim0.claimedWinner === claim1.claimedWinner) {
+      if (claim0.claimedWinner === -1 && claim1.claimedWinner === -1) {
+        // Agreed draw → refund both stakes
+        try { recordMatch({ roomCode, room, winnerIndex: -1, totalTurns: totalTurns ?? 0 }); }
+        catch (err: unknown) { log.error('Failed to record match:', err); }
+        if (room.status) room.status = 'finished';
+        log.info(`Both agree: DRAW in ${roomCode}. Refunding stakes.`);
+        try {
+          const result = await this.payout.refundTie(roomCode);
+          this.io.to(roomCode).emit('payout_result', result);
+        } catch (err) {
+          log.error(`Draw refund failed for ${roomCode}:`, err);
+          this.io.to(roomCode).emit('payout_result', { success: false, error: 'Draw refund failed' });
+        }
+      } else if (claim0.claimedWinner === claim1.claimedWinner) {
         // Record match to database
         try { recordMatch({ roomCode, room, winnerIndex: claim0.claimedWinner, totalTurns: totalTurns ?? 0 }); }
         catch (err: unknown) { log.error('Failed to record match:', err); }
@@ -293,7 +331,16 @@ export class SessionManager {
     });
   }
 
-  private static readonly GRACE_PERIOD_MS = 10_000;
+  /** 30s: long enough for a full page reload (asset preload + login redirect + rejoin). */
+  static readonly GRACE_PERIOD_MS = 30_000;
+
+  /** Decks used for the battle, filling in the default for anyone who didn't submit one. */
+  static battleDecks(room: Room): [string[], string[]] {
+    for (const p of room.players) {
+      if (!p.deckIds) p.deckIds = [...UNITS_ONLY_DECK_IDS];
+    }
+    return [room.players[0]?.deckIds ?? [...UNITS_ONLY_DECK_IDS], room.players[1]?.deckIds ?? [...UNITS_ONLY_DECK_IDS]];
+  }
 
   async handleDisconnect(socket: TypedSocket): Promise<void> {
     const found = this.rooms.findBySocket(socket.id);
@@ -361,8 +408,9 @@ export class SessionManager {
       return;
     }
 
-    // Reset sequence counter for reconnected player
-    room.lastSeqNum[playerIndex] = 0;
+    // NOTE: lastSeqNum is intentionally NOT reset. The client resumes from the value we
+    // send back, so actions it buffered while offline (seq > lastSeqNum) are still accepted
+    // and anything the server already has (seq <= lastSeqNum) is deduplicated.
 
     // Cancel the grace period timer and countdown interval
     const timer = room.disconnectTimers.get(playerIndex);
@@ -378,7 +426,16 @@ export class SessionManager {
     }
 
     socket.join(roomCode);
-    socket.emit('rejoinSuccess', { roomCode, playerIndex, gameSeed: room.gameSeed ?? 0 });
+    const battleStarted = room.battleReadyCount >= 2;
+    socket.emit('rejoinSuccess', {
+      roomCode,
+      playerIndex,
+      gameSeed: room.gameSeed ?? 0,
+      decks: battleStarted ? SessionManager.battleDecks(room) : null,
+      actionLog: room.actionLog.map(a => ({ ...a })),
+      lastSeqNum: room.lastSeqNum[playerIndex],
+      battleStarted,
+    });
     socket.to(roomCode).emit('opponentReconnected');
     log.info(`${playerName} rejoined room: ${roomCode}`);
 

@@ -198,8 +198,10 @@ export interface GameStateSnapshot {
 // ─────────────────────────────────────────────
 
 export interface MatchResult {
-  winner: Player;
-  loser: Player;
+  /** null when isDraw (both Kings fell in the same exchange). */
+  winner: Player | null;
+  loser: Player | null;
+  isDraw?: boolean;
   reason: 'KING_DESTROYED' | 'SURRENDER' | 'TIMEOUT' | 'DISCONNECT';
   turns: number;
 }

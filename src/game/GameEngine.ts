@@ -71,6 +71,8 @@ export interface IGameEngineAPI {
   selectDiscard(handIndex: number): void;
   cancelPending(): void;
   getState(): GameStateSnapshot;
+  /** Kind of the interaction the engine is waiting on, or null. */
+  getPendingKind(): 'TARGET' | 'POSITION' | 'COLUMN' | 'DISCARD' | null;
   on(handler: (event: GameEvent) => void): void;
   off(handler: (event: GameEvent) => void): void;
 }
@@ -115,17 +117,22 @@ export class GameEngine implements IGameEngineAPI {
   }
 
   /** Start a new game. Deals opening hands and pre-places Kings. */
-  startGame(): void {
+  /**
+   * @param decks  [P1 deck, P2 deck] from the server in multiplayer. Both clients MUST use
+   *               the same pair or their simulations diverge. Omit for local play
+   *               (both players use the locally loaded deck).
+   */
+  startGame(decks?: [string[] | null, string[] | null]): void {
     // Idempotency guard: if kings already exist, game has started
     if (this.board.getKing(Player.P1) || this.board.getKing(Player.P2)) {
       console.warn('[GameEngine] startGame() called on already-started engine — ignoring');
       return;
     }
 
-    const deck = DeckLoader.get();
+    const localDeck = DeckLoader.get();
 
-    this.players[Player.P1].loadDeck([...deck], Player.P1);
-    this.players[Player.P2].loadDeck([...deck], Player.P2);
+    this.players[Player.P1].loadDeck([...(decks?.[0] ?? localDeck)], Player.P1);
+    this.players[Player.P2].loadDeck([...(decks?.[1] ?? localDeck)], Player.P2);
 
     this.prePlaceKing(Player.P1);
     this.prePlaceKing(Player.P2);
@@ -174,6 +181,10 @@ export class GameEngine implements IGameEngineAPI {
       const isRoyal = def.allegiance === Allegiance.ROYAL;
       return mod.canAfford(def.cost, isRoyal) ? i : -1;
     }).filter(i => i >= 0);
+  }
+
+  getPendingKind(): 'TARGET' | 'POSITION' | 'COLUMN' | 'DISCARD' | null {
+    return this.pending?.kind ?? null;
   }
 
   getState(): GameStateSnapshot {
@@ -336,6 +347,8 @@ export class GameEngine implements IGameEngineAPI {
    *  emitted it, so clearPending()'s extra emit would cause a double-fire. */
   cancelPending(): void {
     if (!this.pending) return;
+    // DISCARD is a cost (War Horn: draw 2, THEN discard 1) — not skippable.
+    if (this.pending.kind === 'DISCARD') return;
     console.log('[GameEngine] Pending interaction cancelled');
     this.pending = null;
     this.status  = EngineStatus.IDLE;

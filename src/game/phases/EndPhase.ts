@@ -90,21 +90,23 @@ function resolveTreasonReturns(ctx: GameContext): boolean {
  * Returns true if game is over.
  */
 function checkWinCondition(ctx: GameContext): boolean {
-  for (const p of [Player.P1, Player.P2]) {
+  const isDead = (p: Player) => {
     const king = ctx.board.getKing(p);
-    if (!king || king.currentDef <= 0) {
-      ctx.status = EngineStatus.GAME_OVER;
-      ctx.emit({
-        type: 'GAME_OVER',
-        result: {
-          winner: opponent(p),
-          loser: p,
-          reason: 'KING_DESTROYED',
-          turns: ctx.turnNumber,
-        },
-      });
-      return true;
-    }
+    return !king || king.currentDef <= 0;
+  };
+  const p1Dead = isDead(Player.P1);
+  const p2Dead = isDead(Player.P2);
+  if (p1Dead || p2Dead) {
+    ctx.status = EngineStatus.GAME_OVER;
+    const isDraw = p1Dead && p2Dead;
+    const loser = p1Dead ? Player.P1 : Player.P2;
+    ctx.emit({
+      type: 'GAME_OVER',
+      result: isDraw
+        ? { winner: null, loser: null, isDraw: true, reason: 'KING_DESTROYED', turns: ctx.turnNumber }
+        : { winner: opponent(loser), loser, reason: 'KING_DESTROYED', turns: ctx.turnNumber },
+    });
+    return true;
   }
 
   // King threat warnings (informational — doesn't block turn)

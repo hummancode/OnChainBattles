@@ -26,18 +26,19 @@ export default class LoginScene extends Phaser.Scene {
     this.allButtons = [];
     const { width, height } = this.scale;
 
+    // Auto-rejoin an in-progress battle after a page refresh (guests AND logged-in players).
+    // Must run before the logged-in shortcut below, or logged-in players lose the match.
+    if ((AuthManager.isGuest() || AuthManager.isLoggedIn()) && GameState.hasBattleSession()) {
+      console.log('[LoginScene] Battle session found, auto-rejoining...');
+      GameState.restoreBattleSession();
+      this.scene.start('BattleScene');
+      return;
+    }
+
     // Skip login UI entirely if session is already restored
     if (AuthManager.isLoggedIn()) {
       console.log('[LoginScene] Session active, skipping to HubScene');
       this.scene.start('HubScene');
-      return;
-    }
-
-    // Auto-rejoin if guest has an active battle session
-    if (AuthManager.isGuest() && GameState.hasBattleSession()) {
-      console.log('[LoginScene] Guest battle session found, auto-rejoining...');
-      GameState.restoreBattleSession();
-      this.scene.start('BattleScene');
       return;
     }
 

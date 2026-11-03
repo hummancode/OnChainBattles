@@ -101,6 +101,62 @@
       "text": "Fixed duplicate card appearing when the hand exceeds its visible limit.",
       "created": "2026-11-03T10:00:02",
       "edited": null
+    },
+    {
+      "id": "20261103140000000000",
+      "category": "Bug Fix",
+      "text": "Refreshing the page during a match now restores the board, hands and turn exactly where you left off.",
+      "created": "2026-11-03T14:00:00",
+      "edited": null
+    },
+    {
+      "id": "20261103140001000000",
+      "category": "Bug Fix",
+      "text": "Moves made while your connection drops are sent when it comes back instead of being lost.",
+      "created": "2026-11-03T14:00:01",
+      "edited": null
+    },
+    {
+      "id": "20261103140002000000",
+      "category": "Mechanics",
+      "text": "If both Kings fall in the same exchange the match is a draw (crypto stakes are refunded).",
+      "created": "2026-11-03T14:00:02",
+      "edited": null
+    },
+    {
+      "id": "20261103140003000000",
+      "category": "Bug Fix",
+      "text": "War Horn no longer freezes the game — click a card in your hand to discard it. The discard can't be skipped.",
+      "created": "2026-11-03T14:00:03",
+      "edited": null
+    },
+    {
+      "id": "20261103140004000000",
+      "category": "Bug Fix",
+      "text": "Players using different decks no longer go out of sync.",
+      "created": "2026-11-03T14:00:04",
+      "edited": null
+    },
+    {
+      "id": "20261103140005000000",
+      "category": "Bug Fix",
+      "text": "Logged-in players can now rejoin a match after refreshing.",
+      "created": "2026-11-03T14:00:05",
+      "edited": null
+    },
+    {
+      "id": "20261103140006000000",
+      "category": "Bug Fix",
+      "text": "Opponent's card count above their hand no longer smears into overlapping text.",
+      "created": "2026-11-03T14:00:06",
+      "edited": null
+    },
+    {
+      "id": "20261103140007000000",
+      "category": "Mechanics",
+      "text": "Reconnect grace period increased from 10s to 30s.",
+      "created": "2026-11-03T14:00:07",
+      "edited": null
     }
   ],
   "revoked": []

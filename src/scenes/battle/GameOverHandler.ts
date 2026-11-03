@@ -22,18 +22,22 @@ export function setupGameOverHandler(
     const result = ev.result ?? ev;
     const turnCount = result?.turns ?? engine.getState().turn?.turnNumber ?? 0;
     const reason = result?.reason ?? 'KING_DESTROYED';
-    const playerWon = (result?.winner ?? ev.winner) === localPlayerIndex;
+    const isTie = result?.isDraw === true || result?.winner === null;
+    const playerWon = !isTie && (result?.winner ?? ev.winner) === localPlayerIndex;
 
-    if (playerWon) GameState.recordWin(); else GameState.recordLoss();
+    if (isTie) { /* draws don't change W/L record */ }
+    else if (playerWon) GameState.recordWin(); else GameState.recordLoss();
 
     GameState.setLastMatch({
-      playerName, opponentName, playerWon, isTie: false,
+      playerName, opponentName, playerWon, isTie,
       reason, turns: turnCount,
       stakeAmount: GameState.currentStake,
-      payout: playerWon ? GameState.currentStake * 2 * 0.95 : 0,
+      // Draw: escrow refunds each player's stake (refundTie)
+      payout: isTie ? GameState.currentStake : playerWon ? GameState.currentStake * 2 * 0.95 : 0,
     });
 
-    SocketManager.sendGameOver(localPlayerIndex, playerWon, turnCount);
+    if (isTie) SocketManager.sendGameDraw(turnCount);
+    else SocketManager.sendGameOver(localPlayerIndex, playerWon, turnCount);
     GameState.clearBattleSession();
 
     scene.time.delayedCall(1500, () => {

@@ -160,29 +160,28 @@ function executeCombat(ctx: GameContext, attacker: Unit, defender: Unit, isAssas
     ctx.applyEvents(counterKillResult.events);
   }
 
-  // King death = game over — must check BOTH sides (counter can kill attacking king)
-  checkKingDeath(ctx, defender, attacker, events);
-  checkKingDeath(ctx, attacker, defender, events);
+  // King death = game over — must check BOTH sides (dying blow can kill the attacking king too).
+  // Both Kings falling in the same exchange is a DRAW.
+  const defenderKingDied = kingDiedInCombat(defender, events);
+  const attackerKingDied = kingDiedInCombat(attacker, events);
+  if (ctx.status === EngineStatus.GAME_OVER) return;
+  if (defenderKingDied && attackerKingDied) {
+    triggerDraw(ctx);
+  } else if (defenderKingDied) {
+    triggerGameOver(ctx, attacker.owner, 'KING_DESTROYED');
+  } else if (attackerKingDied) {
+    triggerGameOver(ctx, defender.owner, 'KING_DESTROYED');
+  }
 }
 
-/**
- * Check if a specific unit (expected king) died in the event stream.
- * If so, trigger game over with the opponent as winner.
- */
-function checkKingDeath(ctx: GameContext, unit: Unit, killer: Unit, events: any[]): void {
-  if (unit.cardId !== 'king') return;
-  if (ctx.status === EngineStatus.GAME_OVER) return; // Already triggered
-
-  // Find the last UNIT_ATTACKED event targeting this king
+/** True if `unit` is a King whose HP hit 0 in this combat's event stream. */
+function kingDiedInCombat(unit: Unit, events: any[]): boolean {
+  if (unit.cardId !== 'king') return false;
   const attacksOnKing = events.filter(
     e => e.type === 'UNIT_ATTACKED' && e.targetInstanceId === unit.instanceId
   );
-  if (attacksOnKing.length === 0) return;
-
-  const lastHP = attacksOnKing[attacksOnKing.length - 1].targetNewHP;
-  if (lastHP <= 0) {
-    triggerGameOver(ctx, killer.owner, 'KING_DESTROYED');
-  }
+  if (attacksOnKing.length === 0) return false;
+  return attacksOnKing[attacksOnKing.length - 1].targetNewHP <= 0;
 }
 
 // ─────────────────────────────────────────────
@@ -226,6 +225,14 @@ function handleUnitDeath(
 // ─────────────────────────────────────────────
 // GAME OVER
 // ─────────────────────────────────────────────
+
+function triggerDraw(ctx: GameContext): void {
+  ctx.status = EngineStatus.GAME_OVER;
+  ctx.emit({
+    type: 'GAME_OVER',
+    result: { winner: null, loser: null, isDraw: true, reason: 'KING_DESTROYED', turns: ctx.turnNumber },
+  });
+}
 
 function triggerGameOver(
   ctx: GameContext,

@@ -7,7 +7,7 @@
 // ─── Game Actions (relayed between players) ──────────────────
 
 export interface GameAction {
-  type: 'PLAY_CARD' | 'MOVE_UNIT' | 'ATTACK_UNIT' | 'END_PLAY_PHASE' | 'END_ACT_PHASE' | 'SELECT_POSITION' | 'SELECT_TARGET' | 'CANCEL_PENDING';
+  type: 'PLAY_CARD' | 'MOVE_UNIT' | 'ATTACK_UNIT' | 'END_PLAY_PHASE' | 'END_ACT_PHASE' | 'SELECT_POSITION' | 'SELECT_TARGET' | 'SELECT_DISCARD' | 'CANCEL_PENDING';
   handIndex?: number;
   col?: number;
   row?: number;
@@ -19,6 +19,23 @@ export interface GameAction {
   seqNum?: number;
   /** Server-assigned global order stamp (set before relay to opponent). */
   serverSeq?: number;
+  /** Server-assigned: index of the player who sent this action (0 | 1). */
+  by?: number;
+}
+
+/** Sent to a player who rejoins a room — everything needed to rebuild the match. */
+export interface RejoinPayload {
+  roomCode: string;
+  playerIndex: number;
+  gameSeed: number;
+  /** Both players' decks, [P1, P2]. null until the battle has started. */
+  decks: [string[], string[]] | null;
+  /** Every accepted action in server order (each stamped with `by` + `serverSeq`). */
+  actionLog: GameAction[];
+  /** Highest seqNum the server accepted from THIS player — client continues from here. */
+  lastSeqNum: number;
+  /** True once both players were battle-ready (engine should be started + replayed). */
+  battleStarted: boolean;
 }
 
 // ─── Client → Server Events ─────────────────────────────────
@@ -76,6 +93,7 @@ export interface ClientToServerEvents {
   cryptoReady:    (data: { roomCode: string }) => void;
   player_ready:   (data: { roomCode: string }) => void;
   game_action:    (data: { roomCode: string; action: GameAction }) => void;
+  /** winnerIndex: 0 | 1, or -1 for a draw (both Kings destroyed simultaneously). */
   game_over:      (data: { roomCode: string; winnerIndex: number; totalTurns?: number }) => void;
   state_hash:     (data: { roomCode: string; hash: string; afterGlobalSeq: number }) => void;
   rejoin_room:    (data: { roomCode: string; playerName: string; guestSessionId?: string }) => void;
@@ -115,12 +133,12 @@ export interface ServerToClientEvents {
   opponentJoined:       (data: { playerName: string; playerIndex: number }) => void;
   opponent_action:      (action: GameAction) => void;
   game_seed:            (data: { seed: number }) => void;
-  both_battle_ready:    () => void;
+  both_battle_ready:    (data: { decks: [string[], string[]] }) => void;
   opponentDisconnected: () => void;
   opponentReconnected:  () => void;
   opponentAbandon:      () => void;
   disconnectCountdown:  (data: { remaining: number }) => void;
-  rejoinSuccess:        (data: { roomCode: string; playerIndex: number; gameSeed: number }) => void;
+  rejoinSuccess:        (data: RejoinPayload) => void;
   hostDepositConfirmed: () => void;
   bothCryptoReady:      () => void;
   payout_result:        (data: PayoutResult) => void;
@@ -234,7 +252,11 @@ export interface Room {
   gameSeed: number | null;
   cryptoReadyCount: number;
   battleReadyCount: number;
+  /** Player indices that sent player_ready (dedupes repeats after a refresh). */
+  readyPlayers?: Set<number>;
   actionQueue: GameAction[];
+  /** Authoritative ordered log of every accepted action — replayed on rejoin. */
+  actionLog: GameAction[];
   settled: boolean;
   // Server-side turn tracking for action validation
   currentTurnPlayer: number;  // 0 = P1, 1 = P2

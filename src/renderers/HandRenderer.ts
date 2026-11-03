@@ -36,6 +36,7 @@ export class HandRenderer {
   private selectedIndex: number | null = null;
   private hoveredIndex: number | null = null;
   private overflowLabel: Phaser.GameObjects.Text | null = null;
+  private oppCountLabel: Phaser.GameObjects.Text | null = null;
 
   // Opponent hand
   private oppCardCount: number = 0;
@@ -314,13 +315,19 @@ export class HandRenderer {
       this.oppCardContainers.push(back);
     }
 
-    // Count label above opponent hand
-    const countLbl = this.scene.add.text(H.x, H.y - 20, `${this.oppCardCount} cards`, {
-      fontFamily: this.theme.fonts.small.family,
-      fontSize: `${this.theme.fonts.small.size}px`,
-      color: this.theme.colors.TEXT_SECONDARY,
-    }).setOrigin(0.5, 1);
-    this.oppHandContainer.add(countLbl);
+    // Count label above opponent hand — one persistent label, text updated in place
+    // (creating a new one per refresh stacked them into an unreadable smear).
+    const label = `${this.oppCardCount} card${this.oppCardCount === 1 ? '' : 's'}`;
+    if (this.oppCountLabel) {
+      this.oppCountLabel.setText(label);
+    } else {
+      this.oppCountLabel = this.scene.add.text(H.x, H.y - 20, label, {
+        fontFamily: this.theme.fonts.small.family,
+        fontSize: `${this.theme.fonts.small.size}px`,
+        color: this.theme.colors.TEXT_SECONDARY,
+      }).setOrigin(0.5, 1);
+      this.oppHandContainer.add(this.oppCountLabel);
+    }
   }
 
   // ─────────────────────────────────────────────

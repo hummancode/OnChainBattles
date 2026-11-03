@@ -54,7 +54,7 @@ function emitStatsChanged(engine: any, instanceId: string): void {
  * Batched: emits a single UNIT_STATS_BATCH event with all unit data,
  * followed by individual UNIT_STATS_CHANGED for backwards compat.
  */
-function emitAllUnitStats(engine: any, profiler?: RenderProfiler): void {
+export function emitAllUnitStats(engine: any, profiler?: RenderProfiler): void {
   const state = engine.getState();
   const batch: Array<{
     instanceId: string; atk: number; currentHP: number; maxHP: number; canAct: boolean;
