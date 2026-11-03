@@ -203,8 +203,8 @@ io.on('connection', (socket) => {
   });
 
   // ── Rejoin after disconnect ──
-  socket.on('rejoin_room', ({ roomCode, playerName, guestSessionId }) => {
-    session.handleRejoin(socket, roomCode, playerName, guestSessionId);
+  socket.on('rejoin_room', ({ roomCode, playerName, guestSessionId, token }) => {
+    session.handleRejoin(socket, roomCode, playerName, guestSessionId, token);
   });
 
   // ── Game session events ──

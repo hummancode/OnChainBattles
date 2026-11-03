@@ -97,6 +97,7 @@ class SocketManagerClass {
           roomCode: GameState.roomCode,
           playerName: GameState.playerName,
           guestSessionId: AuthManager.getGuestSessionId() ?? undefined,
+          token: AuthManager.getToken() ?? undefined,
         });
         this.callbacks?.onReconnected?.();
       }
@@ -128,6 +129,7 @@ class SocketManagerClass {
         roomCode: GameState.roomCode,
         playerName: GameState.playerName,
         guestSessionId: AuthManager.getGuestSessionId() ?? undefined,
+        token: AuthManager.getToken() ?? undefined,
       });
     });
 
@@ -226,6 +228,7 @@ class SocketManagerClass {
       roomCode: code,
       playerName: GameState.playerName,
       guestSessionId: AuthManager.getGuestSessionId() ?? undefined,
+      token: AuthManager.getToken() ?? undefined,
     });
   }
 
@@ -235,6 +238,7 @@ class SocketManagerClass {
       roomCode: code,
       playerName: GameState.playerName,
       guestSessionId: AuthManager.getGuestSessionId() ?? undefined,
+      token: AuthManager.getToken() ?? undefined,
     });
   }
 
@@ -268,6 +272,7 @@ class SocketManagerClass {
       roomCode: GameState.roomCode,
       playerName: GameState.playerName,
       guestSessionId: AuthManager.getGuestSessionId() ?? undefined,
+      token: AuthManager.getToken() ?? undefined,
     });
   }
 

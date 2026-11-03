@@ -443,7 +443,7 @@ export class SessionManager {
     room.disconnectTimers.set(playerIndex, timer);
   }
 
-  handleRejoin(socket: TypedSocket, roomCode: string, playerName: string, guestSessionId?: string): void {
+  handleRejoin(socket: TypedSocket, roomCode: string, playerName: string, guestSessionId?: string, token?: string): void {
     let room = this.rooms.getRoom(roomCode);
     if (!room) {
       // Server restarted mid-match? Rebuild the room + simulation from disk.
@@ -461,7 +461,8 @@ export class SessionManager {
       return;
     }
 
-    const playerIndex = this.rooms.reassignSocket(roomCode, playerName, socket.id, guestSessionId);
+    const playerId = token ? verifyToken(token)?.playerId ?? null : null;
+    const playerIndex = this.rooms.reassignSocket(roomCode, playerName, socket.id, guestSessionId, playerId);
     if (playerIndex === -1) {
       socket.emit('error', { message: 'Player not found in room' });
       return;

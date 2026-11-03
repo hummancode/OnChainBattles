@@ -13,16 +13,16 @@ Used to identify weak areas and improve code quality over time.
 
 | Category | Count | User-Found | Claude-Found | Test-Found |
 |----------|-------|------------|--------------|------------|
-| logic | 23 | 5 | 18 | 0 |
+| logic | 24 | 5 | 19 | 0 |
 | network | 12 | 6 | 6 | 0 |
-| state | 16 | 4 | 12 | 0 |
+| state | 17 | 4 | 13 | 0 |
 | rendering | 9 | 1 | 7 | 1 |
 | race-condition | 4 | 2 | 2 | 0 |
-| memory-leak | 4 | 0 | 4 | 0 |
-| web3 | 2 | 0 | 2 | 0 |
+| memory-leak | 5 | 0 | 5 | 0 |
+| web3 | 3 | 0 | 3 | 0 |
 | type-safety | 7 | 2 | 5 | 0 |
-| security | 6 | 1 | 5 | 0 |
-| **TOTAL** | **85** | **21** | **63** | **1** |
+| security | 7 | 1 | 6 | 0 |
+| **TOTAL** | **90** | **21** | **68** | **1** |
 
 ---
 
@@ -881,6 +881,56 @@ Used to identify weak areas and improve code quality over time.
 - **Fix**: Handlers flag `noValidTarget`; PlayPhase refuses the play and returns card + LEG (CARD_RETURNED, 'no valid target' toast).
 - **Prevention**: Make 'nothing happened' an explicit result, not an empty one.
 - **Files**: `src/game/phases/PlayPhase.ts`, `src/game/abilities/types.ts`, `src/game/abilities/AbilityDispatcher.ts`, spell handlers
+
+### BUG-086: Anyone with the room code and a player's name could take their seat
+- **Date**: 2026-11-03
+- **Category**: `security`
+- **Discovered by**: `claude`
+- **Symptom**: `rejoin_room` with just a name reclaimed a logged-in (or guest) player's seat — including their crypto payout.
+- **Root cause**: `reassignSocket` fell back to name matching whenever the request carried no guestSessionId, for every seat.
+- **Fix**: Seats with a playerId require a verified token for that playerId; guest seats require the guestSessionId; name matching only for legacy seats with neither. Clients send their auth token on rejoin.
+- **Prevention**: Identity checks must be keyed by the strongest identity the seat has; never fall back to a user-chosen string.
+- **Files**: `server/rooms/RoomManager.ts`, `server/game/SessionManager.ts`, `server/app.ts`, `shared/types/NetworkEvents.ts`, `src/network/SocketManager.ts`, `tests/server/rejoinIdentity.test.ts`
+
+### BUG-087: Practice / tutorial games changed the W/L record
+- **Date**: 2026-11-03
+- **Category**: `state`
+- **Discovered by**: `claude`
+- **Symptom**: Beating (or losing to) the bot counted as a real win/loss.
+- **Root cause**: GameOverHandler recorded every result; it had no notion of offline matches.
+- **Fix**: `setupGameOverHandler(..., { offline })` skips the record and the server notification; result is marked `practice` so REMATCH starts another bot match.
+- **Prevention**: New game modes must be threaded through every side effect of 'game over' (stats, server, payouts, navigation).
+- **Files**: `src/scenes/battle/GameOverHandler.ts`, `src/scenes/BattleScene.ts`, `src/scenes/ResultScene.ts`, `src/GameState.ts`
+
+### BUG-088: Disabled puzzle payout stub lacked isEnabled()
+- **Date**: 2026-11-03
+- **Category**: `web3`
+- **Discovered by**: `claude`
+- **Symptom**: On a server without FUJI_PRIVATE_KEY, solving an on-chain puzzle threw a TypeError (500).
+- **Root cause**: The BUG-068 stand-in implemented only the async payout methods; puzzleRoutes calls `isEnabled()` first.
+- **Fix**: Stub implements every public method (isEnabled → false, puzzleIdFromDbId same formula); test compares against the real classes' prototypes.
+- **Prevention**: Stubs must be checked against the real interface, not written from memory.
+- **Files**: `server/game/DisabledPayout.ts`, `tests/server/disabledPayout.test.ts`
+
+### BUG-089: Puzzle prize card was never granted
+- **Date**: 2026-11-03
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: Solving a puzzle returned `prizeCardId` but the card never reached the player's collection (TODO).
+- **Root cause**: Not implemented.
+- **Fix**: `awardCard()` adds a copy (insert or +1) on a correct attempt; response includes `prizeAwarded`.
+- **Prevention**: Don't return a reward in an API response before it has actually been granted.
+- **Files**: `server/api/collectionHelpers.ts`, `server/api/puzzleRoutes.ts`, `tests/server/puzzlePrize.test.ts`
+
+### BUG-090: Lobby chat keydown listener never removed
+- **Date**: 2026-11-03
+- **Category**: `memory-leak`
+- **Discovered by**: `claude`
+- **Symptom**: Each lobby visit added a listener that was never detached.
+- **Root cause**: `addEventListener` without a cleanup path.
+- **Fix**: AbortController signal, aborted in `cleanup()`.
+- **Prevention**: Same as BUG-058: use signals for DOM listeners.
+- **Files**: `src/scenes/LobbyScene.ts`
 
 ---
 

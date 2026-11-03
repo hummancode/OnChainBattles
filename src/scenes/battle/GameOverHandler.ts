@@ -15,6 +15,8 @@ export function setupGameOverHandler(
   playerName: string,
   opponentName: string,
   _isCryptoMode: boolean,
+  /** offline = practice / tutorial vs the bot: show the result, but don't count it or tell the server. */
+  opts: { offline?: boolean } = {},
 ): () => void {
   const unsub = EventBus.on(EV.GAME_OVER, (ev: any) => {
     if (!scene.scene.isActive('BattleScene')) return;
@@ -25,7 +27,7 @@ export function setupGameOverHandler(
     const isTie = result?.isDraw === true || result?.winner === null;
     const playerWon = !isTie && (result?.winner ?? ev.winner) === localPlayerIndex;
 
-    if (isTie) { /* draws don't change W/L record */ }
+    if (isTie || opts.offline) { /* draws and practice games don't change the W/L record */ }
     else if (playerWon) GameState.recordWin(); else GameState.recordLoss();
 
     GameState.setLastMatch({
@@ -33,10 +35,12 @@ export function setupGameOverHandler(
       reason, turns: turnCount,
       stakeAmount: GameState.currentStake,
       // Draw: escrow refunds each player's stake (refundTie)
-      payout: isTie ? GameState.currentStake : playerWon ? GameState.currentStake * 2 * 0.95 : 0,
+      payout: opts.offline ? 0 : isTie ? GameState.currentStake : playerWon ? GameState.currentStake * 2 * 0.95 : 0,
+      practice: !!opts.offline,
     });
 
-    if (isTie) SocketManager.sendGameDraw(turnCount);
+    if (opts.offline) { /* no server involved */ }
+    else if (isTie) SocketManager.sendGameDraw(turnCount);
     else SocketManager.sendGameOver(localPlayerIndex, playerWon, turnCount);
     GameState.clearBattleSession();
 

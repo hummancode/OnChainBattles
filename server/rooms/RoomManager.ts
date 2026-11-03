@@ -114,18 +114,28 @@ export class RoomManager {
   }
 
   /** Reassign a player's socket ID (after reconnection). Returns player index or -1. */
-  reassignSocket(roomCode: string, playerName: string, newSocketId: string, guestSessionId?: string): number {
+  /**
+   * Reassign a player's socket ID (after reconnection). Returns player index or -1.
+   *
+   * A seat with a strong identity can only be reclaimed with that identity:
+   *   - logged-in seat (playerId)        → caller must present the same playerId (verified token)
+   *   - guest seat (guestSessionId)      → caller must present the same guestSessionId
+   *   - neither (legacy, unauthenticated) → name match
+   * Name alone used to be enough for every seat — anyone with the room code could take one.
+   */
+  reassignSocket(roomCode: string, playerName: string, newSocketId: string, guestSessionId?: string, playerId?: number | null): number {
     const room = this.rooms.get(roomCode);
     if (!room) return -1;
-    // Prefer guestSessionId match (unique), fall back to name match
     let idx = -1;
-    if (guestSessionId) {
-      idx = room.players.findIndex(p => p.guestSessionId === guestSessionId);
+    if (playerId != null) idx = room.players.findIndex(p => p.playerId === playerId);
+    if (idx === -1 && guestSessionId) idx = room.players.findIndex(p => p.guestSessionId === guestSessionId);
+    if (idx === -1) {
+      idx = room.players.findIndex(p => p.name === playerName && p.playerId == null && !p.guestSessionId);
     }
     if (idx === -1) {
-      idx = room.players.findIndex(p => p.name === playerName);
+      log.warn(` Rejoin refused for "${playerName}" in ${roomCode}: identity does not match any seat`);
+      return -1;
     }
-    if (idx === -1) return -1;
     room.players[idx].id = newSocketId;
     log.info(` Reassigned ${playerName} in ${roomCode} → socket ${newSocketId}`);
     return idx;

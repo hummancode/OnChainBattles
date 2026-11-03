@@ -291,6 +291,15 @@ export default class ResultScene extends Phaser.Scene {
     if (this.transitioning) return;
     this.transitioning = true;
     this.autoReturnTimer?.destroy();
+    if (GameState.lastMatch?.practice) {
+      // Practice: straight into another bot match
+      this.cameras.main.fadeOut(200, 0, 0, 0);
+      this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('BattleScene', {
+        playerName: GameState.playerName || 'You', opponentName: 'Bot',
+        isCryptoMode: false, roomCode: '', vsBot: { tutorial: false },
+      }));
+      return;
+    }
     SocketManager.disconnect();
     this.cameras.main.fadeOut(200, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {

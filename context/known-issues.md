@@ -6,14 +6,12 @@
 - Pre-existing 16 unused variable TS warnings (baseline, don't fix — see CLAUDE.md)
 
 ### Network / Reconnection
-- Rejoin falls back to matching by player NAME when there is no guestSessionId (logged-in players) — should match by authenticated playerId
 - Server engine trusts the client-side deck validation path for the legacy RoomScene flow (decks are validated in `submitDeck`, but unsubmitted decks silently become the default)
 - Refresh during an optional pending interaction (Priest/Scout target etc.) cancels it on both clients; the card cost is not refunded
 
 ### UI (found in Playwright QA, 3 Nov 2026 — see ROADMAP Phase 2)
 - Hand cards are stacked with heavy overlap (only header + art visible until hover) — a bottom fan would need a board-layout change
 - Missing card art uses the generated placeholder texture (REFORM, MILITIA) — needs art, not code
-- Practice/tutorial results count toward the local W/L record (offline, not sent to the server)
 - SimpleBot is a single greedy difficulty; it ignores structures' long-term value and never holds cards back
 - Replay viewer reuses the battle HUD: "YOUR TURN" / END TURN refer to the viewed player and the button is inert
 - IGameEngineAPI.getValidDeployPositions interface takes unused `cardIndex` param

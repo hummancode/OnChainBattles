@@ -100,7 +100,8 @@ export interface ClientToServerEvents {
   /** winnerIndex: 0 | 1, or -1 for a draw (both Kings destroyed simultaneously). */
   game_over:      (data: { roomCode: string; winnerIndex: number; totalTurns?: number }) => void;
   state_hash:     (data: { roomCode: string; hash: string; afterGlobalSeq: number }) => void;
-  rejoin_room:    (data: { roomCode: string; playerName: string; guestSessionId?: string }) => void;
+  /** token: auth JWT for logged-in players — required to reclaim a logged-in seat. */
+  rejoin_room:    (data: { roomCode: string; playerName: string; guestSessionId?: string; token?: string }) => void;
   game_state_report: (data: { roomCode: string; report: GameStateReport }) => void;
 
   // Auth/Deck events

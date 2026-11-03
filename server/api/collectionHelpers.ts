@@ -24,3 +24,18 @@ export function initializeCollection(playerId: number): void {
   batch();
   console.log(`[Collection] Initialized for player #${playerId}`);
 }
+
+/**
+ * Grant one more copy of a card (puzzle prizes). Returns false for unknown cards.
+ * owned_copies can exceed the deck-building copy limit — it records ownership
+ * (future NFT support), DeckValidator still enforces per-deck limits.
+ */
+export function awardCard(playerId: number, cardId: string): boolean {
+  if (!CARD_POOL.some(c => c.id === cardId) || cardId === 'king') return false;
+  getDB().prepare(`
+    INSERT INTO collections (player_id, card_id, owned_copies) VALUES (?, ?, 1)
+    ON CONFLICT(player_id, card_id) DO UPDATE SET owned_copies = owned_copies + 1
+  `).run(playerId, cardId);
+  console.log(`[Collection] Awarded ${cardId} to player #${playerId}`);
+  return true;
+}

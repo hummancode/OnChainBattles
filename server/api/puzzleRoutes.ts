@@ -9,6 +9,7 @@ import { verifyMessage } from 'ethers';
 import { getDB } from '../db/database.js';
 import { requireAuth } from './middleware.js';
 import { normalizePlacement } from '../validation/PuzzleValidator.js';
+import { awardCard } from './collectionHelpers.js';
 import type { PuzzlePayoutService } from '../game/PuzzlePayoutService.js';
 
 export const puzzleRouter = Router();
@@ -204,12 +205,15 @@ puzzleRouter.post('/:id/attempt', requireAuth, async (req, res) => {
       }
     }
 
-    // TODO: Award prize card to player's collection (future NFT support)
+    // Prize card → solver's collection
+    const prizeCardId = puzzle.prize_card_id as string | null;
+    const prizeAwarded = prizeCardId ? awardCard(playerId, prizeCardId) : false;
 
     res.json({
       correct: true,
       message: 'Congratulations! You solved the puzzle!',
-      prizeCardId: puzzle.prize_card_id,
+      prizeCardId,
+      prizeAwarded,
       payoutTxHash,
     });
   } else {

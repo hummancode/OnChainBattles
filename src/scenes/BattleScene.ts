@@ -234,7 +234,7 @@ export default class BattleScene extends Phaser.Scene {
     });
 
     // ─── Game over ───────────────────────────────
-    if (!replay) this.gameOverUnsub = setupGameOverHandler(this, this.engine, localPlayerIndex, playerName, opponentName, this.sceneData.isCryptoMode);
+    if (!replay) this.gameOverUnsub = setupGameOverHandler(this, this.engine, localPlayerIndex, playerName, opponentName, this.sceneData.isCryptoMode, { offline: !!vsBot });
 
     // ─── Network ─────────────────────────────────
     if (!offline) setupSocketCallbacks({

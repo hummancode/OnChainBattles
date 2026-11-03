@@ -38,6 +38,7 @@ export default class LobbyScene extends Phaser.Scene {
   private playerListTexts: Phaser.GameObjects.GameObject[] = [];
   private chatTexts: Phaser.GameObjects.Text[] = [];
   private chatInput?: HTMLInputElement;
+  private chatKeys?: AbortController;
   private readyBtn?: MenuButton;
   private startBtn?: MenuButton;
 
@@ -131,9 +132,11 @@ export default class LobbyScene extends Phaser.Scene {
       placeholder: 'Type message...',
       maxLength: 200,
     });
+    this.chatKeys?.abort();
+    this.chatKeys = new AbortController();
     this.chatInput.addEventListener('keydown', (e: KeyboardEvent) => {
       if (e.key === 'Enter') this.sendChat();
-    });
+    }, { signal: this.chatKeys.signal }); // removed in cleanup()
 
     new MenuButton(this, 1100, 430, '[ Send ]', {
       color: '#4fc3f7', fontSize: '12px', fontStyle: 'normal',
@@ -397,6 +400,8 @@ export default class LobbyScene extends Phaser.Scene {
   }
 
   private cleanup(): void {
+    this.chatKeys?.abort();
+    this.chatKeys = undefined;
     this.lobbySM?.detach();
     this.inputManager?.destroyAll();
     if (this.disconnectHandler) {

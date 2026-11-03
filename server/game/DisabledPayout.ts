@@ -6,6 +6,7 @@
 // whole process crashing at startup.
 // ============================================================
 
+import { solidityPackedKeccak256 } from 'ethers';
 import type { PayoutResult } from '../../shared/types/NetworkEvents.js';
 import type { PayoutService } from './PayoutService.js';
 import type { PuzzlePayoutService } from './PuzzlePayoutService.js';
@@ -26,5 +27,9 @@ export function createDisabledPayout(): PayoutService {
 }
 
 export function createDisabledPuzzlePayout(): PuzzlePayoutService {
-  return { createPuzzle: fail, claimPrize: fail, closePuzzle: fail } as unknown as PuzzlePayoutService;
+  return {
+    isEnabled: () => false,          // puzzleRoutes checks this before claimPrize — was missing (TypeError)
+    puzzleIdFromDbId: (dbId: number) => solidityPackedKeccak256(['string', 'uint256'], ['puzzle_', dbId]), // same id as the real service
+    createPuzzle: fail, claimPrize: fail, closePuzzle: fail,
+  } as unknown as PuzzlePayoutService;
 }

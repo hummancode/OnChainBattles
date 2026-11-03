@@ -20,6 +20,8 @@ export interface BoardGameResult {
     turns: number;
     stakeAmount: number;
     payout: number;
+    /** Offline match vs the bot — REMATCH starts another bot match. */
+    practice?: boolean;
 }
 
 // Re-export from shared types for backward compat
