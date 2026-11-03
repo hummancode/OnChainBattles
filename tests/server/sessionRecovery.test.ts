@@ -85,28 +85,89 @@ describe('Session recovery', () => {
     expect(readyB.decks).toEqual(readyA.decks);
   });
 
-  it('a draw claim (winnerIndex -1) from both players settles the match', async () => {
+  it('client game_over claims cannot settle a server-authoritative match', async () => {
     const { a, b } = await startBattle('SR02');
-    // need MIN_ACTIONS relayed actions first
     let seq = 0;
     for (const t of ['END_PLAY_PHASE', 'END_ACT_PHASE'] as const) a.emit('game_action', { roomCode: 'SR02', action: { type: t, seqNum: ++seq } });
     seq = 0;
     for (const t of ['END_PLAY_PHASE', 'END_ACT_PHASE'] as const) b.emit('game_action', { roomCode: 'SR02', action: { type: t, seqNum: ++seq } });
     await sleep(50);
-    a.emit('game_over', { roomCode: 'SR02', winnerIndex: -1, totalTurns: 2 });
-    b.emit('game_over', { roomCode: 'SR02', winnerIndex: -1, totalTurns: 2 });
+    a.emit('game_over', { roomCode: 'SR02', winnerIndex: 0, totalTurns: 2 });
+    b.emit('game_over', { roomCode: 'SR02', winnerIndex: 0, totalTurns: 2 });
     await sleep(50);
-    expect(rooms.getRoom('SR02')?.settled).toBe(true);
+    expect(rooms.getRoom('SR02')?.settled).toBe(false); // nobody's King died — claims are ignored
+  });
+
+  async function kingsFaceToFace(code: string, hp1: number, hp2: number) {
+    const battle = await startBattle(code);
+    const sim: any = rooms.getRoom(code)!.simulation;
+    const board = sim.engineForTests.board;
+    const k1 = board.getKing(0), k2 = board.getKing(1);
+    board.moveUnit(k1.instanceId, 3, 3); board.moveUnit(k2.instanceId, 3, 4);
+    k1.currentDef = hp1; k2.currentDef = hp2;
+    battle.a.emit('game_action', { roomCode: code, action: { type: 'END_PLAY_PHASE', seqNum: 1 } });
+    return battle;
+  }
+
+  it('the server engine settles a mutual King kill as a DRAW and tells both clients', async () => {
+    const { a, b } = await kingsFaceToFace('SR04', 1, 1);
+    const sa = waitFor<any>(a, 'match_settled'); const sb = waitFor<any>(b, 'match_settled');
+    a.emit('game_action', { roomCode: 'SR04', action: { type: 'ATTACK_UNIT', fromCol: 3, fromRow: 3, targetCol: 3, targetRow: 4, seqNum: 2 } });
+    const [ra, rb] = await Promise.all([sa, sb]);
+    expect(ra.winnerIndex).toBe(-1);
+    expect(rb.winnerIndex).toBe(-1);
+    expect(rooms.getRoom('SR04')?.settled).toBe(true);
+  });
+
+  it('the server engine settles a King kill for the attacker', async () => {
+    const { a } = await kingsFaceToFace('SR05', 5, 1);
+    const sa = waitFor<any>(a, 'match_settled');
+    a.emit('game_action', { roomCode: 'SR05', action: { type: 'ATTACK_UNIT', fromCol: 3, fromRow: 3, targetCol: 3, targetRow: 4, seqNum: 2 } });
+    expect((await sa).winnerIndex).toBe(0);
+  });
+
+  it('an illegal action is not relayed and the sender is told to resync', async () => {
+    const { a, b } = await startBattle('SR06');
+    let relayed = false;
+    b.on('opponent_action', () => { relayed = true; });
+    const rs = waitFor<any>(a, 'resync_required');
+    // P1 tries to move a unit from an empty square
+    a.emit('game_action', { roomCode: 'SR06', action: { type: 'END_PLAY_PHASE', seqNum: 1 } });
+    a.emit('game_action', { roomCode: 'SR06', action: { type: 'MOVE_UNIT', fromCol: 0, fromRow: 2, col: 0, row: 3, seqNum: 2 } });
+    expect((await rs).reason).toMatch(/rejected/i);
+    await sleep(30);
+    // END_PLAY_PHASE was relayed, the illegal move was not
+    expect(relayed).toBe(true);
+    expect(rooms.getRoom('SR06')!.actionLog.map(x => x.type)).toEqual(['END_PLAY_PHASE']);
+  });
+
+  it('acting on the opponent\'s turn is rejected', async () => {
+    const { b } = await startBattle('SR07');
+    const rs = waitFor<any>(b, 'resync_required');
+    b.emit('game_action', { roomCode: 'SR07', action: { type: 'END_PLAY_PHASE', seqNum: 1 } });
+    expect((await rs).reason).toMatch(/turn/);
+    expect(rooms.getRoom('SR07')!.actionLog).toHaveLength(0);
+  });
+
+  it('a postHash that disagrees with the server engine triggers resync (action still accepted)', async () => {
+    const { a } = await startBattle('SR08');
+    const rs = waitFor<any>(a, 'resync_required');
+    a.emit('game_action', { roomCode: 'SR08', action: { type: 'END_PLAY_PHASE', seqNum: 1, postHash: 'deadbeef' } });
+    expect((await rs).reason).toMatch(/mismatch/i);
+    const log = rooms.getRoom('SR08')!.actionLog;
+    expect(log).toHaveLength(1);
+    expect(log[0].postHash).toBeUndefined(); // stripped before storing/relaying
   });
 
   it('rejoinSuccess returns the full ordered action log and last accepted seqNum', async () => {
     const { a, b } = await startBattle('SR03');
     const relayed = waitFor(b, 'opponent_action');
-    a.emit('game_action', { roomCode: 'SR03', action: { type: 'PLAY_CARD', handIndex: 0, col: 1, row: 0, seqNum: 1 } });
+    a.emit('game_action', { roomCode: 'SR03', action: { type: 'END_PLAY_PHASE', seqNum: 1 } });
     await relayed;
-    a.emit('game_action', { roomCode: 'SR03', action: { type: 'END_PLAY_PHASE', seqNum: 2 } });
-    a.emit('game_action', { roomCode: 'SR03', action: { type: 'END_ACT_PHASE', seqNum: 3 } });
+    a.emit('game_action', { roomCode: 'SR03', action: { type: 'END_ACT_PHASE', seqNum: 2 } });
+    await sleep(30);
     b.emit('game_action', { roomCode: 'SR03', action: { type: 'END_PLAY_PHASE', seqNum: 1 } });
+    b.emit('game_action', { roomCode: 'SR03', action: { type: 'END_ACT_PHASE', seqNum: 2 } });
     await sleep(50);
 
     // Alice refreshes the page: socket drops, new socket rejoins
@@ -118,19 +179,17 @@ describe('Session recovery', () => {
     const data = await rs;
 
     expect(data.playerIndex).toBe(0);
-    expect(data.lastSeqNum).toBe(3);
+    expect(data.lastSeqNum).toBe(2);
     expect(data.decks).toHaveLength(2);
     expect(data.actionLog.map((x: any) => [x.by, x.type])).toEqual([
-      [0, 'PLAY_CARD'], [0, 'END_PLAY_PHASE'], [0, 'END_ACT_PHASE'], [1, 'END_PLAY_PHASE'],
+      [0, 'END_PLAY_PHASE'], [0, 'END_ACT_PHASE'], [1, 'END_PLAY_PHASE'], [1, 'END_ACT_PHASE'],
     ]);
     expect(data.actionLog.map((x: any) => x.serverSeq)).toEqual([1, 2, 3, 4]);
 
-    // Sequence numbers continue after rejoin (no reset to 0) — seq 4 is accepted
-    const toA2 = waitFor<any>(a2, 'opponent_action');
-    b.emit('game_action', { roomCode: 'SR03', action: { type: 'END_ACT_PHASE', seqNum: 2 } }); // back to Alice
-    await toA2;
+    // Sequence numbers continue after rejoin (no reset to 0) — seq 3 is accepted, seq 2 would be a replay
     const relayed2 = waitFor<any>(b, 'opponent_action');
-    a2.emit('game_action', { roomCode: 'SR03', action: { type: 'END_PLAY_PHASE', seqNum: 4 } });
+    a2.emit('game_action', { roomCode: 'SR03', action: { type: 'END_PLAY_PHASE', seqNum: 2 } }); // dup → dropped
+    a2.emit('game_action', { roomCode: 'SR03', action: { type: 'END_PLAY_PHASE', seqNum: 3 } });
     expect((await relayed2).type).toBe('END_PLAY_PHASE');
   });
 });

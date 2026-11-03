@@ -88,6 +88,9 @@ describe('Per-player decks + log rebuild', () => {
       const pos = live.getValidDeployPositions()[0];
       const idx = st.players[p].hand.findIndex(id => getCard(id).cost <= st.modifiers[p].legPool);
       if (pos && idx >= 0) doAct({ type: 'PLAY_CARD', handIndex: idx, col: pos.col, row: pos.row });
+      const pk = live.getPendingKind();
+      if (pk === 'DISCARD') doAct({ type: 'SELECT_DISCARD', handIndex: 0 });
+      else if (pk) doAct({ type: 'CANCEL_PENDING' });
       doAct({ type: 'END_PLAY_PHASE' });
       doAct({ type: 'END_ACT_PHASE' });
     }
@@ -106,5 +109,17 @@ describe('Per-player decks + log rebuild', () => {
     };
     expect(strip(rebuilt)).toBe(strip(live));
     expect(live.getState().board.filter(c => c.unit).length).toBeGreaterThan(2); // something actually happened
+  });
+});
+
+describe('applyAction reports no-ops honestly (server validation relies on it)', () => {
+  it('END_ACT_PHASE during PLAY, SELECT_* with nothing pending, and CANCEL with nothing pending are rejected', () => {
+    const t = createTestEngineWithDeck(DECK);
+    expect(applyAction(t.engine, { type: 'END_ACT_PHASE' })).toBe(false);
+    expect(applyAction(t.engine, { type: 'SELECT_POSITION', col: 1, row: 1 })).toBe(false);
+    expect(applyAction(t.engine, { type: 'SELECT_DISCARD', handIndex: 0 })).toBe(false);
+    expect(applyAction(t.engine, { type: 'CANCEL_PENDING' })).toBe(false);
+    expect(applyAction(t.engine, { type: 'END_PLAY_PHASE' })).toBe(true);
+    expect(applyAction(t.engine, { type: 'END_PLAY_PHASE' })).toBe(false); // already in ACT
   });
 });

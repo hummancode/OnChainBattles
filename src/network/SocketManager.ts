@@ -32,6 +32,10 @@ export interface RoomCallbacks {
   /** Server confirmed the rejoin and sent the authoritative action log. Fires BEFORE
    *  buffered offline actions are flushed, so missed opponent actions apply first. */
   onRejoinSuccess?: (data: RejoinPayload) => void;
+  /** Server engine disagrees with ours (rejected action / hash mismatch). */
+  onResyncRequired?: (reason: string) => void;
+  /** Authoritative match result from the server engine. */
+  onMatchSettled?: (data: { winnerIndex: number; reason: string; turns: number }) => void;
   onError: (message: string) => void;
   onBothCryptoReady?: () => void;
   onBothBattleReady?: () => void;
@@ -59,6 +63,8 @@ class SocketManagerClass {
   private static readonly MAX_BUFFER_SIZE = 50;
   private hasConnectedOnce: boolean = false;
   private eventsRegistered: boolean = false;
+  /** Produces engineStateHash() of the local engine; attached to outgoing actions as postHash. */
+  private hashSource: (() => string) | null = null;
 
   // ─── Connection Modes ──────────────────────────────────────
 
@@ -218,9 +224,27 @@ class SocketManagerClass {
     this.socket?.emit("player_ready", { roomCode: GameState.roomCode });
   }
 
+  /** BattleScene registers its engine's hash so the server can detect desyncs; null to clear. */
+  setHashSource(fn: (() => string) | null): void {
+    this.hashSource = fn;
+  }
+
+  /** Ask the server for the authoritative match state on the CURRENT socket (desync recovery). */
+  requestResync(): void {
+    this.socket?.emit("rejoin_room", {
+      roomCode: GameState.roomCode,
+      playerName: GameState.playerName,
+      guestSessionId: AuthManager.getGuestSessionId() ?? undefined,
+    });
+  }
+
   sendGameAction(action: GameAction): void {
     this.seqCounter += 1;
     action.seqNum = this.seqCounter;
+    // Called right after the action was applied locally → hash = our post-action state.
+    if (this.hashSource) {
+      try { action.postHash = this.hashSource(); } catch { /* engine not ready */ }
+    }
     if (!this.socket?.connected) {
       if (this.actionBuffer.length >= SocketManagerClass.MAX_BUFFER_SIZE) {
         console.error(`[SocketManager] Action buffer full, dropping: ${action.type}`);
@@ -394,6 +418,15 @@ class SocketManagerClass {
       this.seqCounter = Math.max(this.seqCounter, data.lastSeqNum ?? 0);
       this.callbacks?.onRejoinSuccess?.(data);
       this.flushActionBuffer(data.lastSeqNum ?? 0);
+    });
+
+    s.on("resync_required", (data) => {
+      console.warn(`[SocketManager] Server requested resync: ${data.reason}`);
+      this.callbacks?.onResyncRequired?.(data.reason);
+    });
+
+    s.on("match_settled", (data) => {
+      this.callbacks?.onMatchSettled?.(data);
     });
 
     s.on("error", (data) => {

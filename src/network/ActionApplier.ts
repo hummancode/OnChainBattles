@@ -18,16 +18,34 @@ function unitAt(engine: GameEngine, col?: number, row?: number) {
   return cell?.unit ?? null;
 }
 
-/** Apply one action to the engine. Returns false if it could not be applied. */
+/**
+ * Apply one action to the engine. Returns false if the engine did not accept it.
+ *
+ * Engine methods for phase changes / pending resolution return void and silently
+ * ignore invalid calls, so acceptance is detected by whether the call emitted any
+ * engine event. This must be exact: the server uses it to reject illegal actions.
+ */
 export function applyAction(engine: GameEngine, action: GameAction): boolean {
+  let emitted = 0;
+  const count = () => { emitted++; };
+  engine.on(count);
+  try {
+    return applyInner(engine, action, () => emitted > 0);
+  } finally {
+    engine.off(count);
+  }
+}
+
+function applyInner(engine: GameEngine, action: GameAction, emittedAny: () => boolean): boolean {
   switch (action.type) {
     case 'PLAY_CARD':
-      return engine.playCard(action.handIndex!, action.col, action.row) !== false;
+      if (action.handIndex == null) return false;
+      return engine.playCard(action.handIndex, action.col, action.row) !== false;
 
     case 'MOVE_UNIT': {
       const unit = unitAt(engine, action.fromCol, action.fromRow);
-      if (!unit) return false;
-      return engine.moveUnit(unit.instanceId, action.col!, action.row!) !== false;
+      if (!unit || action.col == null || action.row == null) return false;
+      return engine.moveUnit(unit.instanceId, action.col, action.row) !== false;
     }
 
     case 'ATTACK_UNIT': {
@@ -38,31 +56,37 @@ export function applyAction(engine: GameEngine, action: GameAction): boolean {
     }
 
     case 'SELECT_POSITION':
-      engine.selectPosition(action.col!, action.row!);
-      return true;
+      if (action.col == null || action.row == null) return false;
+      engine.selectPosition(action.col, action.row);
+      return emittedAny();
 
     case 'SELECT_TARGET': {
       const tgt = unitAt(engine, action.col, action.row);
       if (!tgt) return false;
       engine.selectTarget(tgt.instanceId);
-      return true;
+      return emittedAny();
     }
 
     case 'SELECT_DISCARD':
-      engine.selectDiscard(action.handIndex!);
-      return true;
+      if (action.handIndex == null) return false;
+      engine.selectDiscard(action.handIndex);
+      return emittedAny();
 
-    case 'CANCEL_PENDING':
+    case 'CANCEL_PENDING': {
+      // cancelPending() emits nothing by design — check the precondition instead.
+      const kind = engine.getPendingKind();
+      if (!kind || kind === 'DISCARD') return false;
       engine.cancelPending();
       return true;
+    }
 
     case 'END_PLAY_PHASE':
       engine.endPlayPhase();
-      return true;
+      return emittedAny();
 
     case 'END_ACT_PHASE':
       engine.endActPhase();
-      return true;
+      return emittedAny();
 
     default:
       console.warn('[ActionApplier] Unknown action:', (action as GameAction).type);

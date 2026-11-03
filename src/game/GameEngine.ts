@@ -27,7 +27,7 @@ import { GameModifiers } from './GameModifiers';
 import { PlayerState } from './PlayerState';
 import { AuraSystem } from './AuraSystem';
 import { UnitFactory, movementToNumber } from './UnitFactory';
-import { DeckLoader } from '../config/DeckLoader';
+import { getDefaultDeck } from './DefaultDeck';
 import { getCard } from './data/CardRegistry';
 
 import { Player, TurnPhase, EngineStatus } from './types/GameTypes';
@@ -129,7 +129,7 @@ export class GameEngine implements IGameEngineAPI {
       return;
     }
 
-    const localDeck = DeckLoader.get();
+    const localDeck = getDefaultDeck();
 
     this.players[Player.P1].loadDeck([...(decks?.[0] ?? localDeck)], Player.P1);
     this.players[Player.P2].loadDeck([...(decks?.[1] ?? localDeck)], Player.P2);

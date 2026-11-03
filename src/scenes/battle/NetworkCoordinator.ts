@@ -7,7 +7,7 @@ import type { GameEngine } from '../../game/GameEngine';
 import type { GameAction } from '../../network/SocketManager';
 import SocketManager from '../../network/SocketManager';
 import GameState from '../../GameState';
-import { boardHashFromCells } from '../../game/utils/boardHash';
+import { engineStateHash } from '../../game/utils/stateHash';
 import { applyAction } from '../../network/ActionApplier';
 
 export interface NetworkCoordinatorDeps {
@@ -51,8 +51,9 @@ export function replayOpponentAction(deps: NetworkCoordinatorDeps, action: GameA
   if (!applyAction(engine, action)) {
     console.warn('[NetworkCoordinator] Could not apply opponent action', action);
   }
-  if (action.type === 'END_PLAY_PHASE' || action.type === 'END_ACT_PHASE') {
-    SocketManager.sendStateHash(boardHashFromCells(engine.getState().board), engine.getState().turn?.turnNumber ?? 0);
+  // Report our state after this server-stamped action; the server compares it with its engine.
+  if (action.serverSeq != null) {
+    SocketManager.sendStateHash(engineStateHash(engine), action.serverSeq);
   }
 }
 
@@ -137,6 +138,7 @@ export function setupSocketCallbacks(deps: NetworkCoordinatorDeps): void {
     onConnectionLost: () => showConnectionOverlay(deps.scene, true),
     onReconnected: () => showConnectionOverlay(deps.scene, false),
     onReconnectFailed: () => handleFinalDisconnect(deps),
+    onResyncRequired: (reason) => requestResync(deps, reason),
     onRejoinSuccess: (data) => {
       // Live reconnect only — a refreshed page rebuilds its engine in BattleScene before this.
       if (data.battleStarted) catchUpFromLog(deps, data.actionLog);
@@ -144,6 +146,25 @@ export function setupSocketCallbacks(deps: NetworkCoordinatorDeps): void {
     onError: (msg) => console.error('[NetworkCoordinator] Socket error:', msg),
     onPayoutResult: () => {},
   });
+}
+
+/** Last resync time — guards against a restart loop if the server keeps disagreeing. */
+let lastResyncAt = 0;
+
+/**
+ * Our engine disagrees with the server's. Rebuild the match from the authoritative log by
+ * restarting BattleScene in resync mode (same code path as a page-refresh rejoin).
+ */
+export function requestResync(deps: NetworkCoordinatorDeps, reason: string): void {
+  const now = Date.now();
+  if (now - lastResyncAt < 3000) {
+    console.warn('[NetworkCoordinator] Resync requested again too soon — ignoring:', reason);
+    return;
+  }
+  lastResyncAt = now;
+  console.warn('[NetworkCoordinator] Resyncing with server:', reason);
+  GameState.pendingResync = true;
+  deps.scene.scene.restart(deps.scene.sys.settings.data); // keep original scene data
 }
 
 /** Self-connection overlay: "Connection lost — reconnecting..." */

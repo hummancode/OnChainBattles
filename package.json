@@ -16,8 +16,9 @@
     "scripts": {
         "start": "vite --config vite/config.dev.mjs",
         "build": "vite build --config vite/config.prod.mjs && phaser-asset-pack-hashing -j -r dist",
-        "server:build": "tsc -p tsconfig.server.json",
-        "server": "tsc -p tsconfig.server.json && node server/dist/server/app.js",
+        "server:build": "node scripts/typecheck.mjs server && esbuild server/app.ts --bundle --platform=node --format=esm --packages=external --log-level=warning --outfile=server/dist/app.mjs",
+        "server": "npm run server:build && node server/dist/app.mjs",
+        "typecheck": "node scripts/typecheck.mjs client && node scripts/typecheck.mjs server",
         "test:game": "vitest run",
         "test:game:watch": "vitest",
         "test:smoke": "vitest run tests/engine/gameLoop.test.ts",

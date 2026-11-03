@@ -10,15 +10,12 @@
 // ============================================================
 
 import { mkdirSync, writeFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { join, resolve } from 'path';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 const IS_DEV = process.env.NODE_ENV !== 'production';
-// __dirname = server/dist/server/game/ when compiled
-const LOGS_DIR = IS_DEV
-  ? join(__dirname, '..', '..', 'logs')        // server/dist/logs
-  : join(__dirname, '..', '..', '..', 'logs'); // project-root/logs
+// Resolved from the project root (cwd), not the module location — the server is bundled
+// into a single file, so __dirname-relative paths would move with the bundle.
+const LOGS_DIR = IS_DEV ? resolve('server/dist/logs') : resolve('logs');
 
 const DEV_WRITE_INTERVAL_MS = 30_000;
 

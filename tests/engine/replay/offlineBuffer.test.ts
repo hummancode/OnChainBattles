@@ -44,3 +44,36 @@ describe('SocketManager offline buffer', () => {
     sm.socket = null; sm.eventsRegistered = false;
   });
 });
+
+describe('SocketManager desync plumbing', () => {
+  function fakeSocket(sm: any) {
+    const sent: any[] = []; const handlers: Record<string, Function> = {};
+    sm.socket = { connected: true, emit: (ev: string, data: any) => sent.push({ ev, data }),
+      on: (ev: string, fn: Function) => { handlers[ev] = fn; }, once: () => {}, off: () => {}, io: { on: () => {} } };
+    sm.eventsRegistered = false; sm.seqCounter = 0; sm.actionBuffer = [];
+    sm.registerEvents();
+    return { sent, handlers };
+  }
+
+  it('attaches the post-action state hash to every outgoing action', () => {
+    const sm = SocketManager as any;
+    const { sent } = fakeSocket(sm);
+    SocketManager.setHashSource(() => 'abc123');
+    SocketManager.sendGameAction({ type: 'END_PLAY_PHASE' });
+    expect(sent.at(-1).data.action.postHash).toBe('abc123');
+    SocketManager.setHashSource(null);
+    SocketManager.sendGameAction({ type: 'END_ACT_PHASE' });
+    expect(sent.at(-1).data.action.postHash).toBeUndefined();
+    sm.socket = null; sm.eventsRegistered = false;
+  });
+
+  it('forwards resync_required to the active callbacks', () => {
+    const sm = SocketManager as any;
+    const { handlers } = fakeSocket(sm);
+    const reasons: string[] = [];
+    SocketManager.setCallbacks({ onResyncRequired: (r: string) => reasons.push(r) } as any);
+    handlers['resync_required']({ reason: 'State mismatch' });
+    expect(reasons).toEqual(['State mismatch']);
+    sm.socket = null; sm.eventsRegistered = false; sm.callbacks = null;
+  });
+});

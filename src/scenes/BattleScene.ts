@@ -30,7 +30,7 @@ import type { RejoinPayload } from '../../shared/types/NetworkEvents';
 import { setupHUDRefresh } from './battle/HUDRefreshCoordinator';
 import { createSelectionManager } from './battle/InputCoordinator';
 import { setupGameOverHandler } from './battle/GameOverHandler';
-import { boardHashFromCells } from '../game/utils/boardHash';
+import { engineStateHash } from '../game/utils/stateHash';
 import { GameLogger } from '../game/GameLogger';
 import { getCard } from '../game/data/CardRegistry';
 
@@ -59,6 +59,10 @@ export default class BattleScene extends Phaser.Scene {
   init(data: BattleSceneData) { this.sceneData = data; }
 
   async create() {
+    // Phaser emits 'shutdown' but never calls a scene's shutdown() method itself —
+    // without this hook none of the cleanup below ever ran (listeners piled up per match).
+    this.events.once('shutdown', () => this.shutdown());
+
     this.cameras.main.fadeIn(300, 0, 0, 0);
     const loadingText = this.add.text(640, 360, 'Loading battle...', { fontSize: '24px', color: '#aaaaaa' }).setOrigin(0.5);
 
@@ -78,8 +82,23 @@ export default class BattleScene extends Phaser.Scene {
     // The engine is rebuilt from server decks + action log before any renderer or
     // event bridge exists, so the replay is silent and the UI is painted once from state.
     const isRejoin = !SocketManager.isConnected() && !!GameState.roomCode && GameState.hasBattleSession();
+    const isResync = GameState.pendingResync && SocketManager.isConnected() && !!GameState.roomCode;
+    GameState.pendingResync = false;
     let rejoin: RejoinPayload | null = null;
-    if (isRejoin) {
+    if (isResync) {
+      // Desync recovery: same socket, ask the server for the authoritative state.
+      const syncText = this.add.text(640, 360, 'Re-synchronising with server...', { fontSize: '24px', color: '#FFAA00' }).setOrigin(0.5);
+      SocketManager.setCallbacks({
+        onRoomCreated: () => {}, onRoomJoined: () => {}, onOpponentJoined: () => {},
+        onOpponentAction: () => {}, onOpponentDisconnected: () => {},
+        onError: (msg) => console.error('[BattleScene] Resync error:', msg),
+      });
+      const pending = SocketManager.waitForRejoin();
+      SocketManager.requestResync();
+      rejoin = await pending;
+      syncText.destroy();
+      if (!rejoin) { this.abandonRejoin(); return; }
+    } else if (isRejoin) {
       const reconnectText = this.add.text(640, 360, 'Reconnecting to match...', { fontSize: '24px', color: '#FFAA00' }).setOrigin(0.5);
       SocketManager.connectForRejoin({
         onRoomCreated: () => {}, onRoomJoined: () => {}, onOpponentJoined: () => {},
@@ -114,6 +133,8 @@ export default class BattleScene extends Phaser.Scene {
         console.error('[BattleScene] Rejoin replay diverged — state may be out of sync');
       }
     }
+    // Every outgoing action carries our post-action state hash → server detects desyncs.
+    SocketManager.setHashSource(() => engineStateHash(this.engine));
     this.bridgeUnsub = wireEngineToEventBus(this.engine, localPlayerIndex);
 
     // ─── Game logger (with render profiler) ────────
@@ -179,11 +200,9 @@ export default class BattleScene extends Phaser.Scene {
       if (phase === 'PLAY') {
         this.engine.endPlayPhase();
         SocketManager.sendGameAction({ type: 'END_PLAY_PHASE' });
-        SocketManager.sendStateHash(boardHashFromCells(this.engine.getState().board), this.engine.getState().turn?.turnNumber ?? 0);
       } else if (phase === 'ACT') {
         this.engine.endActPhase();
         SocketManager.sendGameAction({ type: 'END_ACT_PHASE' });
-        SocketManager.sendStateHash(boardHashFromCells(this.engine.getState().board), this.engine.getState().turn?.turnNumber ?? 0);
       }
     });
 
@@ -219,7 +238,7 @@ export default class BattleScene extends Phaser.Scene {
       // Engine already rebuilt above — paint it and resume.
       syncUIFromEngine(this.engine, localPlayerIndex, this.handRenderer);
       resumePendingAfterRejoin(this.engine, localPlayerIndex);
-      this.showToast('Reconnected — match restored', '#00FF88');
+      this.showToast(isResync ? 'Re-synchronised with server' : 'Reconnected — match restored', '#00FF88');
     } else if (SocketManager.isConnected()) {
       // Multiplayer (fresh or rejoined before battle start): wait for both players.
       // Decks come from the server so both engines are built identically.
@@ -247,6 +266,7 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   shutdown() {
+    SocketManager.setHashSource(null);
     // Dev-only: send final state report before shutdown (host only)
     if (import.meta.env.DEV && SocketManager.isConnected() && (GameState.playerIndex ?? 0) === 0) {
       this.sendStateReport('GAME_END');

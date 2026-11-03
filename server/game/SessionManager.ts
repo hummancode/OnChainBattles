@@ -14,7 +14,8 @@ import { verifyToken } from '../api/middleware.js';
 import { validateDeck } from '../validation/DeckValidator.js';
 import { recordMatch } from '../api/matchService.js';
 import { UNITS_ONLY_DECK_IDS } from '../../src/game/data/DeckDefinitions.js';
-import type { Room } from '../../shared/types/NetworkEvents.js';
+import type { Room, GameAction } from '../../shared/types/NetworkEvents.js';
+import { MatchSimulation } from './MatchSimulation.js';
 
 type TypedServer = Server<ClientToServerEvents, ServerToClientEvents>;
 type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -23,6 +24,12 @@ const log = new Logger('Session');
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
 export class SessionManager {
+  /** Extension points (persistence, turn timer) — set by app.ts / tests. */
+  hooks: {
+    onActionCommitted?: (roomCode: string, room: Room) => void;
+    onSettled?: (roomCode: string, room: Room, result: { winnerIndex: number; reason: string; turns: number }) => void;
+  } = {};
+
   constructor(
     private io: TypedServer,
     private rooms: RoomManager,
@@ -46,7 +53,9 @@ export class SessionManager {
       if (room.battleReadyCount === 2) {
         // Both clients build their engine from THESE decks — never their own local copy —
         // so the two simulations are identical (and a rejoining client can rebuild it).
-        this.io.to(roomCode).emit('both_battle_ready', { decks: SessionManager.battleDecks(room) });
+        const decks = SessionManager.battleDecks(room);
+        room.simulation = new MatchSimulation(room.gameSeed ?? 0, decks);
+        this.io.to(roomCode).emit('both_battle_ready', { decks });
 
         // Start server-side game log
         if (!room.gameLog) {
@@ -57,40 +66,35 @@ export class SessionManager {
           );
         }
 
-        for (const queued of room.actionQueue) {
-          room.actionLog.push({ ...queued });
-          socket.to(roomCode).emit('opponent_action', queued);
-          log.debug(`Flushed queued action: ${queued.type}`);
-        }
+        const queued = room.actionQueue;
         room.actionQueue = [];
+        for (const q of queued) {
+          const r = this.commitAction(roomCode, room, q, q.by ?? -1);
+          if (!r.ok) log.warn(`Dropped queued ${q.type}: ${r.reason}`);
+        }
       }
     });
 
     socket.on('game_action', ({ roomCode, action }) => {
       const room = this.rooms.getRoom(roomCode);
       if (!room) return;
+      const playerIndex = room.players.findIndex(p => p.id === socket.id);
+      if (playerIndex === -1) return;
 
-      // ── Layer -1: Game-over guard ─────────────────────
-      if (room.settled || room.gameOverClaims.length > 0) {
-        log.warn(`REJECTED ${action.type} in ${roomCode} — game over (settled=${room.settled}, claims=${room.gameOverClaims.length})`);
+      if (room.settled) {
+        log.warn(`REJECTED ${action.type} in ${roomCode} — match settled`);
         return;
       }
 
       if (room.battleReadyCount < 2) {
-        const qIdx = room.players.findIndex(p => p.id === socket.id);
-        if (qIdx === -1) return;
-        room.globalSeq += 1;
-        action.serverSeq = room.globalSeq;
-        action.by = qIdx;
+        // Legacy: queued until both are ready, validated by the simulation at flush time.
+        action.by = playerIndex;
         room.actionQueue.push(action);
         log.debug(`Queued action (opponent not ready): ${action.type}`);
         return;
       }
 
-      // ── Layer 0: Sequence validation ─────────────────────
-      const playerIndex = room.players.findIndex(p => p.id === socket.id);
-      if (playerIndex === -1) return;
-
+      // ── Sequence (replay protection) ───────────────────
       if (action.seqNum != null) {
         if (action.seqNum <= room.lastSeqNum[playerIndex]) {
           log.warn(`REJECTED ${action.type} from P${playerIndex + 1}: seqNum ${action.seqNum} <= last ${room.lastSeqNum[playerIndex]}`);
@@ -99,62 +103,23 @@ export class SessionManager {
         room.lastSeqNum[playerIndex] = action.seqNum;
       }
 
-      // ── Layer 1: Turn ownership validation ──────────────
-      if (playerIndex !== room.currentTurnPlayer) {
-        log.warn(`REJECTED ${action.type} from P${playerIndex + 1} — not their turn (P${room.currentTurnPlayer + 1}'s turn)`);
+      const postHash = action.postHash;
+      delete action.postHash;
+
+      // ── Authoritative validation: apply to the server's own engine ──
+      const res = this.commitAction(roomCode, room, action, playerIndex, socket);
+      if (!res.ok) {
+        log.warn(`REJECTED ${action.type} from P${playerIndex + 1} in ${roomCode}: ${res.reason}`);
+        // The client already applied it locally → its engine is now ahead of the truth.
+        socket.emit('resync_required', { reason: `Action rejected: ${res.reason}` });
         return;
       }
 
-      // ── Layer 2: Phase-appropriate action validation ────
-      const playPhaseActions = ['PLAY_CARD', 'END_PLAY_PHASE', 'SELECT_POSITION', 'SELECT_TARGET', 'SELECT_DISCARD', 'CANCEL_PENDING'];
-      const actPhaseActions  = ['MOVE_UNIT', 'ATTACK_UNIT', 'END_ACT_PHASE', 'SELECT_POSITION', 'SELECT_TARGET', 'SELECT_DISCARD', 'CANCEL_PENDING'];
-
-      if (room.currentPhase === 'PLAY' && !playPhaseActions.includes(action.type)) {
-        log.warn(`REJECTED ${action.type} during PLAY phase`);
-        return;
+      // ── Desync detection: client's state after the action vs ours ──
+      if (postHash && res.hash && postHash !== res.hash) {
+        log.warn(`STATE MISMATCH in ${roomCode} after serverSeq=${action.serverSeq} (P${playerIndex + 1}): client=${postHash} server=${res.hash}`);
+        socket.emit('resync_required', { reason: 'State mismatch' });
       }
-      if (room.currentPhase === 'ACT' && !actPhaseActions.includes(action.type)) {
-        log.warn(`REJECTED ${action.type} during ACT phase`);
-        return;
-      }
-
-      // ── Layer 2: Field validation ───────────────────────
-      if (action.type === 'PLAY_CARD' && (action.handIndex == null || action.col == null || action.row == null)) {
-        log.warn('REJECTED PLAY_CARD: missing fields');
-        return;
-      }
-      if (action.type === 'SELECT_DISCARD' && action.handIndex == null) {
-        log.warn('REJECTED SELECT_DISCARD: missing handIndex');
-        return;
-      }
-      if (action.type === 'MOVE_UNIT' && (action.fromCol == null || action.fromRow == null || action.col == null || action.row == null)) {
-        log.warn('REJECTED MOVE_UNIT: missing fields');
-        return;
-      }
-      if (action.type === 'ATTACK_UNIT' && (action.fromCol == null || action.fromRow == null || action.targetCol == null || action.targetRow == null)) {
-        log.warn('REJECTED ATTACK_UNIT: missing fields');
-        return;
-      }
-
-      // ── Track phase/turn transitions ────────────────────
-      if (action.type === 'END_PLAY_PHASE') {
-        room.currentPhase = 'ACT';
-      } else if (action.type === 'END_ACT_PHASE') {
-        room.currentPhase = 'PLAY';
-        room.currentTurnPlayer = room.currentTurnPlayer === 0 ? 1 : 0;
-      }
-
-      room.actionCount += 1;
-      room.globalSeq += 1;
-      action.serverSeq = room.globalSeq;
-      action.by = playerIndex;
-      room.actionLog.push({ ...action });
-
-      // Log action before relay
-      room.gameLog?.record(playerIndex, action);
-
-      socket.to(roomCode).emit('opponent_action', action);
-      log.debug(`Relayed ${action.type} in ${roomCode} (action #${room.actionCount}, serverSeq=${room.globalSeq})`);
     });
 
     socket.on('game_over', async ({ roomCode, winnerIndex, totalTurns }) => {
@@ -164,6 +129,13 @@ export class SessionManager {
 
       const playerIndex = room.players.findIndex(p => p.id === socket.id);
       if (playerIndex === -1) return;
+
+      // Server-authoritative rooms: the result comes from the server's engine (settled in
+      // commitAction). Client claims are informational only — they can't decide a payout.
+      if (this.sim(room)) {
+        log.info(`game_over claim from P${playerIndex + 1} in ${roomCode} (winner=${winnerIndex}) — ignored, engine decides`);
+        return;
+      }
 
       // -1 = draw (both Kings destroyed in the same exchange)
       if (winnerIndex !== 0 && winnerIndex !== 1 && winnerIndex !== -1) {
@@ -184,69 +156,16 @@ export class SessionManager {
 
       room.gameOverClaims.push({ playerIndex, claimedWinner: winnerIndex });
       room.gameLog?.record(playerIndex, { type: 'GAME_OVER', claimedWinner: winnerIndex });
-      room.gameLog?.flush();
-      log.info(`game_over claim from P${playerIndex + 1}: winner=P${winnerIndex + 1} (${room.gameOverClaims.length}/2 claims)`);
-
-      const hasWallets = room.players.some(p => p.wallet !== null);
-      if (!hasWallets) {
-        // Free-play: still wait for both claims before recording
-        if (room.gameOverClaims.length < 2) {
-          log.info(`Free-play game_over claim ${room.gameOverClaims.length}/2 in ${roomCode}`);
-          return;
-        }
-        const fc0 = room.gameOverClaims.find(c => c.playerIndex === 0);
-        const fc1 = room.gameOverClaims.find(c => c.playerIndex === 1);
-        const agreedWinner = (fc0 && fc1 && fc0.claimedWinner === fc1.claimedWinner)
-          ? fc0.claimedWinner : winnerIndex;
-        log.info(`Free-play mode game_over in ${roomCode}, ${agreedWinner === -1 ? 'DRAW' : `winner: P${agreedWinner + 1}`}`);
-        try { recordMatch({ roomCode, room, winnerIndex: agreedWinner, totalTurns: totalTurns ?? 0 }); }
-        catch (err: unknown) { log.error('Failed to record match:', err); }
-        if (room.status) room.status = 'finished';
-        room.settled = true;
-        return;
-      }
-
+      log.info(`Legacy game_over claim from P${playerIndex + 1}: ${winnerIndex} (${room.gameOverClaims.length}/2)`);
       if (room.gameOverClaims.length < 2) return;
 
-      const claim0 = room.gameOverClaims.find(c => c.playerIndex === 0)!;
-      const claim1 = room.gameOverClaims.find(c => c.playerIndex === 1)!;
-
-      room.settled = true;
-
-      if (claim0.claimedWinner === -1 && claim1.claimedWinner === -1) {
-        // Agreed draw → refund both stakes
-        try { recordMatch({ roomCode, room, winnerIndex: -1, totalTurns: totalTurns ?? 0 }); }
-        catch (err: unknown) { log.error('Failed to record match:', err); }
-        if (room.status) room.status = 'finished';
-        log.info(`Both agree: DRAW in ${roomCode}. Refunding stakes.`);
-        try {
-          const result = await this.payout.refundTie(roomCode);
-          this.io.to(roomCode).emit('payout_result', result);
-        } catch (err) {
-          log.error(`Draw refund failed for ${roomCode}:`, err);
-          this.io.to(roomCode).emit('payout_result', { success: false, error: 'Draw refund failed' });
-        }
-      } else if (claim0.claimedWinner === claim1.claimedWinner) {
-        // Record match to database
-        try { recordMatch({ roomCode, room, winnerIndex: claim0.claimedWinner, totalTurns: totalTurns ?? 0 }); }
-        catch (err: unknown) { log.error('Failed to record match:', err); }
-        if (room.status) room.status = 'finished';
-
-        const winner = room.players[claim0.claimedWinner];
-        if (winner?.wallet) {
-          log.info(`Both agree: P${claim0.claimedWinner + 1} (${winner.name}) wins room ${roomCode}`);
-          const result = await this.payout.payoutWinner(roomCode, winner.wallet);
-          this.io.to(roomCode).emit('payout_result', result);
-        }
+      const c0 = room.gameOverClaims.find(c => c.playerIndex === 0)!;
+      const c1 = room.gameOverClaims.find(c => c.playerIndex === 1)!;
+      if (c0.claimedWinner === c1.claimedWinner) {
+        await this.settle(roomCode, room, { winnerIndex: c0.claimedWinner, reason: 'CLAIMED', turns: totalTurns ?? 0 });
       } else {
-        log.warn(`DISPUTE in ${roomCode}: P1 says P${claim0.claimedWinner + 1}, P2 says P${claim1.claimedWinner + 1}. Refunding.`);
-        try {
-          const result = await this.payout.refundTie(roomCode);
-          this.io.to(roomCode).emit('payout_result', result);
-        } catch (err) {
-          log.error(`Refund failed for ${roomCode}:`, err);
-          this.io.to(roomCode).emit('payout_result', { success: false, error: 'Dispute refund failed' });
-        }
+        log.warn(`DISPUTE in ${roomCode}: P1 says ${c0.claimedWinner}, P2 says ${c1.claimedWinner}. Refunding.`);
+        await this.settle(roomCode, room, { winnerIndex: -1, reason: 'DISPUTE', turns: totalTurns ?? 0 });
       }
     });
 
@@ -255,26 +174,15 @@ export class SessionManager {
       if (!room) return;
       const playerIndex = room.players.findIndex(p => p.id === socket.id);
       if (playerIndex === -1) return;
+      const sim = this.sim(room);
+      if (!sim) return;
 
-      // Cap pending hashes to prevent memory leak if one player stops sending
-      if (room.pendingHashes.size > 50) {
-        const oldest = room.pendingHashes.keys().next().value;
-        if (oldest !== undefined) room.pendingHashes.delete(oldest);
-      }
-
-      if (!room.pendingHashes.has(afterGlobalSeq)) {
-        room.pendingHashes.set(afterGlobalSeq, []);
-      }
-      const entries = room.pendingHashes.get(afterGlobalSeq)!;
-      entries.push({ playerIndex, hash });
-
-      if (entries.length >= 2) {
-        if (entries[0].hash !== entries[1].hash) {
-          log.warn(`STATE MISMATCH in ${roomCode} at globalSeq=${afterGlobalSeq}: P1=${entries[0].hash} P2=${entries[1].hash}`);
-        } else {
-          log.debug(`State sync OK in ${roomCode} at globalSeq=${afterGlobalSeq}: ${entries[0].hash}`);
-        }
-        room.pendingHashes.delete(afterGlobalSeq);
+      // afterGlobalSeq = serverSeq of the opponent action the client just replayed.
+      const expected = sim.hashAt(afterGlobalSeq);
+      if (expected === undefined) return; // too old / unknown — nothing to compare
+      if (expected !== hash) {
+        log.warn(`STATE MISMATCH in ${roomCode} at serverSeq=${afterGlobalSeq} (P${playerIndex + 1}): client=${hash} server=${expected}`);
+        socket.emit('resync_required', { reason: 'State mismatch' });
       }
     });
 
@@ -329,6 +237,80 @@ export class SessionManager {
         log.info(`Both decks ready in ${roomCode}`);
       }
     });
+  }
+
+  private sim(room: Room): MatchSimulation | null {
+    return (room.simulation as MatchSimulation | undefined) ?? null;
+  }
+
+  /**
+   * The single path by which an action becomes part of the match: validate on the server
+   * engine, stamp, log, relay, then settle if it ended the game. Used for player actions
+   * and for server-generated ones (turn timeout).
+   * @param from  sender socket (relay excludes it) — omit to broadcast to the whole room.
+   */
+  commitAction(
+    roomCode: string, room: Room, action: GameAction, byPlayer: number, from?: TypedSocket,
+  ): { ok: true; hash: string | null } | { ok: false; reason: string } {
+    const sim = this.sim(room);
+    if (sim) {
+      const r = sim.apply(action, byPlayer);
+      if (!r.ok) return r;
+    }
+
+    room.actionCount += 1;
+    room.globalSeq += 1;
+    action.serverSeq = room.globalSeq;
+    action.by = byPlayer;
+    room.actionLog.push({ ...action });
+    room.gameLog?.record(byPlayer, action);
+    const hash = sim ? sim.recordHash(room.globalSeq) : null;
+
+    if (sim) {
+      room.currentTurnPlayer = sim.activePlayer;
+      room.currentPhase = sim.phase === 'ACT' ? 'ACT' : 'PLAY';
+    }
+
+    if (from) from.to(roomCode).emit('opponent_action', action);
+    else this.io.to(roomCode).emit('opponent_action', action);
+    log.debug(`Committed ${action.type} by P${byPlayer + 1} in ${roomCode} (serverSeq=${room.globalSeq})`);
+
+    this.hooks.onActionCommitted?.(roomCode, room);
+
+    if (sim?.result && !room.settled) {
+      void this.settle(roomCode, room, sim.result);
+    }
+    return { ok: true, hash };
+  }
+
+  /** Record the result, pay out / refund, and tell both clients. Idempotent. */
+  async settle(roomCode: string, room: Room, result: { winnerIndex: number; reason: string; turns: number }): Promise<void> {
+    if (room.settled) return;
+    room.settled = true;
+    if (room.status) room.status = 'finished';
+    const { winnerIndex } = result;
+    log.info(`SETTLED ${roomCode}: ${winnerIndex === -1 ? 'DRAW' : `P${winnerIndex + 1} wins`} (${result.reason}, ${result.turns} turns)`);
+
+    room.gameLog?.record(winnerIndex, { type: 'SETTLED', winnerIndex, reason: result.reason });
+    room.gameLog?.flush();
+    try { recordMatch({ roomCode, room, winnerIndex, totalTurns: result.turns }); }
+    catch (err: unknown) { log.error('Failed to record match:', err); }
+    this.hooks.onSettled?.(roomCode, room, result);
+    this.io.to(roomCode).emit('match_settled', { winnerIndex, reason: result.reason, turns: result.turns });
+
+    const hasWallets = room.players.some(p => p.wallet !== null);
+    if (!hasWallets) return;
+    try {
+      const payout = winnerIndex === -1
+        ? await this.payout.refundTie(roomCode)
+        : room.players[winnerIndex]?.wallet
+          ? await this.payout.payoutWinner(roomCode, room.players[winnerIndex].wallet!)
+          : { success: false, error: 'Winner has no wallet' };
+      this.io.to(roomCode).emit('payout_result', payout);
+    } catch (err) {
+      log.error(`Payout failed for ${roomCode}:`, err);
+      this.io.to(roomCode).emit('payout_result', { success: false, error: 'Payout failed' });
+    }
   }
 
   /** 30s: long enough for a full page reload (asset preload + login redirect + rejoin). */
@@ -414,6 +396,7 @@ export class SessionManager {
 
     // Cancel the grace period timer and countdown interval
     const timer = room.disconnectTimers.get(playerIndex);
+    const wasDisconnected = !!timer;
     if (timer) {
       clearTimeout(timer);
       room.disconnectTimers.delete(playerIndex);
@@ -431,12 +414,13 @@ export class SessionManager {
       roomCode,
       playerIndex,
       gameSeed: room.gameSeed ?? 0,
-      decks: battleStarted ? SessionManager.battleDecks(room) : null,
+      decks: battleStarted ? (this.sim(room)?.decks ?? SessionManager.battleDecks(room)) : null,
       actionLog: room.actionLog.map(a => ({ ...a })),
       lastSeqNum: room.lastSeqNum[playerIndex],
       battleStarted,
     });
-    socket.to(roomCode).emit('opponentReconnected');
+    // A resync on a live socket is not a reconnect — don't flash "Opponent reconnected!"
+    if (wasDisconnected) socket.to(roomCode).emit('opponentReconnected');
     log.info(`${playerName} rejoined room: ${roomCode}`);
 
     // NOTE: handlers are NOT re-registered here — app.ts already calls

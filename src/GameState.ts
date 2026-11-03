@@ -40,6 +40,8 @@ class GameStateClass {
     roomCode: string = "";
     roomAction: RoomAction = RoomAction.Create;
     playerIndex: number = 0;     // 0 = P1/creator, 1 = P2/joiner
+    /** Set before restarting BattleScene to rebuild the match from the server (desync recovery). */
+    pendingResync: boolean = false;
     gameSeed: number = 0;        // Shared shuffle seed from server
 
     // ─── Match ────────────────────────────────────────────────

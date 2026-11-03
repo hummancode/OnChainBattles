@@ -15,6 +15,7 @@ import { GameEngine } from '../../src/game/GameEngine';
 import GameState from '../../src/GameState';
 import { applyAction, replayLog } from '../../src/network/ActionApplier';
 import { getCard } from '../../src/game/data/CardRegistry';
+import { engineStateHash } from '../../src/game/utils/stateHash';
 import type { GameAction, RejoinPayload } from '../../shared/types/NetworkEvents.js';
 import '../engine/helpers/TestHarness';
 
@@ -79,13 +80,20 @@ describe('Rejoin end-to-end', () => {
     const seq = [0, 0];
 
     // Each engine applies the opponent's relayed actions
-    const listen = (i: number, s: ClientSocket) => s.on('opponent_action', (act: GameAction) => applyAction(engines[i], act));
+    const resyncs: string[] = [];
+    const listen = (i: number, s: ClientSocket) => {
+      s.on('opponent_action', (act: GameAction) => {
+        applyAction(engines[i], act);
+        s.emit('state_hash', { roomCode: ROOM, hash: engineStateHash(engines[i]), afterGlobalSeq: act.serverSeq! });
+      });
+      s.on('resync_required', (d: any) => resyncs.push(`P${i + 1}: ${d.reason}`));
+    };
     listen(0, a); listen(1, b);
 
     // A player acts locally then sends (exactly like InputCoordinator)
     const act = async (i: number, action: GameAction) => {
       expect(applyAction(engines[i], action)).toBe(true);
-      sockets[i].emit('game_action', { roomCode: ROOM, action: { ...action, seqNum: ++seq[i] } });
+      sockets[i].emit('game_action', { roomCode: ROOM, action: { ...action, seqNum: ++seq[i], postHash: engineStateHash(engines[i]) } });
       await sleep(15);
     };
     const playTurn = async () => {
@@ -94,6 +102,9 @@ describe('Rejoin end-to-end', () => {
       const pos = engines[i].getValidDeployPositions()[0];
       const idx = st.players[i].hand.findIndex(id => getCard(id).cost <= st.modifiers[i].legPool);
       if (pos && idx >= 0) await act(i, { type: 'PLAY_CARD', handIndex: idx, col: pos.col, row: pos.row });
+      const pk = engines[i].getPendingKind();
+      if (pk === 'DISCARD') await act(i, { type: 'SELECT_DISCARD', handIndex: 0 });
+      else if (pk) await act(i, { type: 'CANCEL_PENDING' });
       await act(i, { type: 'END_PLAY_PHASE' });
       await act(i, { type: 'END_ACT_PHASE' });
     };
@@ -121,6 +132,13 @@ describe('Rejoin end-to-end', () => {
     listen(1, b2);
     for (let t = 0; t < 3; t++) await playTurn();
     expect(fingerprint(engines[1])).toBe(fingerprint(engines[0]));
+
+    // Client and server engines agreed on every single action (postHash + state_hash)
+    await sleep(50);
+    expect(resyncs).toEqual([]);
+    // And the server's own engine matches both clients
+    expect(rooms.getRoom(ROOM)!.actionLog.length).toBeGreaterThan(20);
+    expect(engineStateHash((rooms.getRoom(ROOM)!.simulation as any).engineForTests)).toBe(engineStateHash(engines[0]));
 
     a.disconnect(); b2.disconnect();
   });

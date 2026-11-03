@@ -21,6 +21,10 @@ export interface GameAction {
   serverSeq?: number;
   /** Server-assigned: index of the player who sent this action (0 | 1). */
   by?: number;
+  /** Client-computed engineStateHash after applying the action locally (stripped by the server). */
+  postHash?: string;
+  /** Server-generated (e.g. turn timeout) rather than sent by a player. */
+  auto?: boolean;
 }
 
 /** Sent to a player who rejoins a room — everything needed to rebuild the match. */
@@ -139,6 +143,10 @@ export interface ServerToClientEvents {
   opponentAbandon:      () => void;
   disconnectCountdown:  (data: { remaining: number }) => void;
   rejoinSuccess:        (data: RejoinPayload) => void;
+  /** Server engine disagrees with this client (rejected action / hash mismatch) — rebuild from rejoin. */
+  resync_required:      (data: { reason: string }) => void;
+  /** Authoritative result from the server engine. winnerIndex -1 = draw. */
+  match_settled:        (data: { winnerIndex: number; reason: string; turns: number }) => void;
   hostDepositConfirmed: () => void;
   bothCryptoReady:      () => void;
   payout_result:        (data: PayoutResult) => void;
@@ -254,6 +262,8 @@ export interface Room {
   battleReadyCount: number;
   /** Player indices that sent player_ready (dedupes repeats after a refresh). */
   readyPlayers?: Set<number>;
+  /** Server-side MatchSimulation (server/game/MatchSimulation.ts) — typed as unknown to keep shared/ server-agnostic. */
+  simulation?: unknown;
   actionQueue: GameAction[];
   /** Authoritative ordered log of every accepted action — replayed on rejoin. */
   actionLog: GameAction[];

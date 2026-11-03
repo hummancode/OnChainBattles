@@ -12,6 +12,7 @@
 import { UNITS_ONLY_DECK_IDS } from '../game/data/DeckDefinitions';
 import { getCard } from '../game/data/CardRegistry';
 import GameState from '../GameState';
+import { setDefaultDeckProvider } from '../game/DefaultDeck';
 import { AuthManager } from '../auth/AuthManager';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
@@ -139,3 +140,6 @@ class DeckLoaderClass {
 }
 
 export const DeckLoader = new DeckLoaderClass();
+
+// Engine reads the local deck through this provider (looked up at call time, so test patches of DeckLoader.get still apply).
+setDefaultDeckProvider(() => DeckLoader.get());

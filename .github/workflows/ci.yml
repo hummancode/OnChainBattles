@@ -16,8 +16,10 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - name: Type check
-        run: npx tsc --noEmit
+      - name: Type check (client + server, baseline unused-var warnings ignored)
+        run: npm run typecheck
+      - name: Server bundle builds
+        run: npx esbuild server/app.ts --bundle --platform=node --format=esm --packages=external --log-level=warning --outfile=server/dist/app.mjs
       - name: Game logic tests
         run: npm run test:game
       - name: Smoke tests
