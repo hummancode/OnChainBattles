@@ -32,6 +32,7 @@ export interface IGameEngineAPI {
   attackUnit(fromCol: number, fromRow: number, targetCol: number, targetRow: number): void;
   selectTarget(col: number, row: number): void;
   selectPosition(col: number, row: number): void;
+  selectColumn(col: number): void;
   selectHandCard(handIndex: number): void;
   cancelPending(): void;
   isAwaitingInput(): boolean;
@@ -83,7 +84,11 @@ export class SelectionManager {
    */
   onBoardCellClicked(col: number, row: number): void {
     if (this.engine.isAwaitingInput()) {
-      if (this.pendingKind === 'POSITION') {
+      if (this.pendingKind === 'COLUMN') {
+        // Any cell picks its column (Earthquake)
+        this.engine.selectColumn(col);
+        this.clearSelection();
+      } else if (this.pendingKind === 'POSITION') {
         // Validate click is on a valid position
         if (this.pendingValidPositions.some(p => p.col === col && p.row === row)) {
           this.engine.selectPosition(col, row);

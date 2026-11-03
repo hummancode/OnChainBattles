@@ -6,7 +6,6 @@
 - Pre-existing 16 unused variable TS warnings (baseline, don't fix — see CLAUDE.md)
 
 ### Network / Reconnection
-- `selectColumn` not networked yet (no cards use COLUMN pending in current card pool)
 - Rejoin falls back to matching by player NAME when there is no guestSessionId (logged-in players) — should match by authenticated playerId
 - Server engine trusts the client-side deck validation path for the legacy RoomScene flow (decks are validated in `submitDeck`, but unsubmitted decks silently become the default)
 - Refresh during an optional pending interaction (Priest/Scout target etc.) cancels it on both clients; the card cost is not refunded

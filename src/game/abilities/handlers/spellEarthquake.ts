@@ -9,7 +9,7 @@ function spellEarthquake(ctx: AbilityContext): AbilityResult {
     owner:          ctx.owner,
     sourceCardId:   ctx.cardId,
     sourceAbility:  AbilityType.SPELL_EARTHQUAKE,
-    reason:         'Choose a column (A\u2013F) to strike with the Earthquake.',
+    reason:         'Choose a column (A\u2013G) to strike with the Earthquake.',
     deferredEvents: [],
   };
   return { events: [], pending };

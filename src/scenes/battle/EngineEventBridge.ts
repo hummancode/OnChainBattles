@@ -4,7 +4,7 @@
 // Converts raw engine events into UI-adapted payloads.
 // ============================================================
 
-import { EventBus } from '../../events/EventBus';
+import { EventBus, EV } from '../../events/EventBus';
 import { getCard } from '../../game/data/CardRegistry';
 import type { CardRenderData } from '../../game/types/UITypes';
 import { Player } from '../../game/types/GameTypes';
@@ -207,6 +207,42 @@ export function wireEngineToEventBus(engine: any, localPlayerIndex: number): () 
         );
         EventBus.emit('UNIT_DIED', { col: event.col, row: event.row, instanceId: event.oldInstanceId });
         EventBus.emit('UNIT_PLACED', { data, col: event.col, row: event.row });
+        profiler.end();
+        break;
+      }
+
+      case 'UNIT_CAPTURED': {
+        // Re-render with the new owner (same pattern as UNIT_TRANSFORMED)
+        profiler.begin('UNIT_CAPTURED');
+        const st = engine.getState();
+        const u = st.board.find((c: any) => c.unit?.instanceId === event.instanceId)?.unit;
+        const data = toCardRenderData(event.cardId, event.instanceId, event.to, localPlayerIndex,
+          u?.currentDef, u?.currentAtk, u ? unitCanAct(u, st.turn?.activePlayer) : false);
+        EventBus.emit('UNIT_DIED', { col: event.col, row: event.row, instanceId: event.instanceId });
+        EventBus.emit('UNIT_PLACED', { data, col: event.col, row: event.row });
+        profiler.end();
+        break;
+      }
+
+      case 'UNIT_BANISHED': {
+        profiler.begin('UNIT_BANISHED');
+        EventBus.emit('UNIT_DIED', { col: event.col, row: event.row, instanceId: event.instanceId });
+        profiler.end();
+        break;
+      }
+
+      case 'CARD_RETURNED': {
+        // A spell went back to hand (refund) — same UI path as a draw.
+        profiler.begin('CARD_RETURNED');
+        if (event.player === (localPlayerIndex as Player)) {
+          const card = toCardRenderData(event.cardId, event.cardId, event.player, localPlayerIndex);
+          EventBus.emit('CARD_DRAWN', { card, handIndex: event.handIndex, deckRemaining: engine.getState().players[event.player]?.deckCount ?? 0 });
+          EventBus.emit(EV.UI_TOAST, { message: event.reason === 'NO_TARGET'
+            ? `${getCard(event.cardId).name} has no valid target — not played`
+            : `${getCard(event.cardId).name} cancelled — card and ${event.refundedLEG} LEG returned` });
+        } else {
+          EventBus.emit('OPPONENT_CARD_DRAWN', { handIndex: event.handIndex });
+        }
         profiler.end();
         break;
       }

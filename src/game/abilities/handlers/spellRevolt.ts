@@ -1,3 +1,4 @@
+import { AbilityType } from '../../types/AbilityTypes';
 import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
 import type { AbilityContext, AbilityResult } from '../types';
 import type { GameEvent } from '../../types/EventTypes';
@@ -39,3 +40,6 @@ function peasantRevoltHandler(ctx: AbilityContext): AbilityResult {
 }
 
 AbilityHandlerRegistry.register('peasantRevoltHandler', peasantRevoltHandler);
+// The card definition references AbilityType.SPELL_REVOLT — register under that key too
+// (it was only reachable as 'peasantRevoltHandler', so the spell silently did nothing).
+AbilityHandlerRegistry.register(AbilityType.SPELL_REVOLT, peasantRevoltHandler);

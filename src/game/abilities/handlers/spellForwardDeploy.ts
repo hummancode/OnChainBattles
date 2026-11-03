@@ -11,7 +11,7 @@ function spellForwardDeploy(ctx: AbilityContext): AbilityResult {
   for (let c = 0; c < ctx.board.cols; c++) {
     if (ctx.board.isEmpty(c, frontRow)) validPositions.push({ col: c, row: frontRow });
   }
-  if (validPositions.length === 0 || ctx.players[ctx.owner].hand.length === 0) return { events: [] };
+  if (validPositions.length === 0 || ctx.players[ctx.owner].hand.length === 0) return { events: [], noValidTarget: true };
 
   const pending: PendingCommand = {
     kind:           'POSITION',

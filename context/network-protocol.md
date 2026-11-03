@@ -8,6 +8,7 @@
 | ATTACK_UNIT | InputCoordinator | fromCol, fromRow, targetCol, targetRow | engine.attackUnit() |
 | SELECT_POSITION | InputCoordinator | col, row | engine.selectPosition() |
 | SELECT_TARGET | InputCoordinator | col, row | engine.selectTarget() |
+| SELECT_COLUMN | InputCoordinator | col | engine.selectColumn() (Earthquake) |
 | SELECT_DISCARD | InputCoordinator | handIndex | engine.selectDiscard() (mandatory — CANCEL_PENDING ignored) |
 | CANCEL_PENDING | InputCoordinator | (none) | engine.cancelPending() |
 
@@ -17,7 +18,7 @@ The server stamps each accepted action with `serverSeq` (global order) and `by` 
 | END_ACT_PHASE | BattleScene | (none) | engine.endActPhase() |
 
 ## Not yet networked
-- selectColumn (no cards use COLUMN pending in current card pool)
+Nothing — every PendingCommand kind (TARGET, POSITION, COLUMN, DISCARD) has a network action.
 
 ## Connection Flow (Legacy: MainMenuScene → RoomScene)
 ```

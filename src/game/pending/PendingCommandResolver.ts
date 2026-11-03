@@ -1,3 +1,4 @@
+import { getCard } from '../data/CardRegistry';
 // ============================================================
 // PendingCommandResolver.ts — Command resolution
 //
@@ -20,6 +21,8 @@ export type PendingSelection =
 /** Optional context for resolving commands that need board state. */
 export interface ResolveContext {
   board: IBoard;
+  /** Needed by Coup (caster's remaining LEG decides capture vs banish). */
+  mods?: readonly [{ legPool: number }, { legPool: number }];
 }
 
 /**
@@ -121,20 +124,18 @@ function resolveTarget(
     return;
   }
 
-  // ── Coup: banish target royal, spawn foot soldiers ──────────
+  // ── Coup: capture if caster's remaining LEG ≥ target's base cost, else banish ──
   if (ability === 'coupHandler') {
     if (!ctx?.board) return;
     const target = ctx.board.getUnitById(targetId);
     if (!target) return;
-    events.push({
-      type: 'UNIT_DIED',
-      instanceId: target.instanceId,
-      cardId: target.cardId,
-      owner: target.owner,
-      col: target.position.col,
-      row: target.position.row,
-      cause: 'COUP_BANISH',
-    } as GameEvent);
+    const remaining = ctx.mods?.[cmd.owner]?.legPool ?? 0;
+    const base = { col: target.position.col, row: target.position.row, instanceId: target.instanceId, cardId: target.cardId };
+    if (remaining >= getCard(target.cardId).cost) {
+      events.push({ type: 'UNIT_CAPTURED', ...base, from: target.owner, to: cmd.owner, permanent: true });
+    } else {
+      events.push({ type: 'UNIT_BANISHED', ...base, owner: target.owner });
+    }
     return;
   }
 
@@ -143,18 +144,14 @@ function resolveTarget(
     if (!ctx?.board) return;
     const target = ctx.board.getUnitById(targetId);
     if (!target) return;
-    // Emit a transform event that flips ownership
+    // Control until the caster's END phase (EndPhase.resolveTreasonReturns hands it back)
     events.push({
-      type: 'UNIT_TRANSFORMED',
-      oldInstanceId: target.instanceId,
-      newInstanceId: target.instanceId,
-      toCardId: target.cardId,
-      owner: cmd.owner,
-      col: target.position.col,
-      row: target.position.row,
-      newHP: target.currentDef,
-      newMaxHP: target.maxDef,
-    } as GameEvent);
+      type: 'UNIT_CAPTURED',
+      instanceId: target.instanceId, cardId: target.cardId,
+      from: target.owner, to: cmd.owner,
+      col: target.position.col, row: target.position.row,
+      permanent: false,
+    });
     return;
   }
 

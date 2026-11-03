@@ -10,5 +10,5 @@ export const EARTHQUAKE_DEF: CardDefinition = {
   abilities: [
     { type: AbilityType.SPELL_EARTHQUAKE, params: {} },
   ],
-  abilityText: 'Choose a column (A–F). All units in that column take 3 damage. Triggers Foot Soldier On Death.',
+  abilityText: 'Choose a column (A–G). All units in that column take 3 damage. Triggers Foot Soldier On Death.',
 };

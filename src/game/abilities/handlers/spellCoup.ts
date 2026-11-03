@@ -1,3 +1,4 @@
+import { AbilityType } from '../../types/AbilityTypes';
 import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
 import type { PendingCommand } from '../../pending/PendingCommand';
 import type { AbilityContext, AbilityResult } from '../types';
@@ -10,7 +11,7 @@ function coupHandler(ctx: AbilityContext): AbilityResult {
     getCard(u.cardId).allegiance === 'ROYAL' && u.cardId !== 'king'
   );
 
-  if (targets.length === 0) return { events: [] };
+  if (targets.length === 0) return { events: [], noValidTarget: true };
 
   const pending: PendingCommand = {
     kind:           'TARGET',
@@ -26,3 +27,6 @@ function coupHandler(ctx: AbilityContext): AbilityResult {
 }
 
 AbilityHandlerRegistry.register('coupHandler', coupHandler);
+// The card definition references AbilityType.SPELL_COUP — register under that key too
+// (it was only reachable as 'coupHandler', so the spell silently did nothing).
+AbilityHandlerRegistry.register(AbilityType.SPELL_COUP, coupHandler);

@@ -7,7 +7,7 @@
 // ─── Game Actions (relayed between players) ──────────────────
 
 export interface GameAction {
-  type: 'PLAY_CARD' | 'MOVE_UNIT' | 'ATTACK_UNIT' | 'END_PLAY_PHASE' | 'END_ACT_PHASE' | 'SELECT_POSITION' | 'SELECT_TARGET' | 'SELECT_DISCARD' | 'CANCEL_PENDING';
+  type: 'PLAY_CARD' | 'MOVE_UNIT' | 'ATTACK_UNIT' | 'END_PLAY_PHASE' | 'END_ACT_PHASE' | 'SELECT_POSITION' | 'SELECT_TARGET' | 'SELECT_COLUMN' | 'SELECT_DISCARD' | 'CANCEL_PENDING';
   handIndex?: number;
   col?: number;
   row?: number;

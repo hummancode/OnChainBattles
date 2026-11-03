@@ -617,6 +617,13 @@ export class OverlayRenderer {
         }
       }),
 
+      EventBus.on(EV.PENDING_COLUMN, (ev: any) => {
+        this.showTargetSelect({
+          prompt: `${ev.reason ?? 'Choose a column.'}  Click any square in that column.`,
+          mode: 'board',
+        }, () => {});
+      }),
+
       EventBus.on(EV.PENDING_DISCARD, (ev: any) => {
         this.showTargetSelect({
           prompt: `${ev.reason ?? 'Discard a card.'}  Click a card in your hand.`,

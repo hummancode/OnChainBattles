@@ -43,9 +43,13 @@ export function createSelectionManager(
       const before = engine.getState();
       const cardId = before.players[localPlayerIndex]?.hand[handIndex];
       const leg = before.modifiers[localPlayerIndex]?.legPool ?? 0;
+      let returned = false; // engine already explained (e.g. "no valid target") via CARD_RETURNED
+      const watch = (e: { type: string }) => { if (e.type === 'CARD_RETURNED') returned = true; };
+      engine.on(watch as any);
       const ok = engine.playCard(handIndex, col, row);
+      engine.off(watch as any);
       if (ok !== false) SocketManager.sendGameAction({ type: 'PLAY_CARD', handIndex, col, row });
-      else EventBus.emit(EV.UI_TOAST, {
+      else if (!returned) EventBus.emit(EV.UI_TOAST, {
         message: cardId && getCard(cardId).cost > leg ? `Not enough LEG (need ${getCard(cardId).cost}, have ${leg})` : "That card can't be played there",
       });
     },
@@ -70,6 +74,11 @@ export function createSelectionManager(
         engine.selectTarget(unit.instanceId);
         SocketManager.sendGameAction({ type: 'SELECT_TARGET', col, row });
       }
+    },
+    selectColumn: (col: number) => {
+      if (engine.getPendingKind() !== 'COLUMN') return;
+      engine.selectColumn(col);
+      SocketManager.sendGameAction({ type: 'SELECT_COLUMN', col });
     },
     selectPosition: (col: number, row: number) => {
       engine.selectPosition(col, row);

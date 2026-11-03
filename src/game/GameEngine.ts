@@ -42,7 +42,7 @@ import { opponent } from './GameContext';
 // Phase modules
 import { runDrawPhase } from './phases/DrawPhase';
 import { runLEGPhase } from './phases/LEGPhase';
-import { executePlayCard } from './phases/PlayPhase';
+import { executePlayCard, returnSpellToHand } from './phases/PlayPhase';
 import { executeMove, executeAttack } from './phases/ActPhase';
 import { runEndPhase } from './phases/EndPhase';
 
@@ -299,8 +299,12 @@ export class GameEngine implements IGameEngineAPI {
     if (!this.board.getUnitById(instanceId)) return;
     const cmd = this.pending;
     this.clearPending();
-    const events = resolvePending(cmd, { kind: 'TARGET', instanceId }, { board: this.board });
+    const events = resolvePending(cmd, { kind: 'TARGET', instanceId }, { board: this.board, mods: this.mods });
     for (const e of events) { this.applyEvent(e); this.emit(e); }
+    // Ownership changes / removals change auras (state-driven UI re-syncs from AURA_APPLIED)
+    if (events.some(e => e.type === 'UNIT_CAPTURED' || e.type === 'UNIT_BANISHED')) {
+      this.emit(this.auras.evaluateAuras(this.board, this.mods));
+    }
   }
 
   selectPosition(col: number, row: number): void {
@@ -350,8 +354,19 @@ export class GameEngine implements IGameEngineAPI {
     // DISCARD is a cost (War Horn: draw 2, THEN discard 1) — not skippable.
     if (this.pending.kind === 'DISCARD') return;
     console.log('[GameEngine] Pending interaction cancelled');
+    const refund = this.pending.refund;
     this.pending = null;
     this.status  = EngineStatus.IDLE;
+    if (refund) {
+      // Spell: take it back out of the discard pile and refund it.
+      const discard = this.players[this.activePlayer].discard;
+      const i = discard.lastIndexOf(refund.cardId);
+      if (i !== -1) discard.splice(i, 1);
+      returnSpellToHand(
+        { players: this.players, mods: this.mods, activePlayer: this.activePlayer, emit: (e) => this.emit(e) },
+        refund.cardId, refund.legCost, 'CANCELLED',
+      );
+    }
   }
 
   // ─────────────────────────────────────────────
@@ -548,6 +563,26 @@ export class GameEngine implements IGameEngineAPI {
           value: event.damage,
           targetInstanceId: event.targetInstanceId,
         });
+        break;
+      }
+
+      case 'UNIT_CAPTURED': {
+        const u = this.board.getUnitById(event.instanceId);
+        if (!u) break;
+        if (event.permanent) {
+          u.treasonOwner = null;
+          u.originalPos = null;
+        } else {
+          u.treasonOwner = event.from;                     // returned at the caster's END phase
+          u.originalPos = { ...u.position };
+        }
+        u.owner = event.to;
+        break;
+      }
+
+      case 'UNIT_BANISHED': {
+        // Gone from the game: no graveyard, no discard, no on-death triggers.
+        this.board.removeUnit(event.instanceId);
         break;
       }
 

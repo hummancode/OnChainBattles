@@ -35,7 +35,10 @@ export function getValidMoves(unit: Unit, board: Board): Position[] {
 
   // Custom pattern takes priority
   if (def.stats?.customMove) {
-    return resolveCustomPattern(unit, def.stats.customMove, board, false);
+    // Movement bonuses (War Horn) extend fixed patterns: every move reaches `bonus` more
+    // squares along its own direction. Penalties don't shrink patterns (unchanged rule).
+    const bonus = Math.max(0, unit.currentMovement - unit.baseMovement);
+    return resolveCustomPattern(unit, extendPattern(def.stats.customMove, bonus), board, false);
   }
 
   // Enum-based fallback
@@ -267,6 +270,26 @@ function isPathClear(
     }
   }
   return false; // every intermediate cell is occupied — fully blocked
+}
+
+/**
+ * Add, for each offset, `steps` further squares in that offset's direction
+ * (sign of dx/dy): (0,2)→(0,3), (-1,2)→(-2,3), (2,0)→(3,0). Original offsets are kept.
+ * Offsets are P1-relative; resolveCustomPattern flips dy for P2 as usual.
+ */
+export function extendPattern(pattern: CustomPattern, steps: number): CustomPattern {
+  if (steps <= 0) return pattern;
+  const seen = new Set(pattern.offsets.map(o => `${o.dx},${o.dy}`));
+  const offsets = [...pattern.offsets];
+  for (const o of pattern.offsets) {
+    const sx = Math.sign(o.dx), sy = Math.sign(o.dy);
+    for (let k = 1; k <= steps; k++) {
+      const n = { dx: o.dx + sx * k, dy: o.dy + sy * k };
+      const id = `${n.dx},${n.dy}`;
+      if (!seen.has(id)) { seen.add(id); offsets.push(n); }
+    }
+  }
+  return { ...pattern, offsets };
 }
 
 function resolveCustomPattern(

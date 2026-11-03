@@ -82,3 +82,47 @@ describe('War Horn spell', () => {
     expect((t.engine as any).mods[Player.P1].hasEffect('WAR_HORN_MOVEMENT')).toBe(false);
   });
 });
+
+describe('War Horn on fixed-pattern movers (Knight, Scout, Lancer, Messenger, Assassin)', () => {
+  function setup(cardId: string, col: number, row: number) {
+    const t = createTestEngineWithDeck(DECK);
+    const eng: any = t.engine;
+    const unit = eng.unitFactory.create(cardId, Player.P1, { col, row });
+    unit.isJustPlaced = false;
+    eng.board.placeUnit(unit);
+    return { t, eng, unit };
+  }
+  const key = (p: { col: number; row: number }) => `${p.col},${p.row}`;
+
+  it('each pattern move reaches one square further along its direction', () => {
+    const { eng, unit } = setup('knight', 3, 2);
+    const before = new Set(getValidMoves(unit, eng.board).map(key));
+    expect(before.has('3,4')).toBe(true);   // (0,+2)
+    expect(before.has('3,5')).toBe(false);
+
+    eng.mods[Player.P1].addTimedEffect({ type: 'WAR_HORN_MOVEMENT', duration: 1, value: 1 });
+    eng.auras.evaluateAuras(eng.board, eng.mods);
+    const after = new Set(getValidMoves(unit, eng.board).map(key));
+    expect(after.has('3,5')).toBe(true);    // (0,+2) extended → (0,+3)
+    expect(after.has('1,5')).toBe(true);    // (-1,+2) extended → (-2,+3)
+    for (const k of before) expect(after.has(k)).toBe(true); // original moves still allowed
+  });
+
+  it('extension is player-relative for P2', () => {
+    const t = createTestEngineWithDeck(DECK);
+    const eng: any = t.engine;
+    const unit = eng.unitFactory.create('lancer', Player.P2, { col: 3, row: 4 });
+    eng.board.placeUnit(unit);
+    eng.mods[Player.P2].addTimedEffect({ type: 'WAR_HORN_MOVEMENT', duration: 1, value: 1 });
+    eng.auras.evaluateAuras(eng.board, eng.mods);
+    const moves = new Set(getValidMoves(unit, eng.board).map(key));
+    expect(moves.has('3,1')).toBe(true);    // lancer (0,+2) forward for P2 = row-2 → extended row-3
+  });
+
+  it('without War Horn, fixed patterns are unchanged', () => {
+    const { eng, unit } = setup('messenger', 3, 3);
+    const moves = new Set(getValidMoves(unit, eng.board).map(key));
+    expect(moves.has('6,6')).toBe(false);   // (2,2) would extend to (3,3)
+    expect(moves.has('5,5')).toBe(true);
+  });
+});

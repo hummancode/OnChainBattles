@@ -68,7 +68,12 @@ function resolveTreasonReturns(ctx: GameContext): boolean {
     if (unit.treasonOwner !== null && unit.treasonOwner !== unit.owner) {
       resolved = true;
       const origPos = unit.originalPos ?? unit.position;
-      ctx.board.moveUnit(unit.instanceId, origPos.col, origPos.row);
+      // Return to the original square — unless it never left (moveUnit onto its own cell
+      // throws "occupied") or someone else now stands there (then it stays put).
+      const moved = origPos.col !== unit.position.col || origPos.row !== unit.position.row;
+      if (moved && !ctx.board.getUnit(origPos.col, origPos.row)) {
+        ctx.board.moveUnit(unit.instanceId, origPos.col, origPos.row);
+      }
       unit.owner = unit.treasonOwner;
       unit.treasonOwner = null;
       unit.originalPos = null;

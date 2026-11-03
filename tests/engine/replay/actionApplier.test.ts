@@ -123,3 +123,21 @@ describe('applyAction reports no-ops honestly (server validation relies on it)',
     expect(applyAction(t.engine, { type: 'END_PLAY_PHASE' })).toBe(false); // already in ACT
   });
 });
+
+describe('SELECT_COLUMN (Earthquake)', () => {
+  it('resolves the column pick identically on a replica engine', () => {
+    const DECK_EQ = [...DECK.slice(0, 30), 'earthquake'];
+    const a = createTestEngineWithDeck(DECK_EQ);
+    const b = createTestEngineWithDeck(DECK_EQ);
+    for (const t of [a, b]) { accumulate(t.engine, 5); injectHand(t.engine, Player.P1, ['earthquake']); }
+    for (const act of [{ type: 'PLAY_CARD', handIndex: 0 }, { type: 'SELECT_COLUMN', col: 3 }] as GameAction[]) {
+      expect(applyAction(a.engine, act)).toBe(true);
+      expect(applyAction(b.engine, act)).toBe(true);
+    }
+    expect(a.engine.getPendingKind()).toBeNull();
+    // Earthquake hit column 3 → both kings (col 3) took damage, identically
+    const hp = (e: any) => e.getState().board.filter((c: any) => c.unit?.cardId === 'king').map((c: any) => c.unit.currentDef);
+    expect(hp(a.engine)).toEqual(hp(b.engine));
+    expect(hp(a.engine).some((h: number) => h < 10)).toBe(true);
+  });
+});

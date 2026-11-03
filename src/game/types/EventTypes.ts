@@ -293,6 +293,38 @@ export interface EvDiseaseApplied {
   duration: number;
 }
 
+/** Ownership flip (Coup capture = permanent, Treason = until the caster's END phase). */
+export interface EvUnitCaptured {
+  type: 'UNIT_CAPTURED';
+  instanceId: string;
+  cardId: string;
+  from: Player;
+  to: Player;
+  col: number;
+  row: number;
+  permanent: boolean;
+}
+
+/** Removed from the game entirely — no graveyard, no discard, no on-death triggers (Coup). */
+export interface EvUnitBanished {
+  type: 'UNIT_BANISHED';
+  instanceId: string;
+  cardId: string;
+  owner: Player;
+  col: number;
+  row: number;
+}
+
+/** A played spell went back to the player's hand (no valid target, or its target choice was cancelled). */
+export interface EvCardReturned {
+  type: 'CARD_RETURNED';
+  player: Player;
+  cardId: string;
+  handIndex: number;          // where it now sits (always appended)
+  refundedLEG: number;
+  reason: 'NO_TARGET' | 'CANCELLED';
+}
+
 export interface EvWarHornSounded {
   type: 'WAR_HORN_SOUNDED';
   player: Player;            // All of this player's units gain +moveBonus this turn
@@ -336,6 +368,9 @@ export type GameEvent =
   | EvScoutResult
   | EvStructureSpawned
   | EvDiseaseApplied
-  | EvWarHornSounded;
+  | EvWarHornSounded
+  | EvCardReturned
+  | EvUnitCaptured
+  | EvUnitBanished;
 
 export type GameEventType = GameEvent['type'];

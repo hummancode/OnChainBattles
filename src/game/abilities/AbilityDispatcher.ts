@@ -44,6 +44,7 @@ export function resolveOnDeploy(
       const result = handler(ctx);
       combined.events.push(...result.events);
       if (result.pending && !combined.pending) combined.pending = result.pending;
+      if (result.noValidTarget) combined.noValidTarget = true;
     } catch (err) {
       console.error(`[AbilityDispatcher] Handler "${key}" threw for card "${cardId}":`, err);
     }

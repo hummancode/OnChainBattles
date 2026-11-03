@@ -10,5 +10,5 @@ export const WAR_HORN_DEF: CardDefinition = {
   abilities: [
     { type: AbilityType.SPELL_WAR_HORN, params: {} },
   ],
-  abilityText: 'Draw 2 cards, then discard 1. All your units gain +1 movement this turn.',
+  abilityText: 'Draw 2 cards, then discard 1. All your units gain +1 movement this turn (pattern movers reach 1 square further along each move).',
 };

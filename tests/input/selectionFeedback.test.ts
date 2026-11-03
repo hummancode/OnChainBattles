@@ -10,7 +10,7 @@ function adapter(over: Partial<IGameEngineAPI> = {}): IGameEngineAPI {
   return {
     getValidMoves: () => [], getValidAttacks: () => [], getValidDeployPositions: () => [{ col: 0, row: 0 }],
     playCard: () => {}, moveUnit: () => {}, attackUnit: () => {}, selectTarget: () => {}, selectPosition: () => {},
-    selectHandCard: () => {}, cancelPending: () => {}, isAwaitingInput: () => false,
+    selectHandCard: () => {}, selectColumn: () => {}, cancelPending: () => {}, isAwaitingInput: () => false,
     canAct: () => true, isPlayerUnit: () => true, isOccupied: () => true,
     getPhase: () => 'PLAY', getAttackRange: () => [], isMyTurn: () => true,
     ...over,
@@ -59,5 +59,20 @@ describe('SelectionManager feedback toasts', () => {
     sm.onBoardCellClicked(3, 0);
     expect(toasts).toEqual([]);
     unsub;
+  });
+});
+
+describe('COLUMN pending (Earthquake)', () => {
+  it('a board click during a COLUMN pending selects that column', () => {
+    const cols: number[] = [];
+    const sm = new SelectionManager({} as any, adapter({
+      isAwaitingInput: () => true,
+      selectColumn: (c: number) => cols.push(c),
+      selectTarget: () => { throw new Error('must not route a column pick to selectTarget'); },
+    } as any));
+    EventBus.emit(EV.PENDING_COLUMN, { reason: 'pick', } as any);
+    sm.onBoardCellClicked(4, 2);
+    expect(cols).toEqual([4]);
+    sm.destroy?.();
   });
 });

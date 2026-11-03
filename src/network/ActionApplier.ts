@@ -67,6 +67,11 @@ function applyInner(engine: GameEngine, action: GameAction, emittedAny: () => bo
       return emittedAny();
     }
 
+    case 'SELECT_COLUMN':
+      if (action.col == null) return false;
+      engine.selectColumn(action.col);
+      return emittedAny();
+
     case 'SELECT_DISCARD':
       if (action.handIndex == null) return false;
       engine.selectDiscard(action.handIndex);

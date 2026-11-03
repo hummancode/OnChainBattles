@@ -11,7 +11,15 @@ import type { Position } from '../types/GameTypes';
 import type { Player } from '../types/GameTypes';
 import type { GameEvent } from '../types/EventTypes';
 
-export type PendingCommand =
+/** Present when the pending came from a SPELL: cancelling it refunds the card + LEG. */
+export interface PendingRefund {
+  cardId: string;
+  legCost: number;
+}
+
+export type PendingCommand = ({
+  refund?: PendingRefund;
+}) & (
   | {
       kind: 'TARGET';
       owner: Player;
@@ -46,4 +54,4 @@ export type PendingCommand =
       count: number;
       reason: string;
       deferredEvents: GameEvent[];
-    };
+    });

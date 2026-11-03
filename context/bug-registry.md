@@ -13,16 +13,16 @@ Used to identify weak areas and improve code quality over time.
 
 | Category | Count | User-Found | Claude-Found | Test-Found |
 |----------|-------|------------|--------------|------------|
-| logic | 19 | 5 | 14 | 0 |
+| logic | 23 | 5 | 18 | 0 |
 | network | 12 | 6 | 6 | 0 |
-| state | 15 | 4 | 11 | 0 |
+| state | 16 | 4 | 12 | 0 |
 | rendering | 9 | 1 | 7 | 1 |
 | race-condition | 4 | 2 | 2 | 0 |
 | memory-leak | 4 | 0 | 4 | 0 |
 | web3 | 2 | 0 | 2 | 0 |
 | type-safety | 7 | 2 | 5 | 0 |
 | security | 6 | 1 | 5 | 0 |
-| **TOTAL** | **80** | **21** | **58** | **1** |
+| **TOTAL** | **85** | **21** | **63** | **1** |
 
 ---
 
@@ -832,6 +832,56 @@ Used to identify weak areas and improve code quality over time.
 - **Prevention**: A CI gate that is always red is no gate — make the baseline explicit.
 - **Files**: `scripts/typecheck.mjs`, `.github/workflows/ci.yml`, `package.json`
 
+### BUG-081: Earthquake soft-locked the game (column pick never reached the engine)
+- **Date**: 2026-11-03
+- **Category**: `state`
+- **Discovered by**: `claude`
+- **Symptom**: After casting Earthquake no prompt appeared and clicking the board did nothing; the turn only ended via the turn clock. Card text also said columns "A–F" on a 7-column board.
+- **Root cause**: SelectionManager routed every non-POSITION pending click to `selectTarget`; there was no `selectColumn` path, no `SELECT_COLUMN` network action and no overlay prompt for `PENDING_COLUMN`. known-issues wrongly claimed no card used COLUMN pending.
+- **Fix**: COLUMN click → `engine.selectColumn(col)` + `SELECT_COLUMN` action (ActionApplier → relay, replay, server validation); overlay prompt with Cancel; text A–G.
+- **Prevention**: Same as BUG-060 — for every PendingCommand kind grep for a producer card and verify UI input, network action, replay case and prompt. Don't trust "unused" notes; grep the card pool.
+- **Files**: `src/input/SelectionManager.ts`, `src/scenes/battle/InputCoordinator.ts`, `src/network/ActionApplier.ts`, `src/renderers/OverlayRenderer.ts`, `shared/types/NetworkEvents.ts`, `src/game/data/cards/earthquake.ts`, `src/game/abilities/handlers/spellEarthquake.ts`
+
+### BUG-082: Coup, Treason and Peasant Revolt did nothing when played
+- **Date**: 2026-11-03
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: Casting any of the three spent the card and its LEG with no effect.
+- **Root cause**: Handlers were registered as 'coupHandler' / 'treasonHandler' / 'peasantRevoltHandler' but the cards reference AbilityType.SPELL_COUP / SPELL_TREASON / SPELL_REVOLT; the dispatcher only logged 'No handler'.
+- **Fix**: Also register each handler under its AbilityType key. New coverage test: every non-aura/passive ability in CARD_DEFINITIONS must have a handler.
+- **Prevention**: Registry keys must come from the same enum the card data uses; keep a test that walks the whole card pool.
+- **Files**: `src/game/abilities/handlers/spellCoup.ts`, `spellTreason.ts`, `spellRevolt.ts`, `tests/engine/abilities/handlerCoverage.test.ts`
+
+### BUG-083: Coup resolution: banish never applied, capture rule missing
+- **Date**: 2026-11-03
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: (Latent behind BUG-082) Coup emitted UNIT_DIED, the UI removed the unit but the engine kept it (UI/engine desync); the card's 'capture if remaining LEG ≥ target cost' branch didn't exist.
+- **Root cause**: GameEngine.applyEvent has no UNIT_DIED case (deaths are handled in ActPhase), so the pending-resolution event was render-only.
+- **Fix**: New UNIT_CAPTURED (permanent) / UNIT_BANISHED events, applied by the engine and mapped by the bridge; resolver gets the caster's mods to decide capture vs banish; auras re-evaluated after.
+- **Prevention**: An event a resolver returns must be applied by the engine — never rely on the UI reacting to an event the engine ignores.
+- **Files**: `src/game/pending/PendingCommandResolver.ts`, `src/game/GameEngine.ts`, `src/game/types/EventTypes.ts`, `src/scenes/battle/EngineEventBridge.ts`
+
+### BUG-084: Treason: ownership never flipped and the return crashed END phase
+- **Date**: 2026-11-03
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: (Latent behind BUG-082) The stolen unit stayed the opponent's; once flipped, END phase threw '[Board] Target cell occupied' when the unit hadn't moved.
+- **Root cause**: Treason reused UNIT_TRANSFORMED whose engine handler ignores `owner`, and never set `treasonOwner`; resolveTreasonReturns moved the unit onto its own square.
+- **Fix**: UNIT_CAPTURED (permanent: false) sets owner + treasonOwner + originalPos; return skips the move when unmoved and stays put if the original square is now occupied.
+- **Prevention**: Exercise every resolution path end-to-end in a test (play → resolve → turn end), not just the handler.
+- **Files**: `src/game/pending/PendingCommandResolver.ts`, `src/game/GameEngine.ts`, `src/game/phases/EndPhase.ts`
+
+### BUG-085: Targeted spells with no valid target wasted the card and LEG
+- **Date**: 2026-11-03
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: Playing Coup/Treason/Disease/Casus Belli with nothing to target consumed the card and its cost with no effect.
+- **Root cause**: Handlers returned an empty result; PlayPhase treated it as a successful play.
+- **Fix**: Handlers flag `noValidTarget`; PlayPhase refuses the play and returns card + LEG (CARD_RETURNED, 'no valid target' toast).
+- **Prevention**: Make 'nothing happened' an explicit result, not an empty one.
+- **Files**: `src/game/phases/PlayPhase.ts`, `src/game/abilities/types.ts`, `src/game/abilities/AbilityDispatcher.ts`, spell handlers
+
 ---
 
 ## Weakness Analysis
@@ -852,6 +902,7 @@ Used to identify weak areas and improve code quality over time.
 8. **Never drop, always reconcile** — on reconnect ask the server what it has (`lastSeqNum`, `serverSeq`) instead of clearing buffers (BUG-063).
 9. **Verify framework lifecycles** — Phaser never calls `scene.shutdown()`; scenes are reused, so anything bound to a scene must be released on its 'shutdown' event (BUG-072, BUG-077).
 10. **Server decides what matters** — validation and results come from the server's own engine, never from client claims (BUG-074).
+11. **Walk the whole card pool in tests** — handler coverage, every pending kind wired end-to-end; three spells were dead for months behind a registry-key mismatch (BUG-081, BUG-082).
 
 ### User-Found vs Claude-Found
 - **User found 12 bugs** (34%) — gameplay-visible issues (freezes, wrong movement, UI blocking, route/scene bugs).

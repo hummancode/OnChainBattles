@@ -105,6 +105,12 @@ export function executePlayCard(
     unitInstance,
   );
 
+  // Targeted spell with nothing to target → refuse the play, give everything back.
+  if (def.class === CardClass.SPELL && result.noValidTarget && !result.pending && result.events.length === 0) {
+    returnSpellToHand(ctx, cardId, cost, 'NO_TARGET');
+    return false;
+  }
+
   // Apply immediate events
   ctx.applyEvents(result.events);
 
@@ -116,7 +122,10 @@ export function executePlayCard(
   // Handle pending interaction (Priest, Mystic, Disease, etc.)
   if (result.pending) {
     ctx.status = EngineStatus.AWAITING_INPUT;
-    ctx.pending = result.pending;
+    // Spells are refundable if their target choice is cancelled; units just fizzle.
+    ctx.pending = def.class === CardClass.SPELL
+      ? { ...result.pending, refund: { cardId, legCost: cost } }
+      : result.pending;
     ctx.emit({
       type: result.pending.kind === 'TARGET'   ? 'PENDING_TARGET'   :
             result.pending.kind === 'POSITION' ? 'PENDING_POSITION' :
@@ -137,4 +146,23 @@ export function executePlayCard(
   }
 
   return true;
+}
+
+/**
+ * Undo a spell play: card back into hand (appended — hand UIs append too, keeping indices
+ * in sync), LEG refunded. Used when it had no target, and when its target choice is cancelled.
+ * Note: the spell is NOT in the discard pile yet when called from executePlayCard; when
+ * called after a cancel it is, and the caller removes it first.
+ */
+export function returnSpellToHand(
+  ctx: Pick<GameContext, 'players' | 'mods' | 'emit'> & { activePlayer: GameContext['activePlayer'] },
+  cardId: string, legCost: number, reason: 'NO_TARGET' | 'CANCELLED',
+): void {
+  const p = ctx.activePlayer;
+  const ps = ctx.players[p];
+  const mod = ctx.mods[p];
+  ps.hand.push(cardId);
+  mod.addLEG(legCost);
+  ctx.emit({ type: 'CARD_RETURNED', player: p, cardId, handIndex: ps.hand.length - 1, refundedLEG: legCost, reason });
+  ctx.emit({ type: 'LEG_GAINED', player: p, amount: legCost, total: mod.legPool, rate: mod.getEffectiveLEGRate() });
 }

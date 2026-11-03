@@ -9,7 +9,7 @@ function spellDamageStructure(ctx: AbilityContext): AbilityResult {
   const structures = ctx.board.getStructures(enemyPlayer);
   const validTargetIds = structures.map(u => u.instanceId);
 
-  if (validTargetIds.length === 0) return { events: [] };
+  if (validTargetIds.length === 0) return { events: [], noValidTarget: true };
 
   const pending: PendingCommand = {
     kind:           'TARGET',

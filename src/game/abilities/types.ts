@@ -11,6 +11,8 @@ export { Player };
 export interface AbilityResult {
   events: GameEvent[];
   pending?: PendingCommand;
+  /** Targeted ability found nothing to target. For a SPELL the play is refused (no cost). */
+  noValidTarget?: boolean;
 }
 
 export interface AbilityContext {
