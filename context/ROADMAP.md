@@ -1,6 +1,6 @@
 # OnChainBattles — Yol Haritası
 
-_Son güncelleme: 3 Kasım 2026_
+_Son güncelleme: 3 Kasım 2026 (Faz 1–3 tamam)_
 
 Durum işaretleri: ✅ bitti · 🔜 sıradaki · ⏳ planlı
 
@@ -27,37 +27,37 @@ Doğrulama: 370 birim/entegrasyon testi + gerçek sunucu ve iki motorla uçtan u
 
 ---
 
-## Faz 2 — Arayüz ve oynanış hissi 🔜 (ilk tur yapıldı)
+## Faz 2 — Arayüz ve oynanış hissi ✅ (3 Kasım 2026)
 
 Kaynak: Playwright ekran görüntüleriyle yapılan QA (`context/known-issues.md` → UI).
 
 | # | İş | Neden |
 |---|----|-------|
-| 2.1 | El kartı yerleşimi: ✅ yazı/stat taşması giderildi (BUG-070/071). ⏳ Kartlar hâlâ çok üst üste — alta yelpaze düzeni düşünülmeli | En görünür sorun |
+| 2.1 | ✅ Yazı/stat taşması (BUG-070/071), hover sonrası yığın sırası (BUG-078). ⏳ Alta yelpaze düzeni tahta yerleşimi değişikliği ister | |
 | 2.2 | ✅ Tur/faz etiketi ve END TURN butonu tahtadan ayrıldı, buton büyüdü | |
 | 2.3 | ✅ HP çubuklarında sayı (`King 10 / 10`). ⏳ LEG göstergesi | |
-| 2.4 | ✅ YOUR TURN / OPPONENT'S TURN etiketi. ⏳ Tur değişiminde büyük bant animasyonu | |
+| 2.4 | ✅ YOUR/THEIR TURN etiketi + tur değişiminde büyük bant + tur sayacı | |
 | 2.5 | ✅ Benzersiz misafir isimleri (`Guest-A4B5`) | |
-| 2.6 | Rakip el sırtları ekrandan taşıyor (5. kart) → küçültme ya da üst üste dizme | Yerleşim |
-| 2.7 | Geçersiz hamlede geri bildirim (kısa uyarı + kırmızı vurgu) | Şu an sessizce yok sayılıyor |
-| 2.8 | ✅ Kodla katılmada Enter/Esc. ⏳ Diğer diyaloglar | |
-| 2.9 | Eksik kart görselleri için düzgün yer tutucu (REFORM, MILITIA metin kutusu gibi duruyor) | Görsel tutarlılık |
-| 2.10 | Kart üstüne gelince büyük detay paneli (yetenek metni okunur halde) | Kart metni şu an okunmuyor |
+| 2.6 | ✅ Rakip el sırtları ekrana sığacak şekilde sıkıştırılıyor (BUG-079) | |
+| 2.7 | ✅ Geçersiz tıklama/hamlede açıklayıcı uyarı (rakibin turu, ACT fazı, yetersiz LEG, yanlış kare…) | |
+| 2.8 | ✅ Kodla katılma + oda kurma diyaloglarında Enter/Esc ve otomatik odak; lobi sohbetinde Enter zaten vardı | |
+| 2.9 | ⏳ Eksik kart görselleri — yer tutucu doku zaten var; gereken şey sanat dosyası | |
+| 2.10 | ✅ Hover'da kart büyüyüp öne geliyor ve gerçek kural metnini gösteriyor (ayrı detay paneli gerekmedi) | |
 
 Yaklaşım: her madde için önce/sonra Playwright ekran görüntüsü; yerleşimler `public/layouts/` JSON'unda.
 
 ---
 
-## Faz 3 — Sunucu otoritesi ve dayanıklılık ⏳
+## Faz 3 — Sunucu otoritesi ve dayanıklılık ✅ (3 Kasım 2026)
 
 | # | İş | Neden |
 |---|----|-------|
-| 3.1 | Hamle kaydını SQLite'a yazmak (sunucu yeniden başlasa da maç sürsün) | Kayıt şu an sadece bellekte |
-| 3.2 | Sunucuda da motoru çalıştırmak (otoriter doğrulama): geçersiz hamle reddi, `game_over` iddiasına gerek kalmaz | Hile önleme; kripto modda şart |
-| 3.3 | Tur zamanlayıcısı / AFK koruması | Rakip oyunu kilitleyebiliyor |
-| 3.4 | Durum hash uyuşmazlığında otomatik yeniden senkron (rejoin akışını tetikle) | Şu an sadece loglanıyor |
-| 3.5 | Tekrar izleme: hamle kaydından maçı baştan oynatma | Hata ayıklama + içerik |
-| 3.6 | CI'a `tsc --noEmit` (istemci + sunucu) eklemek | Tip hataları gözden kaçtı (BUG-059) |
+| 3.1 | ✅ Aktif maçlar SQLite'ta (`active_matches`); sunucu yeniden başlayınca oda + motor diskten kuruluyor | Playwright ile gerçek restart test edildi |
+| 3.2 | ✅ Sunucu her odada motoru çalıştırıyor (MatchSimulation): geçersiz/sırasız hamle reddi, sonuç ve ödeme motordan (BUG-074) | |
+| 3.3 | ✅ Tur saati (varsayılan 90 sn, `TURN_TIME_SECONDS`), süre dolunca tur otomatik biter, 3 ardışık aşım = hükmen yenilgi, HUD sayacı | |
+| 3.4 | ✅ `postHash` + `state_hash` her hamlede sunucu motoruyla karşılaştırılıyor; uyuşmazlık → `resync_required` → otomatik yeniden kurulum | |
+| 3.5 | ✅ Her biten maç kaydediliyor (`match_replays`, `/api/replays/:room`); sonuç ekranında WATCH REPLAY (durdur / 1x / 3x) | |
+| 3.6 | ✅ `npm run typecheck` (baz uyarılar hariç) istemci + sunucu; CI sunucu paketini de derliyor (BUG-080) | |
 
 ---
 

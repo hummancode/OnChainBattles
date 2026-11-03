@@ -58,6 +58,12 @@ export class HUDRenderer {
   private unsubs: Array<() => void> = [];
   private localPlayerIndex: number = 0;
 
+  // Turn clock (server-driven)
+  private timerText?: Phaser.GameObjects.Text;
+  private timerTick?: Phaser.Time.TimerEvent;
+  private turnDeadline = 0;
+  private timerOwner = -1;
+
   setLocalPlayer(index: number): void {
     this.localPlayerIndex = index;
   }
@@ -88,7 +94,7 @@ export class HUDRenderer {
     this.updatePlayerLEG(snap.playerLEG, snap.playerCrown);
     this.updateOpponentLEG(snap.opponentLEGCount);
     this.updatePhaseLabel(snap.currentPhase, snap.turnNumber);
-    this.turnOwnerText?.setText(snap.isPlayerTurn ? 'YOUR TURN' : "OPPONENT'S TURN")
+    this.turnOwnerText?.setText(snap.isPlayerTurn ? 'YOUR TURN' : 'THEIR TURN') // short: must fit beside the board
       .setColor(snap.isPlayerTurn ? '#00FF88' : '#FF8866');
     this.playerWinLossText.setText(`${snap.playerWins}W / ${snap.playerLosses}L`);
 
@@ -141,6 +147,86 @@ export class HUDRenderer {
 
   destroy(): void {
     this.unsubs.forEach(fn => fn());
+    this.timerTick?.remove(false);
+    this.timerTick = undefined;
+    this.toastTimer?.remove(false);
+    this.toastObj?.destroy();
+    this.bannerObj?.destroy();
+  }
+
+  // Board centre (grid origin + half of 7 cells)
+  private get boardCenterX(): number { return 283 + (7 * 102) / 2; }
+
+  private toastObj?: Phaser.GameObjects.Text;
+  private toastTimer?: Phaser.Time.TimerEvent;
+
+  /** Short feedback line near the bottom of the board (replaces the previous one). */
+  showToast(message: string, color = '#FFDD88'): void {
+    this.toastTimer?.remove(false);
+    this.toastObj?.destroy();
+    this.toastObj = this.scene.add.text(this.boardCenterX, 662, message, {
+      fontFamily: this.theme.fonts.body.family,
+      fontSize: `${this.theme.fonts.body.size + 1}px`,
+      color, backgroundColor: '#000000DD', padding: { x: 12, y: 6 },
+      align: 'center', wordWrap: { width: 640 },
+    }).setOrigin(0.5).setDepth(950);
+    const t = this.toastObj;
+    this.toastTimer = this.scene.time.delayedCall(1800, () => {
+      this.scene.tweens.add({ targets: t, alpha: 0, duration: 250, onComplete: () => t.destroy() });
+      if (this.toastObj === t) this.toastObj = undefined;
+    });
+  }
+
+  private bannerObj?: Phaser.GameObjects.Container;
+
+  /** Big "YOUR TURN" / "OPPONENT'S TURN" banner over the board on every turn change. */
+  private showTurnBanner(isMyTurn: boolean): void {
+    this.bannerObj?.destroy();
+    const x = this.boardCenterX, y = 360;
+    const bg = this.scene.add.rectangle(0, 0, 520, 84, 0x000000, 0.75)
+      .setStrokeStyle(2, isMyTurn ? 0x00FF88 : 0xFF6666, 0.9);
+    const label = this.scene.add.text(0, 0, isMyTurn ? 'YOUR TURN' : "OPPONENT'S TURN", {
+      fontFamily: this.theme.fonts.heading.family,
+      fontSize: '40px', fontStyle: 'bold',
+      color: isMyTurn ? '#00FF88' : '#FF8866',
+    }).setOrigin(0.5);
+    const c = this.scene.add.container(x, y, [bg, label]).setDepth(940).setAlpha(0).setScale(0.9);
+    this.bannerObj = c;
+    this.scene.tweens.add({
+      targets: c, alpha: 1, scale: 1, duration: 180, ease: 'Quad.easeOut',
+      onComplete: () => this.scene.tweens.add({
+        targets: c, alpha: 0, delay: 700, duration: 300,
+        onComplete: () => { c.destroy(); if (this.bannerObj === c) this.bannerObj = undefined; },
+      }),
+    });
+  }
+
+  /** Server announced a turn clock — show a live countdown under END TURN. */
+  private startTurnClock(activePlayer: number, remainingMs: number): void {
+    this.turnDeadline = Date.now() + remainingMs; // remainingMs, not a timestamp: no clock skew
+    this.timerOwner = activePlayer;
+    if (!this.timerText) {
+      const B = this.layout.bottomBar;
+      this.timerText = this.scene.add.text(B.phaseLabel.x, B.endTurnBtn.y + B.endTurnBtn.height / 2 + 8, '', {
+        fontFamily: this.theme.fonts.body.family,
+        fontSize: `${this.theme.fonts.body.size + 2}px`,
+        fontStyle: 'bold',
+        color: '#FFFFFF',
+      }).setOrigin(0.5, 0);
+    }
+    if (!this.timerTick) {
+      this.timerTick = this.scene.time.addEvent({ delay: 250, loop: true, callback: () => this.renderTurnClock() });
+    }
+    this.renderTurnClock();
+  }
+
+  private renderTurnClock(): void {
+    if (!this.timerText) return;
+    const left = Math.max(0, Math.ceil((this.turnDeadline - Date.now()) / 1000));
+    const mine = this.timerOwner === this.localPlayerIndex;
+    const mm = Math.floor(left / 60), ss = String(left % 60).padStart(2, '0');
+    this.timerText.setText(`⏱ ${mm}:${ss}`);
+    this.timerText.setColor(!mine ? '#888888' : left <= 10 ? '#FF4444' : left <= 30 ? '#F5A623' : '#FFFFFF');
   }
 
   // ─────────────────────────────────────────────
@@ -343,6 +429,10 @@ export class HUDRenderer {
 
   private attachEventListeners(): void {
     this.unsubs.push(
+      EventBus.on(EV.TURN_TIMER, ({ activePlayer, remainingMs }) => {
+        this.startTurnClock(activePlayer, remainingMs);
+      }),
+
       EventBus.on(EV.HUD_REFRESH, (snap: HUDSnapshot) => {
         this.refresh(snap);
       }),
@@ -387,7 +477,10 @@ export class HUDRenderer {
       EventBus.on(EV.TURN_STARTED, ({ activePlayer }) => {
         const isMyTurn = activePlayer === this.localPlayerIndex;
         this.setEndTurnEnabled(isMyTurn);
+        this.showTurnBanner(isMyTurn);
       }),
+
+      EventBus.on(EV.UI_TOAST, ({ message, color }) => this.showToast(message, color)),
     );
   }
 }

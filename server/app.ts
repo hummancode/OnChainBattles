@@ -19,6 +19,7 @@ import { createDisabledPayout, createDisabledPuzzlePayout, isValidPrivateKey } f
 import { SessionManager } from './game/SessionManager.js';
 import { getDB, closeDB } from './db/database.js';
 import { runMigrations } from './db/migrations.js';
+import { MatchStore } from './game/MatchStore.js';
 import { apiRouter } from './api/index.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
 import { RoomJanitor } from './lobby/RoomJanitor.js';
@@ -98,6 +99,16 @@ const payout = payoutsEnabled ? new PayoutService(ownerKey) : createDisabledPayo
 const puzzlePayout = payoutsEnabled ? new PuzzlePayoutService(ownerKey) : createDisabledPuzzlePayout();
 app.locals.puzzlePayout = puzzlePayout;
 const session = new SessionManager(io, roomManager, payout);
+
+// ── Match persistence: survive server restarts, keep replays ──
+const matchStore = new MatchStore(getDB());
+const pruned = matchStore.pruneOlderThan(120);
+if (pruned) console.log(`[Server] Pruned ${pruned} stale stored match(es)`);
+session.hooks.onActionCommitted = (code, room) => matchStore.save(code, room);
+session.hooks.onSettled = (code, room, result) => { matchStore.saveReplay(code, room, result); matchStore.remove(code); };
+session.hooks.onRoomClosed = (code) => matchStore.remove(code);
+session.hooks.restoreRoom = (code) => matchStore.load(code);
+const pruneTimer = setInterval(() => matchStore.pruneOlderThan(120), 10 * 60 * 1000);
 const lobby = new LobbyManager(io, roomManager);
 const janitor = new RoomJanitor(roomManager);
 janitor.start();
@@ -210,6 +221,14 @@ io.on('connection', (socket) => {
 });
 
 // Public room list (no auth required)
+// Replay of a finished match: seed + decks + ordered action log (public — no hidden info
+// beyond what both players saw at the end; hands are derivable from the seed anyway).
+app.get('/api/replays/:roomCode', (req, res) => {
+  const replay = matchStore.getReplay(String(req.params.roomCode));
+  if (!replay) { res.status(404).json({ error: 'Replay not found' }); return; }
+  res.json(replay);
+});
+
 app.get('/api/rooms', (_req, res) => {
   res.json({ rooms: roomManager.getPublicRooms() });
 });
@@ -220,6 +239,7 @@ httpServer.listen(3001, () => {
 
 function shutdown() {
   janitor.stop();
+  clearInterval(pruneTimer);
   closeDB();
   process.exit(0);
 }

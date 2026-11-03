@@ -18,6 +18,8 @@ import Phaser from 'phaser';
 import GameState from '../GameState';
 import SocketManager from '../network/SocketManager';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
 export default class ResultScene extends Phaser.Scene {
   private autoReturnTimer?: Phaser.Time.TimerEvent;
   private transitioning = false;
@@ -232,6 +234,30 @@ export default class ResultScene extends Phaser.Scene {
     menuBtn.on('pointerover', () => menuBtn.setColor('#FFFFFF'));
     menuBtn.on('pointerout', () => menuBtn.setColor('#777777'));
     menuBtn.on('pointerdown', () => this.goToMenu());
+
+    // Watch replay (server stores every settled match: seed + decks + action log)
+    if (GameState.roomCode) {
+      const replayBtn = this.add.text(width / 2, btnY + 42, '[ WATCH REPLAY ]', {
+        fontSize: '18px', color: '#FFD54F',
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      replayBtn.on('pointerover', () => replayBtn.setColor('#FFFFFF'));
+      replayBtn.on('pointerout', () => replayBtn.setColor('#FFD54F'));
+      replayBtn.on('pointerdown', () => this.watchReplay(replayBtn));
+    }
+  }
+
+  private async watchReplay(btn: Phaser.GameObjects.Text): Promise<void> {
+    this.autoReturnTimer?.destroy();
+    this.autoReturnTimer = undefined;
+    btn.setText('Loading replay...').disableInteractive();
+    try {
+      const res = await fetch(`${API_BASE}/replays/${encodeURIComponent(GameState.roomCode)}`);
+      if (!res.ok) throw new Error(res.status === 404 ? 'Replay not available yet' : `HTTP ${res.status}`);
+      const replay = await res.json();
+      this.scene.start('BattleScene', { replay: { ...replay, viewAs: GameState.playerIndex ?? 0 } });
+    } catch (err) {
+      btn.setText(`Replay unavailable: ${(err as Error).message}`).setColor('#FF6666');
+    }
   }
 
   private addAutoReturn(): void {

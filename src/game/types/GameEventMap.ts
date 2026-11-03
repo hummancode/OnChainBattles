@@ -80,6 +80,9 @@ export interface GameEventMap {
   DETAIL_SHOW:         CardRenderData;
   DETAIL_HIDE:         Record<string, never>;
   HUD_REFRESH:         HUDSnapshot;
+  TURN_TIMER:          { activePlayer: number; remainingMs: number; durationMs: number };
+  UI_TOAST:            { message: string; color?: string };
+  TURN_BANNER:         { isPlayerTurn: boolean; turn: number };
 
   // Network (currently unused — reserved)
   NET_OPPONENT_ACTION: unknown;

@@ -18,8 +18,12 @@ npm start
 # Production build (outputs to dist/)
 npm run build
 
-# Backend server (port 3001)
+# Backend server (port 3001) — type-checks, bundles with esbuild, runs server/dist/app.mjs
 npm run server
+TURN_TIME_SECONDS=15 npm run server   # shorter turn clock for testing (default 90, 0 = off)
+
+# Type check client + server (ignores the baseline unused-variable warnings; this is what CI runs)
+npm run typecheck
 
 # Game logic tests (vitest)
 npm run test:game           # single run — full suite
@@ -75,7 +79,9 @@ PreloadScene → LoginScene → HubScene → ┬→ RoomBrowserScene → LobbySc
 |-------------|---------|
 | `server/app.ts` | Express + Socket.io bootstrap, rate limiter, Socket.IO Admin UI |
 | `server/rooms/RoomManager.ts` | Room lifecycle, player tracking, game seed generation |
-| `server/game/SessionManager.ts` | Game session handling, action validation, ready handshake |
+| `server/game/SessionManager.ts` | Game session handling, `commitAction()` pipeline, settlement, turn clock, grace periods |
+| `server/game/MatchSimulation.ts` | Server-authoritative GameEngine per room (validates actions, decides results, state hashes) |
+| `server/game/MatchStore.ts` | SQLite persistence: active matches (restart recovery) + replays |
 | `server/game/PayoutService.ts` | Escrow payout calls with owner wallet |
 | `server/game/GameLogWriter.ts` | Dev-mode game state logging |
 | `server/lobby/LobbyManager.ts` | Lobby matchmaking |
@@ -121,6 +127,8 @@ PreloadScene → LoginScene → HubScene → ┬→ RoomBrowserScene → LobbySc
 - **State-Driven Rendering** — UI syncs from full engine state, not delta events. Never rely on incremental event streams for UI accuracy. See `context/OCB_CODING_PRINCIPLES.md` §3.6
 - **Every state-setting operation must have a cancel/clear path** — if you add a `setPending()`, there must be a `cancelPending()`
 - **Every local game action must have a network event** — if it changes engine state, it needs a socket emit
+- **The server engine is authoritative** — every network action is applied through `src/network/ActionApplier.ts` on the server too; a new action type needs a case there (client relay, rejoin replay and server validation all share it)
+- **The engine must stay Node-safe** — `src/game/` and `ActionApplier` are bundled into the server; no browser-only imports (DOM, `import.meta.env`, AuthManager, DeckLoader)
 - **Every addEventListener must have a removeEventListener in cleanup**
 - **Serialization must produce fully independent copies** — use deepFreeze for immutable data, deep copy for serialization
 - **Damage calculation short-circuits on zero base** — 0 ATK = 0 damage regardless of bonuses

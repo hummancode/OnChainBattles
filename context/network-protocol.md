@@ -93,5 +93,43 @@ If grace period expires:
 - `graceTimer`: disconnect grace period handle (30s)
 - `game_over.winnerIndex`: 0 | 1, or -1 for a draw (refundTie in crypto mode)
 
-## Known Gap
-The action log lives in server memory — a server restart loses in-progress matches.
+## Server Authority (MatchSimulation)
+Every room runs `server/game/MatchSimulation.ts` — the same pure GameEngine as the clients,
+created at `both_battle_ready` from the room seed + both decks. All actions go through
+`SessionManager.commitAction()`:
+
+```
+game_action → seq check → sim.apply(action, sender)   ── illegal / not your turn ──▶ resync_required (sender only, not relayed)
+                              │ ok
+                              ▼
+             stamp serverSeq + by → actionLog → recordHash(serverSeq) → relay → persist → turn clock
+                              │
+                              ▼ engine reached GAME_OVER
+                          settle() → match_settled {winnerIndex, reason, turns} → payout / draw refund
+```
+
+- `game_over` claims from clients are **ignored** in authoritative rooms (logged only).
+- Desync detection: actions carry `postHash` (client `engineStateHash` after applying; stripped before relay).
+  After replaying a relayed action the client sends `state_hash {hash, afterGlobalSeq: serverSeq}`.
+  Mismatch → `resync_required` → client restarts BattleScene in resync mode (same path as a refresh rejoin).
+- `src/game/utils/stateHash.ts` defines the hash (turn, phase, pending kind, hands, deck/discard sizes, LEG, every unit).
+
+## Turn Clock
+- `turn_timer {activePlayer, remainingMs, durationMs}` when the turn changes hands (and to a rejoining client).
+- Timeout: server commits `SELECT_DISCARD 0` / `CANCEL_PENDING` if needed, then `END_PLAY_PHASE` / `END_ACT_PHASE`
+  with `auto: true`, **broadcast to both clients** (the idle player's client applies them too).
+- 3 consecutive timeouts by one player → `match_settled {reason: 'TIMEOUT'}`. Acting resets the count.
+- `TURN_TIME_SECONDS` env (default 90; 0 disables).
+
+## Persistence & Server Restart
+- `server/game/MatchStore.ts`: `active_matches` row upserted after battle start and every committed action
+  (seed, decks, players, seq counters, timeouts, action log). Removed on settle / room close.
+- `rejoin_room` for a room not in memory → `MatchStore.load()` rebuilds Room + MatchSimulation by replaying the
+  stored log, starts grace timers for both players (the rejoiner's is cancelled immediately), restarts the turn clock.
+- Clients retry the connection for ~2.5 min (30 attempts); lobby-flow sockets re-emit `rejoin_room` on reconnect.
+- Grace expiry after a disconnect settles the match: `DISCONNECT` (other player wins) or `ABANDONED` (draw).
+
+## Replays
+- `match_replays` row written on settle (all matches, guests included).
+- `GET /api/replays/:roomCode` → `{gameSeed, decks, actionLog, playerNames, winnerIndex, reason, totalTurns}`.
+- Client: ResultScene → WATCH REPLAY → `BattleScene` with `{ replay }` (no network, no input).

@@ -28,6 +28,10 @@ export class SessionManager {
   hooks: {
     onActionCommitted?: (roomCode: string, room: Room) => void;
     onSettled?: (roomCode: string, room: Room, result: { winnerIndex: number; reason: string; turns: number }) => void;
+    /** Room is being deleted (abandon / cleanup) — drop any persisted state. */
+    onRoomClosed?: (roomCode: string, room: Room) => void;
+    /** Rebuild a room that isn't in memory (e.g. after a server restart). */
+    restoreRoom?: (roomCode: string) => Room | null;
   } = {};
 
   constructor(
@@ -56,6 +60,8 @@ export class SessionManager {
         const decks = SessionManager.battleDecks(room);
         room.simulation = new MatchSimulation(room.gameSeed ?? 0, decks);
         this.io.to(roomCode).emit('both_battle_ready', { decks });
+        this.hooks.onActionCommitted?.(roomCode, room); // persist the fresh match
+        this.syncTurnTimer(roomCode, room, true);
 
         // Start server-side game log
         if (!room.gameLog) {
@@ -275,10 +281,13 @@ export class SessionManager {
     else this.io.to(roomCode).emit('opponent_action', action);
     log.debug(`Committed ${action.type} by P${byPlayer + 1} in ${roomCode} (serverSeq=${room.globalSeq})`);
 
+    if (!action.auto && room.timeouts) room.timeouts[byPlayer] = 0; // they're not AFK
     this.hooks.onActionCommitted?.(roomCode, room);
 
     if (sim?.result && !room.settled) {
       void this.settle(roomCode, room, sim.result);
+    } else {
+      this.syncTurnTimer(roomCode, room);
     }
     return { ok: true, hash };
   }
@@ -287,6 +296,7 @@ export class SessionManager {
   async settle(roomCode: string, room: Room, result: { winnerIndex: number; reason: string; turns: number }): Promise<void> {
     if (room.settled) return;
     room.settled = true;
+    if (room.turnTimer) { clearTimeout(room.turnTimer); room.turnTimer = undefined; }
     if (room.status) room.status = 'finished';
     const { winnerIndex } = result;
     log.info(`SETTLED ${roomCode}: ${winnerIndex === -1 ? 'DRAW' : `P${winnerIndex + 1} wins`} (${result.reason}, ${result.turns} turns)`);
@@ -313,8 +323,64 @@ export class SessionManager {
     }
   }
 
+  // ── Turn clock (AFK protection) ─────────────────────────
+
+  /** Time per turn. TURN_TIME_SECONDS env overrides; tests shorten it. */
+  static TURN_TIME_MS = Number(process.env.TURN_TIME_SECONDS ?? 90) * 1000;
+  static MAX_CONSECUTIVE_TIMEOUTS = 3;
+
+  /**
+   * (Re)start the clock when the turn changes hands. Not on every action — otherwise one
+   * click every 89s could stall the game forever.
+   */
+  syncTurnTimer(roomCode: string, room: Room, force = false): void {
+    const sim = this.sim(room);
+    if (!sim || room.settled || SessionManager.TURN_TIME_MS <= 0) return;
+    const key = `${sim.turnNumber}:${sim.activePlayer}`;
+    if (!force && room.turnTimerKey === key) return; // same turn — keep the running clock
+    if (room.turnTimer) clearTimeout(room.turnTimer);
+    room.turnTimerKey = key;
+    room.timeouts ??= [0, 0];
+    const ms = SessionManager.TURN_TIME_MS;
+    room.turnTimer = setTimeout(() => this.onTurnTimeout(roomCode, room), ms);
+    room.turnDeadline = Date.now() + ms;
+    this.io.to(roomCode).emit('turn_timer', { activePlayer: sim.activePlayer, remainingMs: ms, durationMs: ms });
+  }
+
+  /** Time's up: resolve any pending interaction and end the idle player's phases for them. */
+  private onTurnTimeout(roomCode: string, room: Room): void {
+    room.turnTimer = undefined;
+    const sim = this.sim(room);
+    if (!sim || room.settled || this.rooms.getRoom(roomCode) !== room) return;
+    const p = sim.activePlayer;
+    room.timeouts ??= [0, 0];
+    room.timeouts[p] += 1;
+    log.info(`Turn timeout for P${p + 1} in ${roomCode} (${room.timeouts[p]}/${SessionManager.MAX_CONSECUTIVE_TIMEOUTS})`);
+
+    if (room.timeouts[p] >= SessionManager.MAX_CONSECUTIVE_TIMEOUTS) {
+      void this.settle(roomCode, room, { winnerIndex: p === 0 ? 1 : 0, reason: 'TIMEOUT', turns: sim.turnNumber });
+      return;
+    }
+
+    const auto: GameAction[] = [];
+    const pending = sim.pendingKind;
+    if (pending === 'DISCARD') auto.push({ type: 'SELECT_DISCARD', handIndex: 0, auto: true });
+    else if (pending) auto.push({ type: 'CANCEL_PENDING', auto: true });
+    if (sim.phase === 'PLAY') auto.push({ type: 'END_PLAY_PHASE', auto: true });
+    auto.push({ type: 'END_ACT_PHASE', auto: true });
+
+    for (const a of auto) {
+      // Broadcast (no `from`): the idle player's own client must apply these too.
+      const r = this.commitAction(roomCode, room, a, p);
+      if (!r.ok) { log.warn(`Auto ${a.type} failed in ${roomCode}: ${r.reason}`); break; }
+      if (room.settled) break;
+    }
+    // Turn didn't change hands (an auto action failed) — re-arm so the match can't stall.
+    if (!room.settled && !room.turnTimer) this.syncTurnTimer(roomCode, room, true);
+  }
+
   /** 30s: long enough for a full page reload (asset preload + login redirect + rejoin). */
-  static readonly GRACE_PERIOD_MS = 30_000;
+  static GRACE_PERIOD_MS = 30_000; // not readonly: tests shorten it
 
   /** Decks used for the battle, filling in the default for anyone who didn't submit one. */
   static battleDecks(room: Room): [string[], string[]] {
@@ -327,58 +393,69 @@ export class SessionManager {
   async handleDisconnect(socket: TypedSocket): Promise<void> {
     const found = this.rooms.findBySocket(socket.id);
     if (!found) return;
-
     const { roomCode, room, playerIndex } = found;
-    const disconnected = room.players[playerIndex];
-    log.info(`${disconnected.name} disconnected from room: ${roomCode} (grace period: ${SessionManager.GRACE_PERIOD_MS / 1000}s)`);
-
-    // Notify opponent of temporary disconnect with total seconds
-    const totalSec = SessionManager.GRACE_PERIOD_MS / 1000;
+    log.info(`${room.players[playerIndex].name} disconnected from room: ${roomCode} (grace period: ${SessionManager.GRACE_PERIOD_MS / 1000}s)`);
+    room.players[playerIndex].id = '';
     socket.to(roomCode).emit('opponentDisconnected');
+    this.startGrace(roomCode, room, playerIndex);
+  }
 
-    // Countdown interval: emit remaining seconds every 1s
-    let remaining = totalSec;
+  /**
+   * Give a missing player GRACE_PERIOD_MS to come back. Used on socket disconnect and for
+   * both players of a match restored from disk after a server restart.
+   * On expiry the match is settled by forfeit (or as a draw if nobody is left).
+   */
+  startGrace(roomCode: string, room: Room, playerIndex: number): void {
+    if (room.disconnectTimers.has(playerIndex)) return;
+    let remaining = SessionManager.GRACE_PERIOD_MS / 1000;
     this.io.to(roomCode).emit('disconnectCountdown', { remaining });
     const countdownInterval = setInterval(() => {
       remaining--;
-      if (remaining > 0) {
-        this.io.to(roomCode).emit('disconnectCountdown', { remaining });
-      }
+      if (remaining > 0) this.io.to(roomCode).emit('disconnectCountdown', { remaining });
     }, 1000);
     room.disconnectIntervals.set(playerIndex, countdownInterval);
 
-    // Start grace period — if they don't rejoin, finalize disconnect
     const timer = setTimeout(async () => {
       clearInterval(countdownInterval);
+      room.disconnectIntervals.delete(playerIndex);
       room.disconnectTimers.delete(playerIndex);
-      log.info(`Grace period expired for ${disconnected.name} in ${roomCode} — finalizing disconnect`);
-
-      // Flush game log before cleanup
+      if (this.rooms.getRoom(roomCode) !== room) return; // already gone
+      const name = room.players[playerIndex]?.name;
+      log.info(`Grace period expired for ${name} in ${roomCode} — finalizing disconnect`);
       room.gameLog?.record(playerIndex, { type: 'DISCONNECT_ABANDON' });
-      room.gameLog?.flush();
 
-      // Notify remaining player that opponent abandoned
       this.io.to(roomCode).emit('opponentAbandon');
 
-      if (room.cryptoReadyCount >= 2 && !room.settled) {
-        room.settled = true;
-        const remainingIdx = playerIndex === 0 ? 1 : 0;
-        const remaining = room.players[remainingIdx];
-        if (remaining?.wallet) {
-          log.info(`Disconnect payout to ${remaining.name} (${remaining.wallet})`);
-          const result = await this.payout.payoutWinner(roomCode, remaining.wallet);
-          this.io.to(roomCode).emit('payout_result', result);
-        }
+      const otherIdx = playerIndex === 0 ? 1 : 0;
+      const otherPresent = !!room.players[otherIdx]?.id;
+      const battleStarted = room.battleReadyCount >= 2;
+      if (battleStarted && !room.settled) {
+        const turns = (room.simulation as MatchSimulation | undefined)?.turnNumber ?? 0;
+        await this.settle(roomCode, room, {
+          winnerIndex: otherPresent ? otherIdx : -1,
+          reason: otherPresent ? 'DISCONNECT' : 'ABANDONED',
+          turns,
+        });
       }
-
+      this.hooks.onRoomClosed?.(roomCode, room);
       this.rooms.deleteRoom(roomCode);
     }, SessionManager.GRACE_PERIOD_MS);
-
     room.disconnectTimers.set(playerIndex, timer);
   }
 
   handleRejoin(socket: TypedSocket, roomCode: string, playerName: string, guestSessionId?: string): void {
-    const room = this.rooms.getRoom(roomCode);
+    let room = this.rooms.getRoom(roomCode);
+    if (!room) {
+      // Server restarted mid-match? Rebuild the room + simulation from disk.
+      const restored = this.hooks.restoreRoom?.(roomCode) ?? null;
+      if (restored) {
+        this.rooms.restoreRoom(roomCode, restored);
+        room = restored;
+        // Both players are "away" until they rejoin; this one is cancelled just below.
+        room.players.forEach((_, i) => this.startGrace(roomCode, restored, i));
+        this.syncTurnTimer(roomCode, restored, true);
+      }
+    }
     if (!room) {
       socket.emit('error', { message: 'Room expired — cannot rejoin' });
       return;
@@ -419,6 +496,16 @@ export class SessionManager {
       lastSeqNum: room.lastSeqNum[playerIndex],
       battleStarted,
     });
+    // Tell the returning client how much of the current turn is left.
+    const simNow = this.sim(room);
+    if (room.turnTimer && room.turnDeadline && simNow) {
+      socket.emit('turn_timer', {
+        activePlayer: simNow.activePlayer,
+        remainingMs: Math.max(0, room.turnDeadline - Date.now()),
+        durationMs: SessionManager.TURN_TIME_MS,
+      });
+    }
+
     // A resync on a live socket is not a reconnect — don't flash "Opponent reconnected!"
     if (wasDisconnected) socket.to(roomCode).emit('opponentReconnected');
     log.info(`${playerName} rejoined room: ${roomCode}`);

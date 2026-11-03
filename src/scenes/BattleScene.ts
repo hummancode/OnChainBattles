@@ -26,7 +26,8 @@ import { wireEngineToEventBus, getActiveProfiler } from './battle/EngineEventBri
 import { setupSocketCallbacks, resetNetworkSyncState } from './battle/NetworkCoordinator';
 import { syncUIFromEngine, resumePendingAfterRejoin } from './battle/BattleStateSync';
 import { replayLog } from '../network/ActionApplier';
-import type { RejoinPayload } from '../../shared/types/NetworkEvents';
+import type { RejoinPayload, GameAction } from '../../shared/types/NetworkEvents';
+import { applyAction } from '../network/ActionApplier';
 import { setupHUDRefresh } from './battle/HUDRefreshCoordinator';
 import { createSelectionManager } from './battle/InputCoordinator';
 import { setupGameOverHandler } from './battle/GameOverHandler';
@@ -34,11 +35,26 @@ import { engineStateHash } from '../game/utils/stateHash';
 import { GameLogger } from '../game/GameLogger';
 import { getCard } from '../game/data/CardRegistry';
 
+/** Stored match served by GET /api/replays/:roomCode. */
+export interface ReplayData {
+  roomCode: string;
+  gameSeed: number;
+  decks: [string[], string[]];
+  actionLog: GameAction[];
+  playerNames: [string, string];
+  winnerIndex: number | null;
+  reason: string | null;
+  /** Whose perspective to show (their hand + board orientation). */
+  viewAs?: number;
+}
+
 interface BattleSceneData {
   playerName: string;
   opponentName: string;
   isCryptoMode: boolean;
   roomCode: string;
+  /** Watch a finished match instead of playing one (no network, no input). */
+  replay?: ReplayData;
 }
 
 export default class BattleScene extends Phaser.Scene {
@@ -81,8 +97,9 @@ export default class BattleScene extends Phaser.Scene {
     // ─── Page-refresh rejoin: get the authoritative match state FIRST ──
     // The engine is rebuilt from server decks + action log before any renderer or
     // event bridge exists, so the replay is silent and the UI is painted once from state.
-    const isRejoin = !SocketManager.isConnected() && !!GameState.roomCode && GameState.hasBattleSession();
-    const isResync = GameState.pendingResync && SocketManager.isConnected() && !!GameState.roomCode;
+    const replay = this.sceneData?.replay;
+    const isRejoin = !replay && !SocketManager.isConnected() && !!GameState.roomCode && GameState.hasBattleSession();
+    const isResync = !replay && GameState.pendingResync && SocketManager.isConnected() && !!GameState.roomCode;
     GameState.pendingResync = false;
     let rejoin: RejoinPayload | null = null;
     if (isResync) {
@@ -113,12 +130,12 @@ export default class BattleScene extends Phaser.Scene {
       }
     }
 
-    const playerName   = this.sceneData?.playerName   ?? GameState.playerName   ?? 'You';
-    const opponentName = this.sceneData?.opponentName  ?? GameState.opponentName ?? 'Opponent';
-    const localPlayerIndex = GameState.playerIndex ?? 0;
+    const localPlayerIndex = replay ? (replay.viewAs ?? 0) : (GameState.playerIndex ?? 0);
+    const playerName   = replay ? replay.playerNames[localPlayerIndex] : (this.sceneData?.playerName   ?? GameState.playerName   ?? 'You');
+    const opponentName = replay ? replay.playerNames[1 - localPlayerIndex] : (this.sceneData?.opponentName  ?? GameState.opponentName ?? 'Opponent');
 
     // Persist battle session so guest can rejoin after page refresh
-    GameState.persistBattleSession();
+    if (!replay) GameState.persistBattleSession();
 
     // ─── Engine + event bridge ────────────────────
     this.engine = new GameEngine();
@@ -134,7 +151,7 @@ export default class BattleScene extends Phaser.Scene {
       }
     }
     // Every outgoing action carries our post-action state hash → server detects desyncs.
-    SocketManager.setHashSource(() => engineStateHash(this.engine));
+    if (!replay) SocketManager.setHashSource(() => engineStateHash(this.engine));
     this.bridgeUnsub = wireEngineToEventBus(this.engine, localPlayerIndex);
 
     // ─── Game logger (with render profiler) ────────
@@ -180,7 +197,8 @@ export default class BattleScene extends Phaser.Scene {
     this.hudRenderer.setLocalPlayer(localPlayerIndex);
 
     // ─── Input ───────────────────────────────────
-    this.selectionManager = createSelectionManager(this.engine, layout, localPlayerIndex);
+    // Replays are read-only: no SelectionManager → no clicks reach the engine.
+    if (!replay) this.selectionManager = createSelectionManager(this.engine, layout, localPlayerIndex);
 
     // ─── Initial HUD emit ────────────────────────
     EventBus.emit(EV.HUD_REFRESH, {
@@ -194,6 +212,7 @@ export default class BattleScene extends Phaser.Scene {
 
     // ─── End turn button ─────────────────────────
     this.hudRenderer.onEndTurnClick(() => {
+      if (replay) return;
       const state = this.engine.getState();
       if (state.turn?.activePlayer !== localPlayerIndex) return;
       const phase = state.turn?.phase;
@@ -207,10 +226,10 @@ export default class BattleScene extends Phaser.Scene {
     });
 
     // ─── Game over ───────────────────────────────
-    this.gameOverUnsub = setupGameOverHandler(this, this.engine, localPlayerIndex, playerName, opponentName, this.sceneData.isCryptoMode);
+    if (!replay) this.gameOverUnsub = setupGameOverHandler(this, this.engine, localPlayerIndex, playerName, opponentName, this.sceneData.isCryptoMode);
 
     // ─── Network ─────────────────────────────────
-    setupSocketCallbacks({
+    if (!replay) setupSocketCallbacks({
       engine: this.engine, scene: this,
       playerName, opponentName, localPlayerIndex,
     });
@@ -234,7 +253,9 @@ export default class BattleScene extends Phaser.Scene {
     };
 
     // ─── Start / resume ────────────────────────────
-    if (rejoin?.battleStarted) {
+    if (replay) {
+      this.runReplay(replay);
+    } else if (rejoin?.battleStarted) {
       // Engine already rebuilt above — paint it and resume.
       syncUIFromEngine(this.engine, localPlayerIndex, this.handRenderer);
       resumePendingAfterRejoin(this.engine, localPlayerIndex);
@@ -248,6 +269,53 @@ export default class BattleScene extends Phaser.Scene {
       // Single-player / local testing: start immediately
       startEngine();
     }
+  }
+
+  /**
+   * Step through a stored match: same seed + decks + actions as the real game, applied on a
+   * timer so the normal renderers animate it. Pause/speed controls + exit.
+   */
+  private runReplay(replay: ReplayData): void {
+    GameState.gameSeed = replay.gameSeed;      // engine RNG (reshuffles) reads it
+    this.engine.startGame(replay.decks);
+
+    const total = replay.actionLog.length;
+    let index = 0;
+    let paused = false;
+    let speed = 1;
+    const BASE_DELAY = 900;
+
+    const banner = this.add.text(640, 22, '', {
+      fontSize: '16px', color: '#FFD54F', backgroundColor: '#000000CC', padding: { x: 12, y: 6 },
+    }).setOrigin(0.5).setDepth(1000);
+    const render = (extra = '') => banner.setText(
+      `REPLAY  ${replay.playerNames[0]} vs ${replay.playerNames[1]}  ·  ${index}/${total}${paused ? '  ·  PAUSED' : ''}  ·  ${speed}x${extra}`);
+
+    const btn = (x: number, label: string, onClick: () => void) =>
+      this.add.text(x, 60, label, { fontSize: '15px', color: '#4fc3f7', backgroundColor: '#000000CC', padding: { x: 8, y: 4 } })
+        .setOrigin(0.5).setDepth(1000).setInteractive({ useHandCursor: true }).on('pointerdown', onClick);
+    btn(520, '[ PAUSE ]', () => { paused = !paused; render(); });
+    btn(620, '[ 1x ]', () => { speed = 1; render(); });
+    btn(690, '[ 3x ]', () => { speed = 3; render(); });
+    btn(790, '[ EXIT ]', () => this.scene.start('HubScene'));
+
+    const step = () => {
+      if (!this.sys.isActive()) return;
+      if (!paused) {
+        if (index >= total) {
+          const w = replay.winnerIndex;
+          render(`  ·  ${w === -1 ? 'DRAW' : w != null ? `${replay.playerNames[w]} wins` : 'end'}${replay.reason ? ` (${replay.reason})` : ''}`);
+          return;
+        }
+        const ok = applyAction(this.engine, replay.actionLog[index]);
+        if (!ok) console.warn('[Replay] action could not be applied:', replay.actionLog[index]);
+        index++;
+        render();
+      }
+      this.time.delayedCall(BASE_DELAY / speed, step);
+    };
+    render();
+    this.time.delayedCall(1200, step);
   }
 
   /** Rejoin failed (room expired / not found): drop the stale session and go home. */
@@ -267,6 +335,9 @@ export default class BattleScene extends Phaser.Scene {
 
   shutdown() {
     SocketManager.setHashSource(null);
+    // Phaser reuses this scene instance; old callbacks would draw disconnect banners etc.
+    // onto the next battle/replay (seen in QA). Re-installed by setupSocketCallbacks.
+    SocketManager.clearCallbacks();
     // Dev-only: send final state report before shutdown (host only)
     if (import.meta.env.DEV && SocketManager.isConnected() && (GameState.playerIndex ?? 0) === 0) {
       this.sendStateReport('GAME_END');

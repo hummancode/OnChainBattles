@@ -72,6 +72,7 @@ export class MatchSimulation {
   get phase(): string { return this.engine.getState().turn.phase; }
   get turnNumber(): number { return this.engine.getState().turn.turnNumber; }
   get result(): SimResult | null { return this._result; }
+  get pendingKind(): string | null { return this.engine.getPendingKind(); }
   get isOver(): boolean { return this._result !== null; }
 
   /** Validate + apply. Never throws; returns why an action was refused. */

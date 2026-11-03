@@ -155,6 +155,9 @@ export const EV = {
 
   // HUD refresh
   HUD_REFRESH:         'HUD_REFRESH',
+  TURN_TIMER:          'TURN_TIMER',          // server turn clock → HUD countdown
+  UI_TOAST:            'UI_TOAST',            // short feedback message (invalid move, etc.)
+  TURN_BANNER:         'TURN_BANNER',         // big "YOUR TURN" / "OPPONENT'S TURN" banner
 
   // Network
   NET_OPPONENT_ACTION: 'NET_OPPONENT_ACTION',

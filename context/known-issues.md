@@ -7,14 +7,14 @@
 
 ### Network / Reconnection
 - `selectColumn` not networked yet (no cards use COLUMN pending in current card pool)
-- Server action log is in-memory only — a server restart still loses live matches (persist to SQLite: see ROADMAP Phase 3)
+- Rejoin falls back to matching by player NAME when there is no guestSessionId (logged-in players) — should match by authenticated playerId
+- Server engine trusts the client-side deck validation path for the legacy RoomScene flow (decks are validated in `submitDeck`, but unsubmitted decks silently become the default)
 - Refresh during an optional pending interaction (Priest/Scout target etc.) cancels it on both clients; the card cost is not refunded
 
 ### UI (found in Playwright QA, 3 Nov 2026 — see ROADMAP Phase 2)
-- Hand cards are stacked with heavy overlap (only header + art visible until hover) — consider a fan along the bottom
-- Opponent hand: 5th card back runs off the bottom of the screen
-- No feedback on invalid moves/deploys (click is silently ignored)
-- Missing card art falls back to a flat text box (REFORM, MILITIA)
+- Hand cards are stacked with heavy overlap (only header + art visible until hover) — a bottom fan would need a board-layout change
+- Missing card art uses the generated placeholder texture (REFORM, MILITIA) — needs art, not code
+- Replay viewer reuses the battle HUD: "YOUR TURN" / END TURN refer to the viewed player and the button is inert
 - IGameEngineAPI.getValidDeployPositions interface takes unused `cardIndex` param
 
 ### Security (Dev-Only)
@@ -29,6 +29,15 @@
 - **Principle**: Every stat modification must be traceable to its source. No silent deltas.
 
 ---
+
+## Fixed (3 November 2026 — server authority, persistence, UI, BUG-072…080)
+- **Server-authoritative engine** — the server runs the same GameEngine per room; illegal/out-of-turn actions are rejected; the result (and payout) comes from the server engine (`match_settled`), not client claims (BUG-074).
+- **Desync detection + auto-resync** — actions carry `postHash`, replays report `state_hash`; any mismatch or rejection sends `resync_required` and the client rebuilds from the server log.
+- **Matches survive a server restart** — active matches persisted to SQLite (`active_matches`) after every action; rebuilt on rejoin with grace timers for both players.
+- **Turn timer** — server clock per turn (`TURN_TIME_SECONDS`, default 90); timeout auto-ends the turn; 3 consecutive timeouts forfeit; HUD countdown.
+- **Replays** — every settled match stored (`match_replays`), `GET /api/replays/:roomCode`, WATCH REPLAY on the result screen (pause / 1x / 3x).
+- **Fixes**: BattleScene cleanup never ran (BUG-072), applyAction no-op detection (BUG-073), own disconnect scored as a win (BUG-075), lobby-flow reconnect never rejoined (BUG-076), stale callbacks on reused scene (BUG-077), hover stacking (BUG-078), opponent hand overflow (BUG-079), CI typecheck always red (BUG-080).
+- **UI**: invalid-click feedback toasts, YOUR TURN / OPPONENT'S TURN banner, Enter/Esc + autofocus in host dialog.
 
 ## Fixed (3 November 2026 — multiplayer reliability, BUG-060…069)
 - **State recovery on refresh/reconnect** — server action log + decks in `rejoinSuccess`; engine rebuilt silently and UI painted from state.

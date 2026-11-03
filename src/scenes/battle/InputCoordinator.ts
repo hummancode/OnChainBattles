@@ -7,6 +7,8 @@ import type { GameEngine } from '../../game/GameEngine';
 import type { BattleLayoutJSON } from '../../game/types/UITypes';
 import { SelectionManager } from '../../input/SelectionManager';
 import SocketManager from '../../network/SocketManager';
+import { EventBus, EV } from '../../events/EventBus';
+import { getCard } from '../../game/data/CardRegistry';
 
 export function createSelectionManager(
   engine: GameEngine,
@@ -38,14 +40,21 @@ export function createSelectionManager(
       return engine.getValidDeployPositions().map((p) => ({ col: p.col, row: p.row }));
     },
     playCard: (handIndex: number, col: number, row: number) => {
+      const before = engine.getState();
+      const cardId = before.players[localPlayerIndex]?.hand[handIndex];
+      const leg = before.modifiers[localPlayerIndex]?.legPool ?? 0;
       const ok = engine.playCard(handIndex, col, row);
       if (ok !== false) SocketManager.sendGameAction({ type: 'PLAY_CARD', handIndex, col, row });
+      else EventBus.emit(EV.UI_TOAST, {
+        message: cardId && getCard(cardId).cost > leg ? `Not enough LEG (need ${getCard(cardId).cost}, have ${leg})` : "That card can't be played there",
+      });
     },
     moveUnit: (fromCol: number, fromRow: number, toCol: number, toRow: number) => {
       const unit = getBoardUnit(fromCol, fromRow);
       if (!unit) return;
       const ok = engine.moveUnit(unit.instanceId, toCol, toRow);
       if (ok !== false) SocketManager.sendGameAction({ type: 'MOVE_UNIT', fromCol, fromRow, col: toCol, row: toRow });
+      else EventBus.emit(EV.UI_TOAST, { message: "That unit can't move there" });
     },
     attackUnit: (fromCol: number, fromRow: number, targetCol: number, targetRow: number) => {
       const attacker = getBoardUnit(fromCol, fromRow);
@@ -53,6 +62,7 @@ export function createSelectionManager(
       if (!attacker || !target) return;
       const ok = engine.attackUnit(attacker.instanceId, target.instanceId);
       if (ok !== false) SocketManager.sendGameAction({ type: 'ATTACK_UNIT', fromCol, fromRow, targetCol, targetRow });
+      else EventBus.emit(EV.UI_TOAST, { message: "That unit can't attack that target" });
     },
     selectTarget: (col: number, row: number) => {
       const unit = getBoardUnit(col, row);
@@ -91,5 +101,6 @@ export function createSelectionManager(
     },
     isOccupied: (col: number, row: number) => getBoardUnit(col, row) !== null,
     getPhase: () => engine.getState().turn?.phase ?? 'DRAW',
+    isMyTurn: () => engine.getState().turn?.activePlayer === localPlayerIndex,
   } as any);
 }

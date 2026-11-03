@@ -302,9 +302,13 @@ export class HandRenderer {
 
     const H = this.layout.rightHUD.hand;
     const count = Math.min(this.oppCardCount, H.maxVisible);
+    // Compress the vertical step so the last card back still ends on screen (was running off at 5+).
+    const BOTTOM = 712;
+    const fullStep = H.cardHeight + H.spacing;
+    const step = count > 1 ? Math.min(fullStep, (BOTTOM - H.y - H.cardHeight) / (count - 1)) : fullStep;
 
     for (let i = 0; i < count; i++) {
-      const py = H.y + i * (H.cardHeight + H.spacing);
+      const py = H.y + i * step;
       const back = this.cardRenderer.renderBack(
         H.x - H.cardWidth / 2,
         py,
@@ -380,7 +384,16 @@ export class HandRenderer {
       });
     }
 
+    // Restore stacking order (hover brought this card to the top; leaving it there
+    // permanently covered the next card's header).
+    this.restoreStackOrder();
+
     EventBus.emit(EV.CARD_HOVER_END, { index });
+  }
+
+  private restoreStackOrder(): void {
+    for (const c of this.cardContainers) this.handContainer.bringToTop(c);
+    if (this.overflowLabel) this.handContainer.bringToTop(this.overflowLabel);
   }
 
   private onCardClick(index: number): void {

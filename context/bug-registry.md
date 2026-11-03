@@ -14,15 +14,15 @@ Used to identify weak areas and improve code quality over time.
 | Category | Count | User-Found | Claude-Found | Test-Found |
 |----------|-------|------------|--------------|------------|
 | logic | 19 | 5 | 14 | 0 |
-| network | 11 | 6 | 5 | 0 |
-| state | 12 | 4 | 8 | 0 |
-| rendering | 7 | 1 | 5 | 1 |
+| network | 12 | 6 | 6 | 0 |
+| state | 15 | 4 | 11 | 0 |
+| rendering | 9 | 1 | 7 | 1 |
 | race-condition | 4 | 2 | 2 | 0 |
-| memory-leak | 3 | 0 | 3 | 0 |
+| memory-leak | 4 | 0 | 4 | 0 |
 | web3 | 2 | 0 | 2 | 0 |
-| type-safety | 6 | 2 | 4 | 0 |
-| security | 5 | 1 | 4 | 0 |
-| **TOTAL** | **71** | **21** | **49** | **1** |
+| type-safety | 7 | 2 | 5 | 0 |
+| security | 6 | 1 | 5 | 0 |
+| **TOTAL** | **80** | **21** | **58** | **1** |
 
 ---
 
@@ -742,6 +742,96 @@ Used to identify weak areas and improve code quality over time.
 - **Prevention**: Player-facing strings come from display fields, never from internal identifiers.
 - **Files**: `src/scenes/battle/EngineEventBridge.ts`
 
+### BUG-072: BattleScene.shutdown() never ran
+- **Date**: 2026-11-03
+- **Category**: `memory-leak`
+- **Discovered by**: `claude`
+- **Symptom**: EventBus listeners, renderers, the logger and timers of every finished battle stayed alive; each new match added another set.
+- **Root cause**: Phaser emits a 'shutdown' event but never calls a scene's `shutdown()` method; nothing subscribed it.
+- **Fix**: `this.events.once('shutdown', () => this.shutdown())` at the start of `create()`.
+- **Prevention**: Never assume a framework calls lifecycle methods by name — verify in the framework source and wire them explicitly.
+- **Files**: `src/scenes/BattleScene.ts`
+
+### BUG-073: applyAction reported engine no-ops as success
+- **Date**: 2026-11-03
+- **Category**: `state`
+- **Discovered by**: `claude`
+- **Symptom**: END_PLAY_PHASE while a pending interaction was open, SELECT_* with nothing pending, etc. returned `true` although the engine ignored them — replay divergence and (now) server validation would be blind to them.
+- **Root cause**: Engine phase/pending methods return void and silently ignore invalid calls; applyAction returned `true` unconditionally for them.
+- **Fix**: Acceptance detected by whether the call emitted any engine event; CANCEL_PENDING checks its precondition (cancel emits nothing by design).
+- **Prevention**: Wrappers around void APIs must observe an effect (event/state change) before reporting success.
+- **Files**: `src/network/ActionApplier.ts`, `tests/engine/replay/actionApplier.test.ts`
+
+### BUG-074: Client game_over claims decided payouts; the killing blow was dropped
+- **Date**: 2026-11-03
+- **Category**: `security`
+- **Discovered by**: `claude`
+- **Symptom**: Two colluding (or one modified) clients could claim any winner. Also: the winner's client sends `game_over` before the final ATTACK_UNIT, and the server rejected all actions once a claim existed — the loser never received the killing blow.
+- **Root cause**: Results were based on client claims; Layer -1 guard rejected actions when `gameOverClaims.length > 0`.
+- **Fix**: Server runs its own engine (MatchSimulation); every action is validated by applying it; the result comes from the engine (`match_settled`). Claims are ignored in authoritative rooms; only `settled` blocks actions.
+- **Prevention**: Anything that moves money must be decided server-side from validated inputs, never from client assertions.
+- **Files**: `server/game/MatchSimulation.ts`, `server/game/SessionManager.ts`
+
+### BUG-075: Losing your own connection was scored as a win
+- **Date**: 2026-11-03
+- **Category**: `state`
+- **Discovered by**: `claude`
+- **Symptom**: When all reconnect attempts failed (e.g. during a server restart) the client showed 'Opponent disconnected — You win!' and recorded a local win.
+- **Root cause**: `onReconnectFailed` was wired to `handleFinalDisconnect` (the opponent-abandoned path).
+- **Fix**: Own connection failure shows 'Connection to the server lost — reload to rejoin'; reconnect attempts raised 5 → 30.
+- **Prevention**: Distinguish 'they left' from 'we are offline' in every network callback.
+- **Files**: `src/scenes/battle/NetworkCoordinator.ts`, `src/network/SocketManager.ts`
+
+### BUG-076: Lobby-flow battles never rejoined after a socket drop
+- **Date**: 2026-11-03
+- **Category**: `network`
+- **Discovered by**: `claude`
+- **Symptom**: After any reconnect in a battle started from the lobby, the server kept the dead socket id and silently ignored the player.
+- **Root cause**: Only `connect()`/`connectForRejoin()` registered reconnect handling; the lobby uses `connectOnly()`, which had none (no rejoin_room, no connection-lost overlay).
+- **Fix**: `connectOnly()` installs a reconnect hook active while a battle runs: re-emits rejoin_room and fires onConnectionLost/onReconnected. Verified in Playwright across a real server restart.
+- **Prevention**: Enumerate every connection entry point when adding connection-level behaviour.
+- **Files**: `src/network/SocketManager.ts`, `tests/engine/replay/connectionLoss.test.ts`
+
+### BUG-077: Stale socket callbacks drew onto the next battle/replay
+- **Date**: 2026-11-03
+- **Category**: `state`
+- **Discovered by**: `claude`
+- **Symptom**: A 'Opponent disconnected — reconnect: 30s' banner appeared in the replay viewer (Playwright QA).
+- **Root cause**: SocketManager kept the finished BattleScene's callbacks; Phaser reuses the scene instance, so late events drew onto the new run.
+- **Fix**: `SocketManager.clearCallbacks()` in BattleScene shutdown.
+- **Prevention**: Callbacks bound to a scene must be released when the scene shuts down.
+- **Files**: `src/network/SocketManager.ts`, `src/scenes/BattleScene.ts`
+
+### BUG-078: Hovered hand card stayed on top of the stack
+- **Date**: 2026-11-03
+- **Category**: `rendering`
+- **Discovered by**: `claude`
+- **Symptom**: After hovering a card, it permanently covered the header of the next card.
+- **Root cause**: Hover called `bringToTop` but hover-end never restored the order.
+- **Fix**: Hover-end re-stacks all cards in index order.
+- **Prevention**: Every temporary visual change needs a restore path (symmetry).
+- **Files**: `src/renderers/HandRenderer.ts`
+
+### BUG-079: Opponent hand backs ran off the bottom of the screen
+- **Date**: 2026-11-03
+- **Category**: `rendering`
+- **Discovered by**: `claude`
+- **Symptom**: With 5+ cards the last card back was cut off.
+- **Root cause**: Fixed vertical step regardless of count.
+- **Fix**: Step compressed so the last card ends at y≤712.
+- **Prevention**: Lay out lists against the available space, not a fixed pitch.
+- **Files**: `src/renderers/HandRenderer.ts`
+
+### BUG-080: CI type-check step could never pass
+- **Date**: 2026-11-03
+- **Category**: `type-safety`
+- **Discovered by**: `claude`
+- **Symptom**: `npx tsc --noEmit` always exits non-zero because of the ~21 baseline unused-variable diagnostics, so CI was red regardless of real errors (and BUG-059 slipped through).
+- **Root cause**: Baseline warnings are errors under `noUnusedLocals`; CI ran plain tsc.
+- **Fix**: `scripts/typecheck.mjs` fails only on non-baseline diagnostics; CI runs it for client + server and builds the server bundle.
+- **Prevention**: A CI gate that is always red is no gate — make the baseline explicit.
+- **Files**: `scripts/typecheck.mjs`, `.github/workflows/ci.yml`, `package.json`
+
 ---
 
 ## Weakness Analysis
@@ -760,6 +850,8 @@ Used to identify weak areas and improve code quality over time.
 6. **Declared-but-unwired** — Every enum variant (e.g. `TimedEffectType`) needs a producer, consumer and expiry path (BUG-056).
 7. **Single authority for simulation inputs** — seed, decks and the ordered action log all come from the server; a client must be able to rebuild the match from server data alone (BUG-062, BUG-064).
 8. **Never drop, always reconcile** — on reconnect ask the server what it has (`lastSeqNum`, `serverSeq`) instead of clearing buffers (BUG-063).
+9. **Verify framework lifecycles** — Phaser never calls `scene.shutdown()`; scenes are reused, so anything bound to a scene must be released on its 'shutdown' event (BUG-072, BUG-077).
+10. **Server decides what matters** — validation and results come from the server's own engine, never from client claims (BUG-074).
 
 ### User-Found vs Claude-Found
 - **User found 12 bugs** (34%) — gameplay-visible issues (freezes, wrong movement, UI blocking, route/scene bugs).

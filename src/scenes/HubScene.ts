@@ -19,6 +19,7 @@ const CX = 640;
 export default class HubScene extends Phaser.Scene {
   private lobbySM!: LobbySocketManager;
   private inputManager?: DOMInputManager;
+  /** Keyboard shortcuts of the open dialog (host / join) — aborted when it closes. */
   private joinKeys?: AbortController;
   private joinOverlay?: Phaser.GameObjects.Container;
   private hostOverlay?: Phaser.GameObjects.Container;
@@ -229,18 +230,29 @@ export default class HubScene extends Phaser.Scene {
     this.hostOverlay.add(cryptoBtn);
 
     // Create button
+    const submitCreate = () => {
+      const roomName = nameInput.value.trim() || `${GameState.playerName}'s Room`;
+      this.lobbySM.createRoom(GameState.playerName || 'Player', {
+        isPublic,
+        isCrypto,
+        roomName,
+        stakeAmount: isCrypto ? 0.01 : 0,
+      });
+      this.hideHostOverlay();
+    };
+
+    // Enter = create, Esc = cancel (listener removed in hideHostOverlay via abort)
+    this.joinKeys?.abort();
+    this.joinKeys = new AbortController();
+    nameInput.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter') { e.preventDefault(); submitCreate(); }
+      else if (e.key === 'Escape') { e.preventDefault(); this.hideHostOverlay(); }
+    }, { signal: this.joinKeys.signal });
+    setTimeout(() => nameInput.focus(), 0);
+
     const createBtn = new MenuButton(this, CX - 70, 420, '[ CREATE ]', {
       color: '#00ff88', fontSize: '20px',
-      onPointerDown: () => {
-        const roomName = nameInput.value.trim() || `${GameState.playerName}'s Room`;
-        this.lobbySM.createRoom(GameState.playerName || 'Player', {
-          isPublic,
-          isCrypto,
-          roomName,
-          stakeAmount: isCrypto ? 0.01 : 0,
-        });
-        this.hideHostOverlay();
-      },
+      onPointerDown: submitCreate,
     });
     this.hostOverlay.add(createBtn.text);
 
@@ -253,6 +265,8 @@ export default class HubScene extends Phaser.Scene {
   }
 
   private hideHostOverlay(): void {
+    this.joinKeys?.abort();
+    this.joinKeys = undefined;
     this.inputManager?.destroyAll();
     this.inputManager = undefined;
     this.hostOverlay?.destroy();

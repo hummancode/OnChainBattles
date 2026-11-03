@@ -7,6 +7,7 @@ import type { GameEngine } from '../../game/GameEngine';
 import type { GameAction } from '../../network/SocketManager';
 import SocketManager from '../../network/SocketManager';
 import GameState from '../../GameState';
+import { EventBus, EV } from '../../events/EventBus';
 import { engineStateHash } from '../../game/utils/stateHash';
 import { applyAction } from '../../network/ActionApplier';
 
@@ -76,7 +77,9 @@ export function handleOpponentDisconnect(deps: NetworkCoordinatorDeps): void {
   disconnectCountdownText = txt;
 }
 
-export function handleDisconnectCountdown(_deps: NetworkCoordinatorDeps, remaining: number): void {
+export function handleDisconnectCountdown(deps: NetworkCoordinatorDeps, remaining: number): void {
+  // After a server restart we may get countdowns without a prior opponentDisconnected.
+  if (!disconnectCountdownText) handleOpponentDisconnect(deps);
   if (disconnectCountdownText) {
     disconnectCountdownText.setText(`Opponent disconnected — reconnect: ${remaining}s`);
   }
@@ -96,28 +99,49 @@ export function handleOpponentReconnect(deps: NetworkCoordinatorDeps): void {
   scene.time.delayedCall(2000, () => flash.destroy());
 }
 
-export function handleFinalDisconnect(deps: NetworkCoordinatorDeps): void {
-  const { engine, scene, playerName, opponentName } = deps;
+/** One result screen per match, whichever signal arrives first. */
+let resultShown = false;
 
-  // Clean up any lingering banner
+/**
+ * End the match from a server-side decision (opponent abandoned, turn-timeout forfeit,
+ * nobody returned). If our own engine already reached GAME_OVER, GameOverHandler owns the
+ * result screen and this is a no-op.
+ */
+export function showServerResult(
+  deps: NetworkCoordinatorDeps,
+  r: { winnerIndex: number; reason: string; turns?: number },
+): void {
+  const { engine, scene, playerName, opponentName, localPlayerIndex } = deps;
+  if (resultShown || engine.getState()?.status === 'GAME_OVER') return;
+  resultShown = true;
+
   for (const obj of disconnectOverlay) obj.destroy();
   disconnectOverlay = [];
   disconnectCountdownText = null;
 
-  GameState.recordWin();
+  const isTie = r.winnerIndex === -1;
+  const won = !isTie && r.winnerIndex === localPlayerIndex;
+  if (!isTie) { if (won) GameState.recordWin(); else GameState.recordLoss(); }
   GameState.setLastMatch({
-    playerName, opponentName, playerWon: true, isTie: false,
-    reason: 'DISCONNECT',
-    turns: engine.getState()?.turn?.turnNumber ?? 0,
+    playerName, opponentName, playerWon: won, isTie,
+    reason: r.reason,
+    turns: r.turns ?? engine.getState()?.turn?.turnNumber ?? 0,
     stakeAmount: GameState.currentStake,
-    payout: GameState.currentMode === 'CryptoPlay' ? GameState.currentStake * 2 * 0.95 : 0,
+    payout: GameState.currentMode === 'CryptoPlay'
+      ? (isTie ? GameState.currentStake : won ? GameState.currentStake * 2 * 0.95 : 0) : 0,
   });
-
   GameState.clearBattleSession();
 
-  scene.add.rectangle(640, 360, 600, 120, 0x000000, 0.85);
-  scene.add.text(640, 345, 'Opponent disconnected', { fontSize: '26px', color: '#FF6666', align: 'center' }).setOrigin(0.5);
-  scene.add.text(640, 380, 'You win! Going to results...', { fontSize: '18px', color: '#00FF88', align: 'center' }).setOrigin(0.5);
+  const REASONS: Record<string, string> = {
+    DISCONNECT: won ? 'Opponent disconnected' : 'You were disconnected too long',
+    TIMEOUT:    won ? 'Opponent ran out of time (3 turns)' : 'You ran out of time (3 turns)',
+    ABANDONED:  'Both players left',
+  };
+  const headline = REASONS[r.reason] ?? 'Match ended';
+  const sub = isTie ? 'Draw — going to results...' : won ? 'You win! Going to results...' : 'You lose. Going to results...';
+  scene.add.rectangle(640, 360, 600, 120, 0x000000, 0.85).setDepth(1002);
+  scene.add.text(640, 345, headline, { fontSize: '26px', color: won ? '#00FF88' : '#FF6666', align: 'center' }).setOrigin(0.5).setDepth(1002);
+  scene.add.text(640, 380, sub, { fontSize: '18px', color: '#DDDDDD', align: 'center' }).setOrigin(0.5).setDepth(1002);
 
   scene.time.delayedCall(3000, () => {
     scene.cameras.main.fadeOut(300, 0, 0, 0);
@@ -125,7 +149,13 @@ export function handleFinalDisconnect(deps: NetworkCoordinatorDeps): void {
   });
 }
 
+/** Opponent's grace period ran out (server also settles and sends match_settled). */
+export function handleFinalDisconnect(deps: NetworkCoordinatorDeps): void {
+  showServerResult(deps, { winnerIndex: deps.localPlayerIndex, reason: 'DISCONNECT' });
+}
+
 export function setupSocketCallbacks(deps: NetworkCoordinatorDeps): void {
+  resultShown = false;
   SocketManager.setCallbacks({
     onRoomCreated: (code) => GameState.setRoomCode(code),
     onRoomJoined: (code) => GameState.setRoomCode(code),
@@ -137,8 +167,11 @@ export function setupSocketCallbacks(deps: NetworkCoordinatorDeps): void {
     onDisconnectCountdown: (remaining) => handleDisconnectCountdown(deps, remaining),
     onConnectionLost: () => showConnectionOverlay(deps.scene, true),
     onReconnected: () => showConnectionOverlay(deps.scene, false),
-    onReconnectFailed: () => handleFinalDisconnect(deps),
+    // OUR connection is gone — that's not the opponent leaving, and certainly not a win.
+    onReconnectFailed: () => handleOwnConnectionFailed(deps),
     onResyncRequired: (reason) => requestResync(deps, reason),
+    onTurnTimer: (data) => EventBus.emit(EV.TURN_TIMER, data),
+    onMatchSettled: (data) => showServerResult(deps, data),
     onRejoinSuccess: (data) => {
       // Live reconnect only — a refreshed page rebuilds its engine in BattleScene before this.
       if (data.battleStarted) catchUpFromLog(deps, data.actionLog);
@@ -146,6 +179,22 @@ export function setupSocketCallbacks(deps: NetworkCoordinatorDeps): void {
     onError: (msg) => console.error('[NetworkCoordinator] Socket error:', msg),
     onPayoutResult: () => {},
   });
+}
+
+/**
+ * All automatic reconnect attempts failed. The match may still be alive on the server
+ * (it survives restarts and keeps a grace period), so offer a reload — which runs the
+ * normal page-refresh rejoin — instead of declaring a result.
+ */
+export function handleOwnConnectionFailed(deps: NetworkCoordinatorDeps): void {
+  const { scene } = deps;
+  showConnectionOverlay(scene, false);
+  scene.add.rectangle(640, 360, 620, 140, 0x000000, 0.9).setDepth(1001);
+  scene.add.text(640, 335, 'Connection to the server lost', { fontSize: '24px', color: '#FFAA00', align: 'center' })
+    .setOrigin(0.5).setDepth(1001);
+  scene.add.text(640, 375, '[ RELOAD TO REJOIN ]', { fontSize: '20px', color: '#4fc3f7', align: 'center' })
+    .setOrigin(0.5).setDepth(1001).setInteractive({ useHandCursor: true })
+    .on('pointerdown', () => window.location.reload());
 }
 
 /** Last resync time — guards against a restart loop if the server keeps disagreeing. */

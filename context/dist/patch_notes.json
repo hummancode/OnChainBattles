@@ -192,6 +192,69 @@
       "text": "Join by code: press Enter to join, Esc to cancel.",
       "created": "2026-11-03T16:00:04",
       "edited": null
+    },
+    {
+      "id": "20261103200000000000",
+      "category": "Mechanics",
+      "text": "The server now checks every move with its own copy of the game — illegal moves are refused and results can't be faked.",
+      "created": "2026-11-03T20:00:00",
+      "edited": null
+    },
+    {
+      "id": "20261103200001000000",
+      "category": "Mechanics",
+      "text": "Turn timer: 90 seconds per turn. If time runs out your turn ends automatically; running out three turns in a row forfeits the match.",
+      "created": "2026-11-03T20:00:01",
+      "edited": null
+    },
+    {
+      "id": "20261103200002000000",
+      "category": "Bug Fix",
+      "text": "Matches survive a server restart — both players are reconnected to the same game.",
+      "created": "2026-11-03T20:00:02",
+      "edited": null
+    },
+    {
+      "id": "20261103200003000000",
+      "category": "Bug Fix",
+      "text": "If your game ever goes out of sync it now repairs itself automatically from the server.",
+      "created": "2026-11-03T20:00:03",
+      "edited": null
+    },
+    {
+      "id": "20261103200004000000",
+      "category": "New Content",
+      "text": "Watch Replay: rewatch any finished match from the result screen (pause, 1x, 3x).",
+      "created": "2026-11-03T20:00:04",
+      "edited": null
+    },
+    {
+      "id": "20261103200005000000",
+      "category": "New Content",
+      "text": "Clearer feedback: a message explains why a click did nothing, and a big banner announces each turn.",
+      "created": "2026-11-03T20:00:05",
+      "edited": null
+    },
+    {
+      "id": "20261103200006000000",
+      "category": "Bug Fix",
+      "text": "Losing your own connection no longer shows a fake 'You win' — you get a reload-to-rejoin prompt instead.",
+      "created": "2026-11-03T20:00:06",
+      "edited": null
+    },
+    {
+      "id": "20261103200007000000",
+      "category": "Bug Fix",
+      "text": "Battles started from the lobby now reconnect properly after a network hiccup.",
+      "created": "2026-11-03T20:00:07",
+      "edited": null
+    },
+    {
+      "id": "20261103200008000000",
+      "category": "Bug Fix",
+      "text": "Opponent's cards no longer run off the screen; hovered cards no longer stay on top of the stack.",
+      "created": "2026-11-03T20:00:08",
+      "edited": null
     }
   ],
   "revoked": []

@@ -69,6 +69,12 @@ export class RoomManager {
     return room;
   }
 
+  /** Put a room rebuilt from disk (MatchStore) back into memory. */
+  restoreRoom(roomCode: string, room: Room): void {
+    this.rooms.set(roomCode, room);
+    log.info(` Room restored: ${roomCode}`);
+  }
+
   getRoom(roomCode: string): Room | undefined {
     return this.rooms.get(roomCode);
   }
@@ -132,6 +138,7 @@ export class RoomManager {
   deleteRoom(roomCode: string): void {
     const room = this.rooms.get(roomCode);
     if (room) {
+      if (room.turnTimer) clearTimeout(room.turnTimer);
       for (const timer of room.disconnectTimers.values()) {
         clearTimeout(timer);
       }

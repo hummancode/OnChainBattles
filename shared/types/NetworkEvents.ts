@@ -147,6 +147,8 @@ export interface ServerToClientEvents {
   resync_required:      (data: { reason: string }) => void;
   /** Authoritative result from the server engine. winnerIndex -1 = draw. */
   match_settled:        (data: { winnerIndex: number; reason: string; turns: number }) => void;
+  /** Turn clock for activePlayer; remainingMs avoids client/server clock skew. */
+  turn_timer:           (data: { activePlayer: number; remainingMs: number; durationMs: number }) => void;
   hostDepositConfirmed: () => void;
   bothCryptoReady:      () => void;
   payout_result:        (data: PayoutResult) => void;
@@ -264,6 +266,12 @@ export interface Room {
   readyPlayers?: Set<number>;
   /** Server-side MatchSimulation (server/game/MatchSimulation.ts) — typed as unknown to keep shared/ server-agnostic. */
   simulation?: unknown;
+  /** Turn clock (server-only). */
+  turnTimer?: ReturnType<typeof setTimeout>;
+  turnTimerKey?: string;
+  turnDeadline?: number;
+  /** Consecutive turn timeouts per player (reset when they act). */
+  timeouts?: [number, number];
   actionQueue: GameAction[];
   /** Authoritative ordered log of every accepted action — replayed on rejoin. */
   actionLog: GameAction[];

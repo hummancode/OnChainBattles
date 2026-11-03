@@ -36,6 +36,8 @@ export interface RoomCallbacks {
   onResyncRequired?: (reason: string) => void;
   /** Authoritative match result from the server engine. */
   onMatchSettled?: (data: { winnerIndex: number; reason: string; turns: number }) => void;
+  /** Server turn clock. */
+  onTurnTimer?: (data: { activePlayer: number; remainingMs: number; durationMs: number }) => void;
   onError: (message: string) => void;
   onBothCryptoReady?: () => void;
   onBothBattleReady?: () => void;
@@ -49,7 +51,8 @@ export interface RoomCallbacks {
 
 const RECONNECT_OPTS = {
   reconnection: true,
-  reconnectionAttempts: 5,
+  // ~2.5 min of retries: covers a server restart (matches are restored from disk).
+  reconnectionAttempts: 30,
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
 };
@@ -154,17 +157,47 @@ class SocketManagerClass {
       } as RoomCallbacks;
     }
 
+    this.ensureSocket();
+    this.installLobbyReconnectHook();
+
     if (this.socket?.connected) {
       console.log('[SocketManager] Already connected (connectOnly).');
       return;
     }
 
-    this.ensureSocket();
-
     // Use once to avoid stacking on repeated connectOnly() calls
     this.socket!.once('connect', () => {
       console.log('[SocketManager] Connected (lobby mode).');
     });
+  }
+
+  private lobbyReconnectHook = false;
+
+  /**
+   * connect()/connectForRejoin() install their own reconnect handling; the lobby flow
+   * (connectOnly) had none — a socket drop mid-battle never re-sent rejoin_room, so the
+   * server kept the dead socket id and ignored everything afterwards.
+   * Only acts while a battle is running (BattleScene has registered a hash source).
+   */
+  private installLobbyReconnectHook(): void {
+    if (this.lobbyReconnectHook || !this.socket) return;
+    this.lobbyReconnectHook = true;
+    let seenFirstConnect = this.socket.connected;
+    this.socket.on('disconnect', () => {
+      if (this.battleActive) this.callbacks?.onConnectionLost?.();
+    });
+    this.socket.on('connect', () => {
+      if (!seenFirstConnect) { seenFirstConnect = true; return; }
+      if (!this.battleActive || !GameState.roomCode) return;
+      console.log('[SocketManager] Reconnected during battle — rejoining room...');
+      this.requestResync(); // emits rejoin_room; rejoinSuccess flushes buffer + catches up
+      this.callbacks?.onReconnected?.();
+    });
+  }
+
+  /** True while BattleScene owns a live engine (it registers the state-hash source). */
+  private get battleActive(): boolean {
+    return this.hashSource !== null;
   }
 
   /** Create socket if none exists, register shared events. */
@@ -305,6 +338,11 @@ class SocketManagerClass {
     this.callbacks = callbacks;
   }
 
+  /** Drop scene-bound callbacks (BattleScene shutdown) so late events can't reach a dead/reused scene. */
+  clearCallbacks(): void {
+    this.callbacks = null;
+  }
+
   isConnected(): boolean {
     return this.socket?.connected ?? false;
   }
@@ -355,6 +393,7 @@ class SocketManagerClass {
     this.socket = null;
     this.hasConnectedOnce = false;
     this.eventsRegistered = false;
+    this.lobbyReconnectHook = false;
     this.actionBuffer = [];
     this.seqCounter = 0;
     console.log("[SocketManager] Manually disconnected.");
@@ -423,6 +462,10 @@ class SocketManagerClass {
     s.on("resync_required", (data) => {
       console.warn(`[SocketManager] Server requested resync: ${data.reason}`);
       this.callbacks?.onResyncRequired?.(data.reason);
+    });
+
+    s.on("turn_timer", (data) => {
+      this.callbacks?.onTurnTimer?.(data);
     });
 
     s.on("match_settled", (data) => {

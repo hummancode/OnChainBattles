@@ -40,6 +40,8 @@ export interface IGameEngineAPI {
   isOccupied(col: number, row: number): boolean;
   getPhase(): string;
   getAttackRange(col: number, row: number): Array<{ col: number; row: number }>;
+  /** True if the local player is the active player. */
+  isMyTurn(): boolean;
 
 }
 
@@ -125,8 +127,13 @@ export class SelectionManager {
     }
 
     const phase = this.engine.getPhase();
+    if (!this.engine.isMyTurn()) {
+      this.toast("It's your opponent's turn");
+      this.clearSelection();
+      return;
+    }
     if (phase !== 'PLAY') {
-      // Hand cards only playable in PLAY phase
+      this.toast('Cards can only be played in the PLAY phase');
       this.clearSelection();
       return;
     }
@@ -198,6 +205,11 @@ export class SelectionManager {
   // PRIVATE — CLICK HANDLERS
   // ─────────────────────────────────────────────
 
+  /** Explain why a click did nothing (previously silent — Roadmap 2.7). */
+  private toast(message: string): void {
+    EventBus.emit(EV.UI_TOAST, { message });
+  }
+
   private handleIdleBoardClick(col: number, row: number, phase: string): void {
     if (!this.engine.isOccupied(col, row)) {
       // Click on empty cell in idle — do nothing
@@ -209,13 +221,18 @@ export class SelectionManager {
       return;
     }
 
+    if (!this.engine.isMyTurn()) {
+      this.toast("It's your opponent's turn");
+      return;
+    }
+
     if (phase !== 'ACT') {
-      // Units can only act in ACT phase
+      this.toast('Units move and attack in the ACT phase — press END TURN to finish playing cards');
       return;
     }
 
     if (!this.engine.canAct(col, row)) {
-      // Unit already acted this turn (exhausted)
+      this.toast("This unit can't act right now (already acted, or deployed this turn)");
       return;
     }
 
@@ -260,6 +277,8 @@ this.state = {
       // If clicking own unit, switch to unit selection
       if (this.engine.isOccupied(col, row) && this.engine.isPlayerUnit(col, row)) {
         this.handleIdleBoardClick(col, row, this.engine.getPhase());
+      } else {
+        this.toast('Deploy on a highlighted square (a row where you already have a unit)');
       }
     }
   }
