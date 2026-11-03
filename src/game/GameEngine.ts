@@ -73,6 +73,8 @@ export interface IGameEngineAPI {
   getState(): GameStateSnapshot;
   /** Kind of the interaction the engine is waiting on, or null. */
   getPendingKind(): 'TARGET' | 'POSITION' | 'COLUMN' | 'DISCARD' | null;
+  /** Read-only copy of the pending interaction (valid targets/positions) — for AI and tools. */
+  getPendingCommand(): PendingCommand | null;
   on(handler: (event: GameEvent) => void): void;
   off(handler: (event: GameEvent) => void): void;
 }
@@ -185,6 +187,10 @@ export class GameEngine implements IGameEngineAPI {
 
   getPendingKind(): 'TARGET' | 'POSITION' | 'COLUMN' | 'DISCARD' | null {
     return this.pending?.kind ?? null;
+  }
+
+  getPendingCommand(): PendingCommand | null {
+    return this.pending ? structuredClone(this.pending) : null;
   }
 
   getState(): GameStateSnapshot {

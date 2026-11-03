@@ -1,6 +1,6 @@
 # OnChainBattles — Yol Haritası
 
-_Son güncelleme: 3 Kasım 2026 (Faz 1–3 tamam)_
+_Son güncelleme: 3 Kasım 2026 (Faz 1–4 tamam)_
 
 Durum işaretleri: ✅ bitti · 🔜 sıradaki · ⏳ planlı
 
@@ -61,13 +61,18 @@ Yaklaşım: her madde için önce/sonra Playwright ekran görüntüsü; yerleşi
 
 ---
 
-## Faz 4 — İçerik ve denge ⏳
+## Faz 4 — İçerik ve denge ✅ (3 Kasım 2026)
 
-- `selectColumn` ağa bağlanması (COLUMN pending kullanan kart eklenmeden önce)
-- War Horn +1 hareketinin sabit desenli birimlere (özel desen, zıplama, ileri-1) de uygulanması — tasarım kararı gerekiyor
-- Opsiyonel etkileşimde (Priest/Scout) yenileme sonrası iptal edilen kartın bedel iadesi
-- Öğretici (tutorial) maç + puzzle modunun tamamlanması
-- Patch notes: birikmiş `unreleased` notlarının sürüm olarak yayınlanması
+| # | İş | Durum |
+|---|----|-------|
+| 4.1 | `selectColumn` ağa bağlandı — Earthquake zaten havuzdaydı ve oyunu kilitliyordu (BUG-081) | ✅ |
+| 4.2 | War Horn: sabit desenli birimler her hareket yönünde 1 kare daha uzağa gidebiliyor (`extendPattern`, P2 için çevrilmiş) | ✅ |
+| 4.3 | Büyü hedef seçimi iptal edilince kart + LEG iade; hedefsiz büyü oynanamıyor (BUG-085); birim yeteneği iptalde sadece boşa gidiyor | ✅ |
+| 4.3+ | Coup / Treason / Peasant Revolt hiç çalışmıyordu (BUG-082); Coup ele geçir/sürgün kuralı ve Treason tur sonu iadesi düzgün uygulandı (BUG-083/084) | ✅ |
+| 4.4 | SimpleBot (saf, Node uyumlu) + Hub'da PRACTICE VS BOT + 8 adımlı öğretici maç (sabit deste/seed, bot öğretici bitene kadar pasif) | ✅ |
+| 4.5 | Birikmiş 32 not v0.03 olarak yayınlandı | ✅ |
+
+Açık kalan içerik işleri: alta yelpaze el düzeni, eksik kart çizimleri, puzzle ödül kartı (`puzzleRoutes.ts` TODO), botun zorluk seviyeleri.
 
 ---
 

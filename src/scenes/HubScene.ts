@@ -121,14 +121,25 @@ export default class HubScene extends Phaser.Scene {
       onPointerDown: () => this.goToPuzzles(),
     });
 
-    new MenuButton(this, CX, y += gap + 20, '[ QUICK PLAY (LEGACY) ]', {
+    // Offline: practice vs the bot / guided tutorial (no server needed)
+    y += gap;
+    new MenuButton(this, CX - 125, y, '[ PRACTICE VS BOT ]', {
+      color: '#b388ff', fontSize: '18px',
+      onPointerDown: () => this.startBotMatch(false),
+    });
+    new MenuButton(this, CX + 130, y, '[ TUTORIAL ]', {
+      color: '#FFD54F', fontSize: '18px',
+      onPointerDown: () => this.startBotMatch(true),
+    });
+
+    new MenuButton(this, CX, y += gap - 5, '[ QUICK PLAY (LEGACY) ]', {
       color: '#777777', fontSize: '16px',
       onPointerDown: () => this.goToLegacy(),
     });
 
     // W/L record
     if (GameState.winCount + GameState.lossCount > 0) {
-      this.add.text(CX, y + gap, `Record: ${GameState.winCount}W / ${GameState.lossCount}L`, {
+      this.add.text(CX, y + 45, `Record: ${GameState.winCount}W / ${GameState.lossCount}L`, {
         fontSize: '14px', fontFamily: '"Courier New", monospace', color: '#777777',
       }).setOrigin(0.5);
     }
@@ -262,6 +273,20 @@ export default class HubScene extends Phaser.Scene {
       onPointerDown: () => this.hideHostOverlay(),
     });
     this.hostOverlay.add(cancelBtn.text);
+  }
+
+  /** Offline match against SimpleBot (optionally the guided tutorial). */
+  private startBotMatch(tutorial: boolean): void {
+    this.cameras.main.fadeOut(250, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start('BattleScene', {
+        playerName: GameState.playerName || 'You',
+        opponentName: tutorial ? 'Tutor Bot' : 'Bot',
+        isCryptoMode: false,
+        roomCode: '',
+        vsBot: { tutorial },
+      });
+    });
   }
 
   private hideHostOverlay(): void {

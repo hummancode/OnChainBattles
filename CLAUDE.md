@@ -58,6 +58,7 @@ npx hardhat ignition deploy --network fuji ignition/modules/Escrow.ts
 | `src/game/pending/` | PendingCommand (discriminated union) + PendingCommandResolver |
 | `src/game/data/` | CardRegistry (frozen), DeckDefinitions, MovementPresets, card definitions |
 | `src/game/interfaces/` | IBoard, IPlayerState, IGameModifiers |
+| `src/game/ai/` | SimpleBot — greedy AI returning one GameAction (practice + tutorial) |
 | `src/network/` | SocketManager (multiplayer relay) |
 | `src/web3/` | WalletManager + EscrowManager (MetaMask/Core Wallet, Fuji testnet) |
 | `src/auth/` | AuthManager (player authentication) |
@@ -69,6 +70,7 @@ npx hardhat ignition deploy --network fuji ignition/modules/Escrow.ts
 
 ```
 PreloadScene → LoginScene → HubScene → ┬→ RoomBrowserScene → LobbyScene → BattleScene → ResultScene
+                                        ├→ BattleScene {vsBot} (practice / tutorial, offline)
                                         ├→ DeckBuilderScene
                                         └→ MainMenuScene → RoomScene → BattleScene → ResultScene
 ```
@@ -128,6 +130,8 @@ PreloadScene → LoginScene → HubScene → ┬→ RoomBrowserScene → LobbySc
 - **Every state-setting operation must have a cancel/clear path** — if you add a `setPending()`, there must be a `cancelPending()`
 - **Every local game action must have a network event** — if it changes engine state, it needs a socket emit
 - **The server engine is authoritative** — every network action is applied through `src/network/ActionApplier.ts` on the server too; a new action type needs a case there (client relay, rejoin replay and server validation all share it)
+- **Ability handlers are registered under the card's `AbilityType`** — `tests/engine/abilities/handlerCoverage.test.ts` fails if any active ability in the card pool has no handler
+- **Resolver events must be applied by the engine** — anything a pending resolution returns needs a case in `GameEngine.applyEvent` *and* in `EngineEventBridge` (UI)
 - **The engine must stay Node-safe** — `src/game/` and `ActionApplier` are bundled into the server; no browser-only imports (DOM, `import.meta.env`, AuthManager, DeckLoader)
 - **Every addEventListener must have a removeEventListener in cleanup**
 - **Serialization must produce fully independent copies** — use deepFreeze for immutable data, deep copy for serialization

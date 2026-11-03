@@ -13,6 +13,8 @@
 ### UI (found in Playwright QA, 3 Nov 2026 — see ROADMAP Phase 2)
 - Hand cards are stacked with heavy overlap (only header + art visible until hover) — a bottom fan would need a board-layout change
 - Missing card art uses the generated placeholder texture (REFORM, MILITIA) — needs art, not code
+- Practice/tutorial results count toward the local W/L record (offline, not sent to the server)
+- SimpleBot is a single greedy difficulty; it ignores structures' long-term value and never holds cards back
 - Replay viewer reuses the battle HUD: "YOUR TURN" / END TURN refer to the viewed player and the button is inert
 - IGameEngineAPI.getValidDeployPositions interface takes unused `cardIndex` param
 
@@ -28,6 +30,14 @@
 - **Principle**: Every stat modification must be traceable to its source. No silent deltas.
 
 ---
+
+## Fixed (3 November 2026 — content & balance, BUG-081…085)
+- **Earthquake soft-lock (BUG-081)** — `SELECT_COLUMN` action + UI path + prompt.
+- **Dead spells (BUG-082…084)** — Coup / Treason / Peasant Revolt were never dispatched; Coup capture/banish and Treason steal/return now applied by the engine (`UNIT_CAPTURED`, `UNIT_BANISHED`).
+- **Spell refunds** — cancelling a spell's target refunds card + LEG (`CARD_RETURNED`); no-target spells refused (BUG-085).
+- **War Horn** reaches further with fixed-pattern movers.
+- **Practice vs Bot + Tutorial** (`src/game/ai/SimpleBot.ts`, `src/scenes/battle/TutorialScript.ts`).
+- **Patch notes released as v0.03.**
 
 ## Fixed (3 November 2026 — server authority, persistence, UI, BUG-072…080)
 - **Server-authoritative engine** — the server runs the same GameEngine per room; illegal/out-of-turn actions are rejected; the result (and payout) comes from the server engine (`match_settled`), not client claims (BUG-074).

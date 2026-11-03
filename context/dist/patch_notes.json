@@ -1,6 +1,238 @@
 {
   "patches": [
     {
+      "version": "0.03",
+      "date": "2026-11-03",
+      "summary": "Multiplayer reliability, server authority, replays, bot + tutorial, card fixes",
+      "notes": [
+        {
+          "id": "20261103100000000000",
+          "category": "Bug Fix",
+          "text": "War Horn now actually grants all your units +1 movement for the rest of the turn.",
+          "created": "2026-11-03T10:00:00",
+          "edited": null
+        },
+        {
+          "id": "20261103100001000000",
+          "category": "Bug Fix",
+          "text": "Fixed clicking a hand card right after playing/discarding another selecting the wrong card.",
+          "created": "2026-11-03T10:00:01",
+          "edited": null
+        },
+        {
+          "id": "20261103100002000000",
+          "category": "Bug Fix",
+          "text": "Fixed duplicate card appearing when the hand exceeds its visible limit.",
+          "created": "2026-11-03T10:00:02",
+          "edited": null
+        },
+        {
+          "id": "20261103140000000000",
+          "category": "Bug Fix",
+          "text": "Refreshing the page during a match now restores the board, hands and turn exactly where you left off.",
+          "created": "2026-11-03T14:00:00",
+          "edited": null
+        },
+        {
+          "id": "20261103140001000000",
+          "category": "Bug Fix",
+          "text": "Moves made while your connection drops are sent when it comes back instead of being lost.",
+          "created": "2026-11-03T14:00:01",
+          "edited": null
+        },
+        {
+          "id": "20261103140002000000",
+          "category": "Mechanics",
+          "text": "If both Kings fall in the same exchange the match is a draw (crypto stakes are refunded).",
+          "created": "2026-11-03T14:00:02",
+          "edited": null
+        },
+        {
+          "id": "20261103140003000000",
+          "category": "Bug Fix",
+          "text": "War Horn no longer freezes the game — click a card in your hand to discard it. The discard can't be skipped.",
+          "created": "2026-11-03T14:00:03",
+          "edited": null
+        },
+        {
+          "id": "20261103140004000000",
+          "category": "Bug Fix",
+          "text": "Players using different decks no longer go out of sync.",
+          "created": "2026-11-03T14:00:04",
+          "edited": null
+        },
+        {
+          "id": "20261103140005000000",
+          "category": "Bug Fix",
+          "text": "Logged-in players can now rejoin a match after refreshing.",
+          "created": "2026-11-03T14:00:05",
+          "edited": null
+        },
+        {
+          "id": "20261103140006000000",
+          "category": "Bug Fix",
+          "text": "Opponent's card count above their hand no longer smears into overlapping text.",
+          "created": "2026-11-03T14:00:06",
+          "edited": null
+        },
+        {
+          "id": "20261103140007000000",
+          "category": "Mechanics",
+          "text": "Reconnect grace period increased from 10s to 30s.",
+          "created": "2026-11-03T14:00:07",
+          "edited": null
+        },
+        {
+          "id": "20261103160000000000",
+          "category": "Bug Fix",
+          "text": "Card ATK/DEF badges and rules text now fit inside the card; cards show their real ability text.",
+          "created": "2026-11-03T16:00:00",
+          "edited": null
+        },
+        {
+          "id": "20261103160001000000",
+          "category": "New Content",
+          "text": "King HP is shown as a number under each health bar.",
+          "created": "2026-11-03T16:00:01",
+          "edited": null
+        },
+        {
+          "id": "20261103160002000000",
+          "category": "New Content",
+          "text": "A YOUR TURN / OPPONENT'S TURN label sits above a larger END TURN button that no longer overlaps the board.",
+          "created": "2026-11-03T16:00:02",
+          "edited": null
+        },
+        {
+          "id": "20261103160003000000",
+          "category": "New Content",
+          "text": "Guest players get unique names (e.g. Guest-A4B5).",
+          "created": "2026-11-03T16:00:03",
+          "edited": null
+        },
+        {
+          "id": "20261103160004000000",
+          "category": "New Content",
+          "text": "Join by code: press Enter to join, Esc to cancel.",
+          "created": "2026-11-03T16:00:04",
+          "edited": null
+        },
+        {
+          "id": "20261103200000000000",
+          "category": "Mechanics",
+          "text": "The server now checks every move with its own copy of the game — illegal moves are refused and results can't be faked.",
+          "created": "2026-11-03T20:00:00",
+          "edited": null
+        },
+        {
+          "id": "20261103200001000000",
+          "category": "Mechanics",
+          "text": "Turn timer: 90 seconds per turn. If time runs out your turn ends automatically; running out three turns in a row forfeits the match.",
+          "created": "2026-11-03T20:00:01",
+          "edited": null
+        },
+        {
+          "id": "20261103200002000000",
+          "category": "Bug Fix",
+          "text": "Matches survive a server restart — both players are reconnected to the same game.",
+          "created": "2026-11-03T20:00:02",
+          "edited": null
+        },
+        {
+          "id": "20261103200003000000",
+          "category": "Bug Fix",
+          "text": "If your game ever goes out of sync it now repairs itself automatically from the server.",
+          "created": "2026-11-03T20:00:03",
+          "edited": null
+        },
+        {
+          "id": "20261103200004000000",
+          "category": "New Content",
+          "text": "Watch Replay: rewatch any finished match from the result screen (pause, 1x, 3x).",
+          "created": "2026-11-03T20:00:04",
+          "edited": null
+        },
+        {
+          "id": "20261103200005000000",
+          "category": "New Content",
+          "text": "Clearer feedback: a message explains why a click did nothing, and a big banner announces each turn.",
+          "created": "2026-11-03T20:00:05",
+          "edited": null
+        },
+        {
+          "id": "20261103200006000000",
+          "category": "Bug Fix",
+          "text": "Losing your own connection no longer shows a fake 'You win' — you get a reload-to-rejoin prompt instead.",
+          "created": "2026-11-03T20:00:06",
+          "edited": null
+        },
+        {
+          "id": "20261103200007000000",
+          "category": "Bug Fix",
+          "text": "Battles started from the lobby now reconnect properly after a network hiccup.",
+          "created": "2026-11-03T20:00:07",
+          "edited": null
+        },
+        {
+          "id": "20261103200008000000",
+          "category": "Bug Fix",
+          "text": "Opponent's cards no longer run off the screen; hovered cards no longer stay on top of the stack.",
+          "created": "2026-11-03T20:00:08",
+          "edited": null
+        },
+        {
+          "id": "20261103230000000000",
+          "category": "New Content",
+          "text": "Practice vs Bot: play an offline match against an AI opponent from the Hub.",
+          "created": "2026-11-03T23:00:00",
+          "edited": null
+        },
+        {
+          "id": "20261103230001000000",
+          "category": "New Content",
+          "text": "Tutorial: a guided first match that walks you through deploying, ending phases, moving and attacking.",
+          "created": "2026-11-03T23:00:01",
+          "edited": null
+        },
+        {
+          "id": "20261103230002000000",
+          "category": "Mechanics",
+          "text": "War Horn: units with fixed movement patterns (Knight, Scout, Lancer, Messenger, Assassin) reach one square further along each move.",
+          "created": "2026-11-03T23:00:02",
+          "edited": null
+        },
+        {
+          "id": "20261103230003000000",
+          "category": "Mechanics",
+          "text": "Cancelling a spell's target choice returns the card to your hand and refunds its LEG.",
+          "created": "2026-11-03T23:00:03",
+          "edited": null
+        },
+        {
+          "id": "20261103230004000000",
+          "category": "Mechanics",
+          "text": "Targeted spells can't be played without a valid target (no more wasted cards).",
+          "created": "2026-11-03T23:00:04",
+          "edited": null
+        },
+        {
+          "id": "20261103230005000000",
+          "category": "Bug Fix",
+          "text": "Coup, Treason and Peasant Revolt now actually work (they did nothing before). Coup captures the target if you have enough LEG left, otherwise banishes it; Treason controls a unit until the end of your turn.",
+          "created": "2026-11-03T23:00:05",
+          "edited": null
+        },
+        {
+          "id": "20261103230006000000",
+          "category": "Bug Fix",
+          "text": "Earthquake no longer freezes the game — click any square to choose its column.",
+          "created": "2026-11-03T23:00:06",
+          "edited": null
+        }
+      ],
+      "released_at": "2026-11-03T23:30:00"
+    },
+    {
       "version": "0.02",
       "date": "2026-03-16",
       "summary": "v0.02",
@@ -80,182 +312,6 @@
       "released_at": "2026-03-12T23:02:58.165219"
     }
   ],
-  "unreleased": [
-    {
-      "id": "20261103100000000000",
-      "category": "Bug Fix",
-      "text": "War Horn now actually grants all your units +1 movement for the rest of the turn.",
-      "created": "2026-11-03T10:00:00",
-      "edited": null
-    },
-    {
-      "id": "20261103100001000000",
-      "category": "Bug Fix",
-      "text": "Fixed clicking a hand card right after playing/discarding another selecting the wrong card.",
-      "created": "2026-11-03T10:00:01",
-      "edited": null
-    },
-    {
-      "id": "20261103100002000000",
-      "category": "Bug Fix",
-      "text": "Fixed duplicate card appearing when the hand exceeds its visible limit.",
-      "created": "2026-11-03T10:00:02",
-      "edited": null
-    },
-    {
-      "id": "20261103140000000000",
-      "category": "Bug Fix",
-      "text": "Refreshing the page during a match now restores the board, hands and turn exactly where you left off.",
-      "created": "2026-11-03T14:00:00",
-      "edited": null
-    },
-    {
-      "id": "20261103140001000000",
-      "category": "Bug Fix",
-      "text": "Moves made while your connection drops are sent when it comes back instead of being lost.",
-      "created": "2026-11-03T14:00:01",
-      "edited": null
-    },
-    {
-      "id": "20261103140002000000",
-      "category": "Mechanics",
-      "text": "If both Kings fall in the same exchange the match is a draw (crypto stakes are refunded).",
-      "created": "2026-11-03T14:00:02",
-      "edited": null
-    },
-    {
-      "id": "20261103140003000000",
-      "category": "Bug Fix",
-      "text": "War Horn no longer freezes the game — click a card in your hand to discard it. The discard can't be skipped.",
-      "created": "2026-11-03T14:00:03",
-      "edited": null
-    },
-    {
-      "id": "20261103140004000000",
-      "category": "Bug Fix",
-      "text": "Players using different decks no longer go out of sync.",
-      "created": "2026-11-03T14:00:04",
-      "edited": null
-    },
-    {
-      "id": "20261103140005000000",
-      "category": "Bug Fix",
-      "text": "Logged-in players can now rejoin a match after refreshing.",
-      "created": "2026-11-03T14:00:05",
-      "edited": null
-    },
-    {
-      "id": "20261103140006000000",
-      "category": "Bug Fix",
-      "text": "Opponent's card count above their hand no longer smears into overlapping text.",
-      "created": "2026-11-03T14:00:06",
-      "edited": null
-    },
-    {
-      "id": "20261103140007000000",
-      "category": "Mechanics",
-      "text": "Reconnect grace period increased from 10s to 30s.",
-      "created": "2026-11-03T14:00:07",
-      "edited": null
-    },
-    {
-      "id": "20261103160000000000",
-      "category": "Bug Fix",
-      "text": "Card ATK/DEF badges and rules text now fit inside the card; cards show their real ability text.",
-      "created": "2026-11-03T16:00:00",
-      "edited": null
-    },
-    {
-      "id": "20261103160001000000",
-      "category": "New Content",
-      "text": "King HP is shown as a number under each health bar.",
-      "created": "2026-11-03T16:00:01",
-      "edited": null
-    },
-    {
-      "id": "20261103160002000000",
-      "category": "New Content",
-      "text": "A YOUR TURN / OPPONENT'S TURN label sits above a larger END TURN button that no longer overlaps the board.",
-      "created": "2026-11-03T16:00:02",
-      "edited": null
-    },
-    {
-      "id": "20261103160003000000",
-      "category": "New Content",
-      "text": "Guest players get unique names (e.g. Guest-A4B5).",
-      "created": "2026-11-03T16:00:03",
-      "edited": null
-    },
-    {
-      "id": "20261103160004000000",
-      "category": "New Content",
-      "text": "Join by code: press Enter to join, Esc to cancel.",
-      "created": "2026-11-03T16:00:04",
-      "edited": null
-    },
-    {
-      "id": "20261103200000000000",
-      "category": "Mechanics",
-      "text": "The server now checks every move with its own copy of the game — illegal moves are refused and results can't be faked.",
-      "created": "2026-11-03T20:00:00",
-      "edited": null
-    },
-    {
-      "id": "20261103200001000000",
-      "category": "Mechanics",
-      "text": "Turn timer: 90 seconds per turn. If time runs out your turn ends automatically; running out three turns in a row forfeits the match.",
-      "created": "2026-11-03T20:00:01",
-      "edited": null
-    },
-    {
-      "id": "20261103200002000000",
-      "category": "Bug Fix",
-      "text": "Matches survive a server restart — both players are reconnected to the same game.",
-      "created": "2026-11-03T20:00:02",
-      "edited": null
-    },
-    {
-      "id": "20261103200003000000",
-      "category": "Bug Fix",
-      "text": "If your game ever goes out of sync it now repairs itself automatically from the server.",
-      "created": "2026-11-03T20:00:03",
-      "edited": null
-    },
-    {
-      "id": "20261103200004000000",
-      "category": "New Content",
-      "text": "Watch Replay: rewatch any finished match from the result screen (pause, 1x, 3x).",
-      "created": "2026-11-03T20:00:04",
-      "edited": null
-    },
-    {
-      "id": "20261103200005000000",
-      "category": "New Content",
-      "text": "Clearer feedback: a message explains why a click did nothing, and a big banner announces each turn.",
-      "created": "2026-11-03T20:00:05",
-      "edited": null
-    },
-    {
-      "id": "20261103200006000000",
-      "category": "Bug Fix",
-      "text": "Losing your own connection no longer shows a fake 'You win' — you get a reload-to-rejoin prompt instead.",
-      "created": "2026-11-03T20:00:06",
-      "edited": null
-    },
-    {
-      "id": "20261103200007000000",
-      "category": "Bug Fix",
-      "text": "Battles started from the lobby now reconnect properly after a network hiccup.",
-      "created": "2026-11-03T20:00:07",
-      "edited": null
-    },
-    {
-      "id": "20261103200008000000",
-      "category": "Bug Fix",
-      "text": "Opponent's cards no longer run off the screen; hovered cards no longer stay on top of the stack.",
-      "created": "2026-11-03T20:00:08",
-      "edited": null
-    }
-  ],
+  "unreleased": [],
   "revoked": []
 }

@@ -28,6 +28,9 @@ import { syncUIFromEngine, resumePendingAfterRejoin } from './battle/BattleState
 import { replayLog } from '../network/ActionApplier';
 import type { RejoinPayload, GameAction } from '../../shared/types/NetworkEvents';
 import { applyAction } from '../network/ActionApplier';
+import { nextBotAction } from '../game/ai/SimpleBot';
+import { TutorialCoordinator } from './battle/TutorialCoordinator';
+import { TUTORIAL_DECK, TUTORIAL_BOT_DECK, TUTORIAL_SEED } from '../game/data/TutorialSetup';
 import { setupHUDRefresh } from './battle/HUDRefreshCoordinator';
 import { createSelectionManager } from './battle/InputCoordinator';
 import { setupGameOverHandler } from './battle/GameOverHandler';
@@ -55,6 +58,8 @@ interface BattleSceneData {
   roomCode: string;
   /** Watch a finished match instead of playing one (no network, no input). */
   replay?: ReplayData;
+  /** Offline match vs SimpleBot (P2); `tutorial` adds the guided lesson. */
+  vsBot?: { tutorial?: boolean };
 }
 
 export default class BattleScene extends Phaser.Scene {
@@ -98,8 +103,11 @@ export default class BattleScene extends Phaser.Scene {
     // The engine is rebuilt from server decks + action log before any renderer or
     // event bridge exists, so the replay is silent and the UI is painted once from state.
     const replay = this.sceneData?.replay;
-    const isRejoin = !replay && !SocketManager.isConnected() && !!GameState.roomCode && GameState.hasBattleSession();
-    const isResync = !replay && GameState.pendingResync && SocketManager.isConnected() && !!GameState.roomCode;
+    const vsBot = this.sceneData?.vsBot;
+    const offline = !!replay || !!vsBot;
+    if (vsBot) GameState.roomCode = ''; // no stale room → no wrong replay / rejoin afterwards
+    const isRejoin = !offline && !SocketManager.isConnected() && !!GameState.roomCode && GameState.hasBattleSession();
+    const isResync = !offline && GameState.pendingResync && SocketManager.isConnected() && !!GameState.roomCode;
     GameState.pendingResync = false;
     let rejoin: RejoinPayload | null = null;
     if (isResync) {
@@ -130,12 +138,12 @@ export default class BattleScene extends Phaser.Scene {
       }
     }
 
-    const localPlayerIndex = replay ? (replay.viewAs ?? 0) : (GameState.playerIndex ?? 0);
+    const localPlayerIndex = replay ? (replay.viewAs ?? 0) : vsBot ? 0 : (GameState.playerIndex ?? 0);
     const playerName   = replay ? replay.playerNames[localPlayerIndex] : (this.sceneData?.playerName   ?? GameState.playerName   ?? 'You');
     const opponentName = replay ? replay.playerNames[1 - localPlayerIndex] : (this.sceneData?.opponentName  ?? GameState.opponentName ?? 'Opponent');
 
     // Persist battle session so guest can rejoin after page refresh
-    if (!replay) GameState.persistBattleSession();
+    if (!offline) GameState.persistBattleSession();
 
     // ─── Engine + event bridge ────────────────────
     this.engine = new GameEngine();
@@ -151,7 +159,7 @@ export default class BattleScene extends Phaser.Scene {
       }
     }
     // Every outgoing action carries our post-action state hash → server detects desyncs.
-    if (!replay) SocketManager.setHashSource(() => engineStateHash(this.engine));
+    if (!offline) SocketManager.setHashSource(() => engineStateHash(this.engine));
     this.bridgeUnsub = wireEngineToEventBus(this.engine, localPlayerIndex);
 
     // ─── Game logger (with render profiler) ────────
@@ -229,7 +237,7 @@ export default class BattleScene extends Phaser.Scene {
     if (!replay) this.gameOverUnsub = setupGameOverHandler(this, this.engine, localPlayerIndex, playerName, opponentName, this.sceneData.isCryptoMode);
 
     // ─── Network ─────────────────────────────────
-    if (!replay) setupSocketCallbacks({
+    if (!offline) setupSocketCallbacks({
       engine: this.engine, scene: this,
       playerName, opponentName, localPlayerIndex,
     });
@@ -255,6 +263,16 @@ export default class BattleScene extends Phaser.Scene {
     // ─── Start / resume ────────────────────────────
     if (replay) {
       this.runReplay(replay);
+    } else if (vsBot) {
+      if (vsBot.tutorial) {
+        // Same playable opening for every new player (tests/tutorial/tutorialSetup.test.ts)
+        GameState.gameSeed = TUTORIAL_SEED;
+        startEngine([TUTORIAL_DECK, TUTORIAL_BOT_DECK]);
+      } else {
+        GameState.gameSeed = 0; // random shuffle for practice
+        startEngine();
+      }
+      this.startBot(!!vsBot.tutorial);
     } else if (rejoin?.battleStarted) {
       // Engine already rebuilt above — paint it and resume.
       syncUIFromEngine(this.engine, localPlayerIndex, this.handRenderer);
@@ -269,6 +287,28 @@ export default class BattleScene extends Phaser.Scene {
       // Single-player / local testing: start immediately
       startEngine();
     }
+  }
+
+  private tutorial?: TutorialCoordinator;
+
+  /** Drive player 2 with SimpleBot; actions go through applyAction like any other source. */
+  private startBot(tutorial: boolean): void {
+    const BOT = 1;
+    if (tutorial) this.tutorial = new TutorialCoordinator(this, 0);
+    const timer = this.time.addEvent({
+      delay: 650, loop: true,
+      callback: () => {
+        const st = this.engine.getState();
+        if (st.status === 'GAME_OVER') { timer.remove(false); return; }
+        if (st.turn.activePlayer !== BOT) return;
+        const action = nextBotAction(this.engine, BOT, { passive: this.tutorial?.script.botPassive ?? false });
+        if (applyAction(this.engine, action)) return;
+        // Safety net: never let a refused bot action stall the game.
+        console.warn('[Bot] action refused, ending phase instead:', action);
+        if (this.engine.getPendingKind()) applyAction(this.engine, { type: 'CANCEL_PENDING' });
+        applyAction(this.engine, { type: st.turn.phase === 'PLAY' ? 'END_PLAY_PHASE' : 'END_ACT_PHASE' });
+      },
+    });
   }
 
   /**
@@ -334,6 +374,8 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   shutdown() {
+    this.tutorial?.cleanup();
+    this.tutorial = undefined;
     SocketManager.setHashSource(null);
     // Phaser reuses this scene instance; old callbacks would draw disconnect banners etc.
     // onto the next battle/replay (seen in QA). Re-installed by setupSocketCallbacks.
