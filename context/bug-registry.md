@@ -16,13 +16,13 @@ Used to identify weak areas and improve code quality over time.
 | logic | 19 | 5 | 14 | 0 |
 | network | 11 | 6 | 5 | 0 |
 | state | 12 | 4 | 8 | 0 |
-| rendering | 5 | 1 | 3 | 1 |
+| rendering | 7 | 1 | 5 | 1 |
 | race-condition | 4 | 2 | 2 | 0 |
 | memory-leak | 3 | 0 | 3 | 0 |
 | web3 | 2 | 0 | 2 | 0 |
 | type-safety | 6 | 2 | 4 | 0 |
 | security | 5 | 1 | 4 | 0 |
-| **TOTAL** | **69** | **21** | **47** | **1** |
+| **TOTAL** | **71** | **21** | **49** | **1** |
 
 ---
 
@@ -721,6 +721,26 @@ Used to identify weak areas and improve code quality over time.
 - **Fix**: One persistent label updated with `setText()`.
 - **Prevention**: Rebuild functions must destroy or reuse everything they create.
 - **Files**: `src/renderers/HandRenderer.ts`, `tests/renderers/handRenderer.test.ts`
+
+### BUG-070: Card ATK/DEF badges spilled outside the card
+- **Date**: 2026-11-03
+- **Category**: `rendering`
+- **Discovered by**: `claude`
+- **Symptom**: In the hand, fragments like "A…2", "GE", "NDLY" appeared to the left/right of cards (Playwright screenshot).
+- **Root cause**: `makeBadge()` drew a fixed 24px pill but centred a ~50px "ATK 10" label on it, so the label overflowed the card edge.
+- **Fix**: Label is created first and the pill is sized to `text.width + 8`.
+- **Prevention**: Size containers from their content; never assume label width.
+- **Files**: `src/renderers/helpers/CardRenderHelpers.ts`
+
+### BUG-071: Cards showed raw ability enum codes instead of card text
+- **Date**: 2026-11-03
+- **Category**: `rendering`
+- **Discovered by**: `claude`
+- **Symptom**: Card body read "AURA_VILLAGE_SLOW, PASSIVE_BUILD_DELAY" instead of the rules text.
+- **Root cause**: `toCardRenderData` joined `def.abilities[].type` instead of using `def.abilityText`.
+- **Fix**: Use `def.abilityText`.
+- **Prevention**: Player-facing strings come from display fields, never from internal identifiers.
+- **Files**: `src/scenes/battle/EngineEventBridge.ts`
 
 ---
 

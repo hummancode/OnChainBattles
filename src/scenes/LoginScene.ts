@@ -212,8 +212,8 @@ export default class LoginScene extends Phaser.Scene {
 
   private enterAsGuest(): void {
     this.statusText.setText('Entering as guest...').setColor('#4fc3f7');
-    GameState.setPlayerName('Guest');
     AuthManager.enterAsGuest();
+    GameState.setPlayerName(AuthManager.guestDisplayName());
     this.time.delayedCall(300, () => this.goToHub());
   }
 

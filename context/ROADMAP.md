@@ -27,20 +27,20 @@ Doğrulama: 370 birim/entegrasyon testi + gerçek sunucu ve iki motorla uçtan u
 
 ---
 
-## Faz 2 — Arayüz ve oynanış hissi 🔜
+## Faz 2 — Arayüz ve oynanış hissi 🔜 (ilk tur yapıldı)
 
 Kaynak: Playwright ekran görüntüleriyle yapılan QA (`context/known-issues.md` → UI).
 
 | # | İş | Neden |
 |---|----|-------|
-| 2.1 | El kartı yerleşimi: kartlar üst üste biniyor, yazı ve statlar kartın dışına (sol HUD'a) taşıyor | En görünür sorun |
-| 2.2 | Tur/faz etiketi ve END TURN butonunu tahtanın kenarından uzaklaştırmak, butonu büyütmek | Tahtaya biniyor |
-| 2.3 | HP çubuklarına sayı eklemek (`10/10`), LEG göstergesini netleştirmek | Okunabilirlik |
-| 2.4 | "Rakibin turu" bandı ve sıra kimdeyken net görsel durum | Oyuncu ne zaman bekleyeceğini bilmiyor |
-| 2.5 | Benzersiz misafir isimleri (`Guest-4821`) | İki oyuncu da "Guest" görünüyor |
+| 2.1 | El kartı yerleşimi: ✅ yazı/stat taşması giderildi (BUG-070/071). ⏳ Kartlar hâlâ çok üst üste — alta yelpaze düzeni düşünülmeli | En görünür sorun |
+| 2.2 | ✅ Tur/faz etiketi ve END TURN butonu tahtadan ayrıldı, buton büyüdü | |
+| 2.3 | ✅ HP çubuklarında sayı (`King 10 / 10`). ⏳ LEG göstergesi | |
+| 2.4 | ✅ YOUR TURN / OPPONENT'S TURN etiketi. ⏳ Tur değişiminde büyük bant animasyonu | |
+| 2.5 | ✅ Benzersiz misafir isimleri (`Guest-A4B5`) | |
 | 2.6 | Rakip el sırtları ekrandan taşıyor (5. kart) → küçültme ya da üst üste dizme | Yerleşim |
 | 2.7 | Geçersiz hamlede geri bildirim (kısa uyarı + kırmızı vurgu) | Şu an sessizce yok sayılıyor |
-| 2.8 | Diyaloglarda Enter ile onay / Esc ile iptal (kodla katılma vb.) | Küçük UX |
+| 2.8 | ✅ Kodla katılmada Enter/Esc. ⏳ Diğer diyaloglar | |
 | 2.9 | Eksik kart görselleri için düzgün yer tutucu (REFORM, MILITIA metin kutusu gibi duruyor) | Görsel tutarlılık |
 | 2.10 | Kart üstüne gelince büyük detay paneli (yetenek metni okunur halde) | Kart metni şu an okunmuyor |
 

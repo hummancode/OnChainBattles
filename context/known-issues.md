@@ -11,11 +11,10 @@
 - Refresh during an optional pending interaction (Priest/Scout target etc.) cancels it on both clients; the card cost is not refunded
 
 ### UI (found in Playwright QA, 3 Nov 2026 — see ROADMAP Phase 2)
-- Hand cards overlap heavily; card stat/ability text renders outside card bounds on the left HUD
-- Turn/phase label and END TURN button overlap the board's right edge
-- HP bars show no numbers; both guest players are named "Guest"
+- Hand cards are stacked with heavy overlap (only header + art visible until hover) — consider a fan along the bottom
 - Opponent hand: 5th card back runs off the bottom of the screen
-- Join-by-code dialog: Enter key does not submit
+- No feedback on invalid moves/deploys (click is silently ignored)
+- Missing card art falls back to a flat text box (REFORM, MILITIA)
 - IGameEngineAPI.getValidDeployPositions interface takes unused `cardIndex` param
 
 ### Security (Dev-Only)
@@ -37,6 +36,7 @@
 - **Per-player decks** — server sends both decks; engines no longer desync when players use different decks.
 - **Mutual King death = draw** — `isDraw` result, `winnerIndex: -1` claim, crypto refund.
 - **War Horn discard** — was a soft-lock; now networked, mandatory, with on-screen prompt.
+- **UI pass**: badges sized to text (BUG-070), real ability text on cards (BUG-071), King HP numbers, YOUR TURN / OPPONENT'S TURN label, END TURN moved off the board, unique guest names, Enter/Esc in join dialog.
 - **Logged-in rejoin**, **player_ready dedupe**, **server boots without wallet key**, **opponent count label smear**.
 
 ## Fixed (3 November 2026)

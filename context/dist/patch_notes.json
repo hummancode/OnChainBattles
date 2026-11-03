@@ -157,6 +157,41 @@
       "text": "Reconnect grace period increased from 10s to 30s.",
       "created": "2026-11-03T14:00:07",
       "edited": null
+    },
+    {
+      "id": "20261103160000000000",
+      "category": "Bug Fix",
+      "text": "Card ATK/DEF badges and rules text now fit inside the card; cards show their real ability text.",
+      "created": "2026-11-03T16:00:00",
+      "edited": null
+    },
+    {
+      "id": "20261103160001000000",
+      "category": "New Content",
+      "text": "King HP is shown as a number under each health bar.",
+      "created": "2026-11-03T16:00:01",
+      "edited": null
+    },
+    {
+      "id": "20261103160002000000",
+      "category": "New Content",
+      "text": "A YOUR TURN / OPPONENT'S TURN label sits above a larger END TURN button that no longer overlaps the board.",
+      "created": "2026-11-03T16:00:02",
+      "edited": null
+    },
+    {
+      "id": "20261103160003000000",
+      "category": "New Content",
+      "text": "Guest players get unique names (e.g. Guest-A4B5).",
+      "created": "2026-11-03T16:00:03",
+      "edited": null
+    },
+    {
+      "id": "20261103160004000000",
+      "category": "New Content",
+      "text": "Join by code: press Enter to join, Esc to cancel.",
+      "created": "2026-11-03T16:00:04",
+      "edited": null
     }
   ],
   "revoked": []

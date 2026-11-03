@@ -20,7 +20,7 @@ export function toCardRenderData(
     cost: def.cost, artKey: `art_${cardId}`,
     atk: currentAtk ?? def.stats?.atk, def: def.stats?.def,
     currentHP: currentHP ?? def.stats?.def, maxHP: def.stats?.def,
-    abilityText: def.abilities?.map(a => a.type).join(', '),
+    abilityText: def.abilityText ?? '',
     isEnemy: owner !== (localIndex as Player),
     isExhausted: false, isSelected: false, canAct: canAct ?? false,
   };

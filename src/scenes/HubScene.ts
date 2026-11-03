@@ -19,6 +19,7 @@ const CX = 640;
 export default class HubScene extends Phaser.Scene {
   private lobbySM!: LobbySocketManager;
   private inputManager?: DOMInputManager;
+  private joinKeys?: AbortController;
   private joinOverlay?: Phaser.GameObjects.Container;
   private hostOverlay?: Phaser.GameObjects.Container;
   private transitioning = false;
@@ -288,17 +289,27 @@ export default class HubScene extends Phaser.Scene {
       placeholder: '6-digit code', maxLength: 6, uppercase: true,
     });
 
+    const submitJoin = () => {
+      const code = codeInput.value.trim();
+      if (code.length < 4) {
+        ToastNotification.show(this, 'Enter a room code', { color: '#ff4444' });
+        return;
+      }
+      this.lobbySM.joinRoom(code, GameState.playerName || 'Guest');
+      this.hideJoinOverlay();
+    };
+
+    // Enter = join, Esc = cancel (removed in hideJoinOverlay via abort)
+    this.joinKeys = new AbortController();
+    codeInput.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter') { e.preventDefault(); submitJoin(); }
+      else if (e.key === 'Escape') { e.preventDefault(); this.hideJoinOverlay(); }
+    }, { signal: this.joinKeys.signal });
+    setTimeout(() => codeInput.focus(), 0);
+
     const joinBtn = new MenuButton(this, CX - 60, 385, '[ JOIN ]', {
       color: '#00ff88', fontSize: '20px',
-      onPointerDown: () => {
-        const code = codeInput.value.trim();
-        if (code.length < 4) {
-          ToastNotification.show(this, 'Enter a room code', { color: '#ff4444' });
-          return;
-        }
-        this.lobbySM.joinRoom(code, GameState.playerName || 'Guest');
-        this.hideJoinOverlay();
-      },
+      onPointerDown: submitJoin,
     });
     this.joinOverlay.add(joinBtn.text);
 
@@ -310,6 +321,8 @@ export default class HubScene extends Phaser.Scene {
   }
 
   private hideJoinOverlay(): void {
+    this.joinKeys?.abort();
+    this.joinKeys = undefined;
     this.inputManager?.destroyAll();
     this.inputManager = undefined;
     this.joinOverlay?.destroy();

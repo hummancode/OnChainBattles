@@ -41,17 +41,21 @@ export function makeBadge(
   x: number, y: number, label: string, fillHex: string,
   fontSize: number, rightAligned = false, w = 24, h = 16,
 ): Phaser.GameObjects.GameObject[] {
-  const bgX = rightAligned ? x - w : x;
-
-  const bg = scene.add.graphics();
-  bg.fillStyle(ThemeLoader.hexToNum(fillHex), 1);
-  bg.fillRoundedRect(bgX, y - h / 2, w, h, 4);
-
-  const text = scene.add.text(x + (rightAligned ? -w / 2 : w / 2), y, label, {
+  // Create the label first so the pill can be sized to fit it — a fixed 24px pill
+  // let "ATK 10" spill past the card edge.
+  const text = scene.add.text(0, y, label, {
     fontFamily: theme.fonts.cardStat.family,
     fontSize: `${fontSize}px`,
     color: '#FFFFFF',
   }).setOrigin(0.5, 0.5);
+  const bw = Math.max(w, Math.ceil(text.width) + 8);
+  const bh = Math.max(h, Math.ceil(text.height));
+  const bgX = rightAligned ? x - bw : x;
+  text.setX(bgX + bw / 2);
+
+  const bg = scene.add.graphics();
+  bg.fillStyle(ThemeLoader.hexToNum(fillHex), 1);
+  bg.fillRoundedRect(bgX, y - bh / 2, bw, bh, 4);
 
   return [bg, text];
 }

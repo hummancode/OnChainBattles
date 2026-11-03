@@ -245,9 +245,9 @@ class LayoutLoaderClass {
 
 private defaultBottomBar() {
     return {
-x: 997, y: 300, width: 70, height: 120,
-      phaseLabel:   { x: 1035, y: 310 },
-      endTurnBtn:   { x: 1035, y: 345, width: 76, height: 36 },
+x: 1007, y: 300, width: 110, height: 120,
+      phaseLabel:   { x: 1062, y: 318 },
+      endTurnBtn:   { x: 1062, y: 352, width: 104, height: 40 },
     };
   }
 

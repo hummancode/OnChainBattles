@@ -42,6 +42,9 @@ export class HUDRenderer {
 
   // ── Action controls (right HUD area) ──
   private phaseLabelText!: Phaser.GameObjects.Text;
+  private turnOwnerText!: Phaser.GameObjects.Text;
+  private playerHPText!: Phaser.GameObjects.Text;
+  private opponentHPText!: Phaser.GameObjects.Text;
   private endTurnBtn!: Phaser.GameObjects.Container;
 
   // Callbacks set by BattleScene
@@ -85,6 +88,8 @@ export class HUDRenderer {
     this.updatePlayerLEG(snap.playerLEG, snap.playerCrown);
     this.updateOpponentLEG(snap.opponentLEGCount);
     this.updatePhaseLabel(snap.currentPhase, snap.turnNumber);
+    this.turnOwnerText?.setText(snap.isPlayerTurn ? 'YOUR TURN' : "OPPONENT'S TURN")
+      .setColor(snap.isPlayerTurn ? '#00FF88' : '#FF8866');
     this.playerWinLossText.setText(`${snap.playerWins}W / ${snap.playerLosses}L`);
 
     const isMyTurn = snap.isPlayerTurn;
@@ -93,10 +98,12 @@ export class HUDRenderer {
 
   updatePlayerHP(current: number, max: number): void {
     this.drawHPBar(this.playerHPBarFill, this.layout.leftHUD.kingHPBar, current, max);
+    this.playerHPText?.setText(`King ${Math.max(0, current)} / ${max}`);
   }
 
   updateOpponentHP(current: number, max: number): void {
     this.drawHPBar(this.opponentHPBarFill, this.layout.rightHUD.kingHPBar, current, max);
+    this.opponentHPText?.setText(`King ${Math.max(0, current)} / ${max}`);
   }
 
   updatePlayerLEG(amount: number, rate: number): void {
@@ -161,6 +168,7 @@ export class HUDRenderer {
 
     this.playerHPBarFill = this.scene.add.graphics();
     this.drawHPBar(this.playerHPBarFill, L.kingHPBar, 30, 30);
+    this.playerHPText = this.makeHPText(L.kingHPBar);
 
     this.playerLEGText = this.scene.add.text(L.legCounter.x, L.legCounter.y, '1 LEG', {
       fontFamily: this.theme.fonts.heading.family,
@@ -208,6 +216,7 @@ export class HUDRenderer {
 
     this.opponentHPBarFill = this.scene.add.graphics();
     this.drawHPBar(this.opponentHPBarFill, L.kingHPBar, 30, 30);
+    this.opponentHPText = this.makeHPText(L.kingHPBar);
 
     this.opponentLEGText = this.scene.add.text(L.legCounter.x, L.legCounter.y, '1 LEG', {
       fontFamily: this.theme.fonts.heading.family,
@@ -231,6 +240,13 @@ export class HUDRenderer {
       }
     ).setOrigin(0.5, 0);
 
+    this.turnOwnerText = this.scene.add.text(L.phaseLabel.x, L.phaseLabel.y - 20, '', {
+      fontFamily: this.theme.fonts.body.family,
+      fontSize: `${this.theme.fonts.body.size}px`,
+      fontStyle: 'bold',
+      color: '#FFFFFF',
+    }).setOrigin(0.5, 0);
+
     // End Turn button — positioned in right HUD area below phase label
     if (L.endTurnBtn.width > 0 && L.endTurnBtn.height > 0) {
       this.endTurnBtn = createButton(this.scene, {
@@ -251,6 +267,15 @@ export class HUDRenderer {
   // ─────────────────────────────────────────────
   // PRIVATE — DRAWING HELPERS
   // ─────────────────────────────────────────────
+
+  /** Numeric King HP under a bar — the bar alone gave no exact value. */
+  private makeHPText(bar: { x: number; y: number; width: number; height: number }): Phaser.GameObjects.Text {
+    return this.scene.add.text(bar.x + bar.width / 2, bar.y + bar.height + 3, '', {
+      fontFamily: this.theme.fonts.small.family,
+      fontSize: `${this.theme.fonts.small.size + 1}px`,
+      color: this.theme.colors.TEXT_SECONDARY,
+    }).setOrigin(0.5, 0);
+  }
 
   private drawHPBar(
     gfx: Phaser.GameObjects.Graphics,

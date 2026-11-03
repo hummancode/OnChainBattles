@@ -183,6 +183,12 @@ class AuthManagerClass {
 
   getGuestSessionId(): string | null { return this._guestSessionId; }
 
+  /** "Guest-3F9A" — stable per guest session so two guests in one match are distinguishable. */
+  guestDisplayName(): string {
+    const id = this._guestSessionId?.replace(/-/g, '');
+    return id ? `Guest-${id.slice(0, 4).toUpperCase()}` : 'Guest';
+  }
+
   isGuest(): boolean { return !this._loggedIn && !!this._guestSessionId; }
 
   clearGuestSession(): void {
