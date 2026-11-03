@@ -30,6 +30,7 @@ import type { RejoinPayload, GameAction } from '../../shared/types/NetworkEvents
 import { applyAction } from '../network/ActionApplier';
 import { nextBotAction } from '../game/ai/SimpleBot';
 import { TutorialCoordinator } from './battle/TutorialCoordinator';
+import { SfxCoordinator } from './battle/SfxCoordinator';
 import { TUTORIAL_DECK, TUTORIAL_BOT_DECK, TUTORIAL_SEED } from '../game/data/TutorialSetup';
 import { setupHUDRefresh } from './battle/HUDRefreshCoordinator';
 import { createSelectionManager } from './battle/InputCoordinator';
@@ -203,6 +204,7 @@ export default class BattleScene extends Phaser.Scene {
     this.hudRenderer     = new HUDRenderer(this, layout, theme);
     this.overlayRenderer = new OverlayRenderer(this, layout, theme);
     this.hudRenderer.setLocalPlayer(localPlayerIndex);
+    this.sfx = new SfxCoordinator(this, localPlayerIndex);
 
     // ─── Input ───────────────────────────────────
     // Replays are read-only: no SelectionManager → no clicks reach the engine.
@@ -290,6 +292,7 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   private tutorial?: TutorialCoordinator;
+  private sfx?: SfxCoordinator;
 
   /** Drive player 2 with SimpleBot; actions go through applyAction like any other source. */
   private startBot(tutorial: boolean): void {
@@ -317,6 +320,7 @@ export default class BattleScene extends Phaser.Scene {
    */
   private runReplay(replay: ReplayData): void {
     GameState.gameSeed = replay.gameSeed;      // engine RNG (reshuffles) reads it
+    this.hudRenderer.setSpectator(replay.playerNames);
     this.engine.startGame(replay.decks);
 
     const total = replay.actionLog.length;
@@ -376,6 +380,8 @@ export default class BattleScene extends Phaser.Scene {
   shutdown() {
     this.tutorial?.cleanup();
     this.tutorial = undefined;
+    this.sfx?.cleanup();
+    this.sfx = undefined;
     SocketManager.setHashSource(null);
     // Phaser reuses this scene instance; old callbacks would draw disconnect banners etc.
     // onto the next battle/replay (seen in QA). Re-installed by setupSocketCallbacks.

@@ -18,6 +18,7 @@ import type { BattleLayoutJSON, ThemeJSON, CellRenderData, CardRenderData } from
 import { EventBus, EV } from '../events/EventBus';
 import { ThemeLoader } from '../config/ThemeLoader';
 import { UnitThumbnail } from './UnitThumbnail';
+import { CardRenderer, PREVIEW } from './CardRenderer';
 import { setContainerHitArea } from '../utils/PhaserUtils';
 
 type HighlightType = 'none' | 'move' | 'attack' | 'attackRange' | 'deploy' | 'aura' | 'selected' | 'hover';
@@ -50,11 +51,15 @@ export class BoardRenderer {
   private localPlayerIndex: number = 0;
   private unsubs: Array<() => void> = [];
 
+  /** Renders the hover preview (full card) for board units. */
+  private cardRenderer: CardRenderer;
+
   constructor(scene: Phaser.Scene, layout: BattleLayoutJSON, theme: ThemeJSON, localPlayerIndex: number) {
     this.localPlayerIndex = localPlayerIndex;
     this.scene = scene;
     this.layout = layout;
     this.theme = theme;
+    this.cardRenderer = new CardRenderer(scene, layout, theme);
 
     this.rootContainer         = scene.add.container(0, 0);
     this.cellContainer         = scene.add.container(0, 0);
@@ -249,11 +254,30 @@ onComplete: () => {
   }
 
   animateAttack(
-    _from: { col: number; row: number },
+    from: { col: number; row: number },
     target: { col: number; row: number },
     onComplete?: () => void
   ): void {
     const g = this.layout.grid;
+    // Attacker lunges toward the target and snaps back; target shakes.
+    const attacker = this.unitsByCell.get(this.cellKey(from.col, from.row));
+    const victim = this.unitsByCell.get(this.cellKey(target.col, target.row));
+    if (attacker && attacker !== victim) {
+      const dx = (target.col - from.col) * g.cellSize * 0.3;
+      const dy = (this.mirrorRow(target.row) - this.mirrorRow(from.row)) * g.cellSize * 0.3;
+      const ox = attacker.container.x, oy = attacker.container.y;
+      this.scene.tweens.add({
+        targets: attacker.container, x: ox + dx, y: oy + dy, duration: 90, ease: 'Quad.easeOut', yoyo: true,
+        onComplete: () => { attacker.container.setPosition(ox, oy); },
+      });
+    }
+    if (victim) {
+      const vx = victim.container.x;
+      this.scene.tweens.add({
+        targets: victim.container, x: vx + 5, duration: 45, delay: 90, yoyo: true, repeat: 2,
+        onComplete: () => { victim.container.x = vx; },
+      });
+    }
     const displayRow = this.mirrorRow(target.row);
     const flash = this.scene.add.graphics();
     flash.fillStyle(0xFF4444, 0.5);
@@ -300,6 +324,7 @@ onComplete: () => {
 
   destroy(): void {
     this.unsubs.forEach(fn => fn());
+    this.hideUnitPreview();
     this.clearAllUnits();
     this.rootContainer.destroy();
   }
@@ -496,10 +521,38 @@ onComplete: () => {
     this.hoverGfx.setVisible(true);
 
     EventBus.emit(EV.CARD_HOVERED, { col, row });
+    const thumb = this.unitsByCell.get(this.cellKey(col, row));
+    if (thumb) this.showUnitPreview(thumb);
+  }
+
+  // ── Hover preview: full card with live stats, beside the board ──
+  private previewCard: Phaser.GameObjects.Container | null = null;
+  private previewFor: UnitThumbnail | null = null;
+  private previewTimer: Phaser.Time.TimerEvent | null = null;
+
+  private showUnitPreview(thumb: UnitThumbnail): void {
+    this.hideUnitPreview();
+    this.previewFor = thumb;
+    // Short delay so sweeping the mouse across the board doesn't flicker cards
+    this.previewTimer = this.scene.time.delayedCall(250, () => {
+      if (this.previewFor !== thumb || !this.unitsById.has(thumb.instanceId)) return;
+      // Right side, over the opponent's card backs (never over the board itself)
+      this.previewCard = this.cardRenderer.renderPreview({ ...thumb.data, isSelected: false, isExhausted: false }, 1270 - PREVIEW.width, 380);
+      this.previewCard.setDepth(950);
+    });
+  }
+
+  private hideUnitPreview(): void {
+    this.previewTimer?.remove(false);
+    this.previewTimer = null;
+    this.previewCard?.destroy();
+    this.previewCard = null;
+    this.previewFor = null;
   }
 
   private onCellHoverEnd(_col: number, _row: number): void {
     if (this.hoverGfx) this.hoverGfx.setVisible(false);
+    this.hideUnitPreview();
     this.hoveredCell = null;
     EventBus.emit(EV.CARD_HOVER_END, { col: _col, row: _row });
   }
@@ -512,6 +565,12 @@ onComplete: () => {
     this.unsubs.push(
       EventBus.on(EV.UNIT_PLACED, ({ data, col, row }) => {
         this.renderUnit(data, col, row);
+        // Pop-in: the unit "lands" on its square
+        const t = this.unitsByCell.get(this.cellKey(col, row));
+        if (t) {
+          t.container.setAlpha(0).setScale(0.6);
+          this.scene.tweens.add({ targets: t.container, alpha: 1, scale: 1, duration: 200, ease: 'Back.easeOut' });
+        }
       }),
 
       // UNIT_MOVED: tween re-keys only. NO destroy+recreate.
@@ -530,12 +589,21 @@ onComplete: () => {
 
       // UNIT_DIED: remove by instanceId — works even mid-tween
       EventBus.on(EV.UNIT_DIED, ({ instanceId, col, row }) => {
-        if (instanceId) {
-          this.clearUnitById(instanceId);
-        } else {
-          // Fallback: legacy events without instanceId
-          this.clearUnitByCell(col, row);
-        }
+        const thumb = instanceId ? this.unitsById.get(instanceId) : this.unitsByCell.get(this.cellKey(col, row));
+        if (!thumb) return;
+        // Detach from both maps NOW (state-driven: a unit placed on this square right
+        // after — capture/transform — must not collide); only the visual fades out.
+        this.unitsById.delete(thumb.instanceId);
+        if (thumb.cellKey) this.unitsByCell.delete(thumb.cellKey);
+        if (this.previewFor === thumb) this.hideUnitPreview();
+        thumb.container.removeAllListeners();
+        thumb.container.disableInteractive();
+        this.scene.tweens.killTweensOf(thumb.container);
+        this.scene.tweens.add({
+          targets: thumb.container, alpha: 0, scale: 0.5, angle: 8,
+          delay: 160, duration: 260, ease: 'Quad.easeIn',
+          onComplete: () => thumb.destroy(),
+        });
       }),
 
       EventBus.on(EV.UNIT_HEALED, ({ col, row, amount }) => {

@@ -10,10 +10,8 @@
 - Refresh during an optional pending interaction (Priest/Scout target etc.) cancels it on both clients; the card cost is not refunded
 
 ### UI (found in Playwright QA, 3 Nov 2026 — see ROADMAP Phase 2)
-- Hand cards are stacked with heavy overlap (only header + art visible until hover) — a bottom fan would need a board-layout change
 - Missing card art uses the generated placeholder texture (REFORM, MILITIA) — needs art, not code
 - SimpleBot is a single greedy difficulty; it ignores structures' long-term value and never holds cards back
-- Replay viewer reuses the battle HUD: "YOUR TURN" / END TURN refer to the viewed player and the button is inert
 - IGameEngineAPI.getValidDeployPositions interface takes unused `cardIndex` param
 
 ### Security (Dev-Only)
@@ -28,6 +26,13 @@
 - **Principle**: Every stat modification must be traceable to its source. No silent deltas.
 
 ---
+
+## Fixed (3 November 2026 — polish & cleanup, BUG-086…091)
+- **Hand as compact rows** (cost, art, name, ATK/DEF, type) — 8+ cards readable; large preview on hover; unaffordable cards dimmed.
+- **Board hover preview** — full card with live stats beside the board.
+- **Game feel** — attack lunge + hit shake, death fade, deploy pop-in, synthesized SFX (mute: 🔊 button / M key).
+- **Replay HUD** shows whose turn by name, no END TURN.
+- **Security**: rejoin requires the seat's identity (BUG-086). **Practice** games don't touch W/L (BUG-087). **Puzzle prize card** granted (BUG-089). Payout stub (BUG-088), chat listener (BUG-090), dimming (BUG-091).
 
 ## Fixed (3 November 2026 — content & balance, BUG-081…085)
 - **Earthquake soft-lock (BUG-081)** — `SELECT_COLUMN` action + UI path + prompt.

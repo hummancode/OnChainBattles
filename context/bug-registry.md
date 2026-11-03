@@ -16,13 +16,13 @@ Used to identify weak areas and improve code quality over time.
 | logic | 24 | 5 | 19 | 0 |
 | network | 12 | 6 | 6 | 0 |
 | state | 17 | 4 | 13 | 0 |
-| rendering | 9 | 1 | 7 | 1 |
+| rendering | 10 | 1 | 8 | 1 |
 | race-condition | 4 | 2 | 2 | 0 |
 | memory-leak | 5 | 0 | 5 | 0 |
 | web3 | 3 | 0 | 3 | 0 |
 | type-safety | 7 | 2 | 5 | 0 |
 | security | 7 | 1 | 6 | 0 |
-| **TOTAL** | **90** | **21** | **68** | **1** |
+| **TOTAL** | **91** | **21** | **69** | **1** |
 
 ---
 
@@ -931,6 +931,16 @@ Used to identify weak areas and improve code quality over time.
 - **Fix**: AbortController signal, aborted in `cleanup()`.
 - **Prevention**: Same as BUG-058: use signals for DOM listeners.
 - **Files**: `src/scenes/LobbyScene.ts`
+
+### BUG-091: Newly drawn hand row ignored "can't afford" dimming
+- **Date**: 2026-11-03
+- **Category**: `rendering`
+- **Discovered by**: `claude`
+- **Symptom**: A 9-cost card drawn at 1 LEG showed at full brightness (Playwright QA); rows only dimmed after the next LEG change.
+- **Root cause**: `addCard`'s fade-in tween always animated alpha to 1, overwriting the alpha `applyState` had just set.
+- **Fix**: Tween to the row's state alpha.
+- **Prevention**: Entry animations must end at the state value, not a hard-coded "visible" value (cf. BUG-057 — state first, animation second).
+- **Files**: `src/renderers/HandRenderer.ts`, `tests/renderers/handRenderer.test.ts`
 
 ---
 

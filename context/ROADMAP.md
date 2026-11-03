@@ -76,6 +76,17 @@ Açık kalan içerik işleri: alta yelpaze el düzeni, eksik kart çizimleri, pu
 
 ---
 
+## Cila turu — mevcut sürümün iyileştirilmesi ✅ (3 Kasım 2026)
+
+| Alan | Yapılan |
+|------|---------|
+| Oynanış hissi | Saldırı atılması + vuruş sarsıntısı, ölüm animasyonu, konuşlanma animasyonu; Web Audio ile üretilen ses efektleri (🔊 / M ile kapat) |
+| El / tahta düzeni | El kartları kompakt satırlar (8+ kart okunur), hover'da büyük kart önizlemesi, LEG'in yetmediği kartlar soluk; tahtadaki birimler için canlı statlı önizleme |
+| Tekrar izleme | HUD'da sıra kimdeyse adı, END TURN gizli |
+| Güvenlik / kalite | Yeniden bağlanmada kimlik doğrulama (BUG-086), pratik maçlar W/L'yi etkilemiyor + REMATCH yeni bot maçı (BUG-087), puzzle ödül kartı veriliyor (BUG-089), ödeme taslağı ve sohbet dinleyicisi düzeltildi (BUG-088, BUG-090) |
+
+---
+
 ## Faz 5 — Web3 / canlıya hazırlık ⏳
 
 - Beraberlik iadesinin (`refundTie`) Fuji'de uçtan uca testi

@@ -15,15 +15,24 @@
 import Phaser from 'phaser';
 import type { BattleLayoutJSON, ThemeJSON, CardRenderData } from '../game/types/UITypes';
 import { EventBus, EV } from '../events/EventBus';
-import { CardRenderer } from './CardRenderer';
+import { CardRenderer, PREVIEW } from './CardRenderer';
 import { setContainerHitArea } from '../utils/PhaserUtils';
-import { fanPosition } from './helpers/CardLayoutCalc';
+import { CardRowRenderer, ROW } from './CardRowRenderer';
+
+/** Rows fit between the LEG/record block and the bottom of the screen. */
+const ROW_X = 15;
+const ROW_BOTTOM = 712;
 
 export class HandRenderer {
   private scene: Phaser.Scene;
   private layout: BattleLayoutJSON;
   private theme: ThemeJSON;
   private cardRenderer: CardRenderer;
+  private rowRenderer: CardRowRenderer;
+  /** Full-size card shown beside the hand while a row is hovered. */
+  private preview: Phaser.GameObjects.Container | null = null;
+  /** Current LEG pool (from HUD_REFRESH) — rows that cost more are dimmed. */
+  private legAvailable = Infinity;
 
   // Player hand container
   private handContainer: Phaser.GameObjects.Container;
@@ -49,6 +58,7 @@ export class HandRenderer {
     this.layout = layout;
     this.theme = theme;
     this.cardRenderer = new CardRenderer(scene, layout, theme);
+    this.rowRenderer = new CardRowRenderer(scene, theme);
 
     this.handContainer    = scene.add.container(0, 0);
     this.oppHandContainer = scene.add.container(0, 0);
@@ -72,10 +82,8 @@ export class HandRenderer {
   /** Add a card to the hand (on draw). Renders only the new card + repositions existing. */
   addCard(card: CardRenderData): void {
     this.cards.push(card);
-    const H = this.layout.leftHUD.hand;
-
     // Overflow: the new card isn't visible — full rebuild keeps the "+N more" label right.
-    if (this.cards.length > H.maxVisible) {
+    if (this.cards.length > this.maxVisible) {
       this.rebuild();
       return;
     }
@@ -87,20 +95,19 @@ export class HandRenderer {
     this.repositionCards(newCount);
 
     // Render only the new card
-    const pos = this.cardPosition(newIndex, newCount, H);
-    const cardContainer = this.cardRenderer.render(
-      { ...this.cards[newIndex], isSelected: false }, 'full', pos.x, pos.y,
-    );
-    cardContainer.setRotation(Phaser.Math.DegToRad(pos.angle));
+    const pos = this.cardPosition(newIndex);
+    const cardContainer = this.rowRenderer.render(this.rowData(newIndex), pos.x, pos.y);
     this.bindCardInput(cardContainer);
 
     this.handContainer.add(cardContainer);
     this.cardContainers.push(cardContainer);
 
-    // Animate the new card sliding in
+    // Animate the new card sliding in — to its state alpha (dimmed if unaffordable),
+    // not to 1, or the fade-in would undo applyState's dimming.
+    const targetAlpha = cardContainer.alpha;
     cardContainer.setAlpha(0);
     this.scene.tweens.add({
-      targets: cardContainer, alpha: 1, duration: 250, ease: 'Quad.easeOut',
+      targets: cardContainer, alpha: targetAlpha, duration: 250, ease: 'Quad.easeOut',
     });
   }
 
@@ -115,7 +122,7 @@ export class HandRenderer {
     this.cards.splice(index, 1);
     if (this.selectedIndex === index) this.selectedIndex = null;
     else if (this.selectedIndex !== null && this.selectedIndex > index) this.selectedIndex--;
-    if (this.hoveredIndex === index) this.hoveredIndex = null;
+    if (this.hoveredIndex === index) { this.hoveredIndex = null; this.hidePreview(); }
     else if (this.hoveredIndex !== null && this.hoveredIndex > index) this.hoveredIndex--;
 
     const container = this.cardContainers[index];
@@ -131,14 +138,13 @@ export class HandRenderer {
     this.scene.tweens.add({
       targets: container,
       alpha: 0,
-      y: container.y - 30,
+      x: container.x - 40,
       duration: 200,
       ease: 'Quad.easeIn',
       onComplete: () => container.destroy(),
     });
 
-    const H = this.layout.leftHUD.hand;
-    if (this.cards.length >= H.maxVisible) {
+    if (this.cards.length >= this.maxVisible) {
       // A previously hidden card becomes visible — rebuild (fading container is detached, unaffected)
       this.rebuild();
     } else {
@@ -170,6 +176,7 @@ export class HandRenderer {
 
   destroy(): void {
     this.unsubs.forEach(fn => fn());
+    this.hidePreview();
     this.handContainer.destroy();
     this.oppHandContainer.destroy();
   }
@@ -186,19 +193,11 @@ export class HandRenderer {
     this.overflowLabel = null;
 
     const H = this.layout.leftHUD.hand;
-    const count = Math.min(this.cards.length, H.maxVisible);
+    const count = Math.min(this.cards.length, this.maxVisible);
 
     for (let i = 0; i < count; i++) {
-      const pos = this.cardPosition(i, count, H);
-      const cardContainer = this.cardRenderer.render(
-        { ...this.cards[i], isSelected: this.selectedIndex === i },
-        'full',
-        pos.x,
-        pos.y
-      );
-
-      // Apply fan rotation
-      cardContainer.setRotation(Phaser.Math.DegToRad(pos.angle));
+      const pos = this.cardPosition(i);
+      const cardContainer = this.rowRenderer.render(this.rowData(i), pos.x, pos.y);
 
       // Interactivity
       this.bindCardInput(cardContainer);
@@ -208,12 +207,12 @@ export class HandRenderer {
     }
 
     // Overflow indicator
-    if (this.cards.length > H.maxVisible) {
-      const overflow = this.cards.length - H.maxVisible;
+    if (this.cards.length > this.maxVisible) {
+      const overflow = this.cards.length - this.maxVisible;
       const bottomCard = this.cardContainers[this.cardContainers.length - 1];
       if (bottomCard) {
         const moreLabel = this.scene.add.text(
-          H.x, bottomCard.y + H.cardHeight + 4,
+          H.x, bottomCard.y + ROW.height + 2,
           `+${overflow} more`,
           {
             fontFamily: this.theme.fonts.small.family,
@@ -227,15 +226,13 @@ export class HandRenderer {
     }
   }
 
-  /** Tween existing cards to new fan positions without destroy/recreate. */
+  /** Tween existing rows to their slots without destroy/recreate. */
   private repositionCards(count: number): void {
-    const H = this.layout.leftHUD.hand;
     for (let i = 0; i < this.cardContainers.length && i < count; i++) {
-      const pos = this.cardPosition(i, count, H);
+      const pos = this.cardPosition(i);
       this.scene.tweens.add({
         targets: this.cardContainers[i],
-        x: pos.x, y: pos.y,
-        rotation: Phaser.Math.DegToRad(pos.angle),
+        x: pos.x + (this.selectedIndex === i ? 8 : 0), y: pos.y,
         duration: 150, ease: 'Quad.easeOut',
       });
     }
@@ -246,7 +243,7 @@ export class HandRenderer {
    * Never capture an index in the closure — indices shift when cards are removed.
    */
   private bindCardInput(c: Phaser.GameObjects.Container): void {
-    setContainerHitArea(c, this.layout.cards.full.width, this.layout.cards.full.height);
+    setContainerHitArea(c, ROW.width, ROW.height);
     const withIndex = (fn: (i: number) => void) => () => {
       const i = this.cardContainers.indexOf(c);
       if (i >= 0) fn(i);
@@ -256,40 +253,47 @@ export class HandRenderer {
     c.on('pointerdown', withIndex(i => this.onCardClick(i)));
   }
 
-  // cardPosition extracted → helpers/CardLayoutCalc.ts fanPosition()
-  private cardPosition(
-    index: number,
-    total: number,
-    H: typeof this.layout.leftHUD.hand
-  ): { x: number; y: number; angle: number } {
-    return fanPosition(index, total, H);
+  /** How many rows fit between the hand's top (layout) and the bottom of the screen. */
+  private get maxVisible(): number {
+    const H = this.layout.leftHUD.hand;
+    return Math.max(1, Math.floor((ROW_BOTTOM - H.y + ROW.gap) / (ROW.height + ROW.gap)));
+  }
+
+  private cardPosition(index: number): { x: number; y: number } {
+    return { x: ROW_X, y: this.layout.leftHUD.hand.y + index * (ROW.height + ROW.gap) };
+  }
+
+  private rowData(index: number): CardRenderData & { unaffordable: boolean } {
+    const d = this.cards[index];
+    return { ...d, isSelected: this.selectedIndex === index, unaffordable: d.cost > this.legAvailable };
   }
 
   private refreshCardVisual(index: number): void {
     const container = this.cardContainers[index];
     if (!container) return;
-
-    // Destroy and re-render just this card
-    const H = this.layout.leftHUD.hand;
-    const count = Math.min(this.cards.length, H.maxVisible);
-    const pos = this.cardPosition(index, count, H);
-
-    // Update state without full rebuild for performance
-    this.cardRenderer.updateState(
-      container,
-      { ...this.cards[index], isSelected: this.selectedIndex === index },
-      'full'
-    );
-
-    // Scale animation for selected state
-    const targetScale = this.selectedIndex === index ? H.selectedScale : 1.0;
+    this.rowRenderer.applyState(container, this.rowData(index));
+    // Selected row nudges right so it reads as "picked up"
+    const pos = this.cardPosition(index);
     this.scene.tweens.add({
-      targets: container,
-      scaleX: targetScale,
-      scaleY: targetScale,
-      duration: 120,
-      ease: 'Quad.easeOut',
+      targets: container, x: pos.x + (this.selectedIndex === index ? 8 : 0),
+      duration: 120, ease: 'Quad.easeOut',
     });
+  }
+
+  /** Big readable card next to the hand while hovering a row. */
+  private showPreview(index: number): void {
+    this.hidePreview();
+    const data = this.cards[index];
+    const row = this.cardContainers[index];
+    if (!data || !row) return;
+    const y = Math.max(4, Math.min(720 - PREVIEW.height - 4, row.y - 40));
+    this.preview = this.cardRenderer.renderPreview({ ...data, isSelected: false }, ROW_X + ROW.width + 14, y);
+    this.preview.setDepth(950);
+  }
+
+  private hidePreview(): void {
+    this.preview?.destroy();
+    this.preview = null;
   }
 
   // ─────────────────────────────────────────────
@@ -341,59 +345,16 @@ export class HandRenderer {
   private onCardHover(index: number): void {
     if (this.hoveredIndex === index) return;
     this.hoveredIndex = index;
-
-    const container = this.cardContainers[index];
-    if (!container) return;
-
-    // Expand card on hover (if not selected)
-    if (this.selectedIndex !== index) {
-      const H = this.layout.leftHUD.hand;
-      const full = this.layout.cards.full;
-      const scaleX = full.hoverWidth / full.width;
-      const scaleY = full.hoverHeight / full.height;
-
-      this.scene.tweens.add({
-        targets: container,
-        scaleX,
-        scaleY,
-        duration: 100,
-        ease: 'Quad.easeOut',
-      });
-    }
-
-    // Bring to top within hand container
-    this.handContainer.bringToTop(container);
-
+    if (!this.cardContainers[index]) return;
+    this.showPreview(index);
     EventBus.emit(EV.CARD_HOVERED, { index, card: this.cards[index] });
   }
 
   private onCardHoverEnd(index: number): void {
     if (this.hoveredIndex !== index) return;
     this.hoveredIndex = null;
-
-    const container = this.cardContainers[index];
-    if (!container) return;
-
-    if (this.selectedIndex !== index) {
-      this.scene.tweens.add({
-        targets: container,
-        scaleX: 1,
-        scaleY: 1,
-        duration: 100,
-        ease: 'Quad.easeOut',
-      });
-    }
-
-    // Restore stacking order (hover brought this card to the top; leaving it there
-    // permanently covered the next card's header).
-    this.restoreStackOrder();
-
+    this.hidePreview();
     EventBus.emit(EV.CARD_HOVER_END, { index });
-  }
-
-  private restoreStackOrder(): void {
-    for (const c of this.cardContainers) this.handContainer.bringToTop(c);
-    if (this.overflowLabel) this.handContainer.bringToTop(this.overflowLabel);
   }
 
   private onCardClick(index: number): void {
@@ -442,6 +403,11 @@ EventBus.on(EV.SELECTION_CHANGED, ({ source }) => {
       EventBus.on(EV.HUD_REFRESH, (snap) => {
         if (snap.opponentHandCount !== undefined) {
           this.setOpponentHandCount(snap.opponentHandCount);
+        }
+        // Dim rows the player can't afford right now
+        if (typeof snap.playerLEG === 'number' && snap.playerLEG !== this.legAvailable) {
+          this.legAvailable = snap.playerLEG;
+          this.cardContainers.forEach((_, i) => this.rowRenderer.applyState(this.cardContainers[i], this.rowData(i)));
         }
       }),
     );

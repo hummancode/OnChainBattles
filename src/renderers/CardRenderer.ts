@@ -13,8 +13,12 @@ import { CardThumbnailRenderer } from './CardThumbnailRenderer';
 import { CardDetailRenderer } from './CardDetailRenderer';
 import { CardBackRenderer } from './CardBackRenderer';
 
+/** Hover preview size: taller than the in-hand card so long rules text fits. */
+export const PREVIEW = { width: 200, height: 330 } as const;
+
 export class CardRenderer {
   private fullRenderer: CardFullRenderer;
+  private previewRenderer: CardFullRenderer;
   private thumbnailRenderer: CardThumbnailRenderer;
   private detailRenderer: CardDetailRenderer;
   private backRenderer: CardBackRenderer;
@@ -24,6 +28,19 @@ export class CardRenderer {
     this.thumbnailRenderer = new CardThumbnailRenderer(scene, layout, theme);
     this.detailRenderer = new CardDetailRenderer(scene, layout, theme);
     this.backRenderer = new CardBackRenderer(scene, layout, theme);
+    const f = layout.cards.full;
+    this.previewRenderer = new CardFullRenderer(scene, {
+      ...layout,
+      cards: { ...layout.cards, full: {
+        ...f, width: PREVIEW.width, height: PREVIEW.height,
+        artAreaHeight: 120, nameBarHeight: 28, statRowHeight: 24, legPipSize: 30, typeIconSize: 20,
+      } },
+    }, theme);
+  }
+
+  /** Large, readable card (top-left anchored) for hover previews. */
+  renderPreview(data: CardRenderData, x: number, y: number): Phaser.GameObjects.Container {
+    return this.previewRenderer.render(data, x, y);
   }
 
   render(data: CardRenderData, mode: CardRenderMode, x: number, y: number): Phaser.GameObjects.Container {

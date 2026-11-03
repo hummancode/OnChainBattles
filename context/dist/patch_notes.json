@@ -312,6 +312,63 @@
       "released_at": "2026-03-12T23:02:58.165219"
     }
   ],
-  "unreleased": [],
+  "unreleased": [
+    {
+      "id": "20261104100000000000",
+      "category": "New Content",
+      "text": "Your hand is now a readable list: cost, name, ATK/DEF and type at a glance. Hover a card for a large preview; cards you can't afford are dimmed.",
+      "created": "2026-11-04T10:00:00",
+      "edited": null
+    },
+    {
+      "id": "20261104100001000000",
+      "category": "New Content",
+      "text": "Hover any unit on the board to see its full card with current stats.",
+      "created": "2026-11-04T10:00:01",
+      "edited": null
+    },
+    {
+      "id": "20261104100002000000",
+      "category": "New Content",
+      "text": "Combat feels punchier: attackers lunge, targets shake, fallen units fade away, new units pop onto the board.",
+      "created": "2026-11-04T10:00:02",
+      "edited": null
+    },
+    {
+      "id": "20261104100003000000",
+      "category": "New Content",
+      "text": "Sound effects for deploying, attacking, deaths, your turn and wins/losses. Toggle with the speaker button or the M key.",
+      "created": "2026-11-04T10:00:03",
+      "edited": null
+    },
+    {
+      "id": "20261104100004000000",
+      "category": "Bug Fix",
+      "text": "Replays show whose turn it is by name and no longer show an END TURN button.",
+      "created": "2026-11-04T10:00:04",
+      "edited": null
+    },
+    {
+      "id": "20261104100005000000",
+      "category": "Bug Fix",
+      "text": "Reconnecting to a match now requires your own account/guest session — a seat can't be taken just by knowing your name.",
+      "created": "2026-11-04T10:00:05",
+      "edited": null
+    },
+    {
+      "id": "20261104100006000000",
+      "category": "Bug Fix",
+      "text": "Practice and tutorial games no longer change your win/loss record; REMATCH after practice starts a new bot game.",
+      "created": "2026-11-04T10:00:06",
+      "edited": null
+    },
+    {
+      "id": "20261104100007000000",
+      "category": "Bug Fix",
+      "text": "Solving a puzzle now actually adds its prize card to your collection.",
+      "created": "2026-11-04T10:00:07",
+      "edited": null
+    }
+  ],
   "revoked": []
 }

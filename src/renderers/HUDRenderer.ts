@@ -68,6 +68,13 @@ export class HUDRenderer {
     this.localPlayerIndex = index;
   }
 
+  /** Replay viewer: name whose turn it is instead of YOUR/THEIR, no END TURN button. */
+  private spectatorNames: [string, string] | null = null;
+  setSpectator(names: [string, string]): void {
+    this.spectatorNames = names;
+    this.endTurnBtn?.setVisible(false);
+  }
+
   constructor(scene: Phaser.Scene, layout: BattleLayoutJSON, theme: ThemeJSON) {
     this.scene = scene;
     this.layout = layout;
@@ -94,8 +101,13 @@ export class HUDRenderer {
     this.updatePlayerLEG(snap.playerLEG, snap.playerCrown);
     this.updateOpponentLEG(snap.opponentLEGCount);
     this.updatePhaseLabel(snap.currentPhase, snap.turnNumber);
-    this.turnOwnerText?.setText(snap.isPlayerTurn ? 'YOUR TURN' : 'THEIR TURN') // short: must fit beside the board
-      .setColor(snap.isPlayerTurn ? '#00FF88' : '#FF8866');
+    if (this.spectatorNames) {
+      const active = snap.isPlayerTurn ? this.localPlayerIndex : 1 - this.localPlayerIndex;
+      this.turnOwnerText?.setText(this.spectatorNames[active]).setColor('#FFD54F');
+    } else {
+      this.turnOwnerText?.setText(snap.isPlayerTurn ? 'YOUR TURN' : 'THEIR TURN') // short: must fit beside the board
+        .setColor(snap.isPlayerTurn ? '#00FF88' : '#FF8866');
+    }
     this.playerWinLossText.setText(`${snap.playerWins}W / ${snap.playerLosses}L`);
 
     const isMyTurn = snap.isPlayerTurn;
@@ -136,6 +148,7 @@ export class HUDRenderer {
   setEndTurnEnabled(enabled: boolean): void {
     const btn = this.endTurnBtn;
     if (!btn) return;
+    if (this.spectatorNames) { btn.setVisible(false); return; }
     btn.setAlpha(enabled ? 1.0 : 0.4);
     if (btn.input) {
       btn.input.enabled = enabled;
@@ -180,12 +193,12 @@ export class HUDRenderer {
   private bannerObj?: Phaser.GameObjects.Container;
 
   /** Big "YOUR TURN" / "OPPONENT'S TURN" banner over the board on every turn change. */
-  private showTurnBanner(isMyTurn: boolean): void {
+  private showTurnBanner(isMyTurn: boolean, spectatorLabel?: string): void {
     this.bannerObj?.destroy();
     const x = this.boardCenterX, y = 360;
     const bg = this.scene.add.rectangle(0, 0, 520, 84, 0x000000, 0.75)
       .setStrokeStyle(2, isMyTurn ? 0x00FF88 : 0xFF6666, 0.9);
-    const label = this.scene.add.text(0, 0, isMyTurn ? 'YOUR TURN' : "OPPONENT'S TURN", {
+    const label = this.scene.add.text(0, 0, spectatorLabel ?? (isMyTurn ? 'YOUR TURN' : "OPPONENT'S TURN"), {
       fontFamily: this.theme.fonts.heading.family,
       fontSize: '40px', fontStyle: 'bold',
       color: isMyTurn ? '#00FF88' : '#FF8866',
@@ -477,7 +490,7 @@ export class HUDRenderer {
       EventBus.on(EV.TURN_STARTED, ({ activePlayer }) => {
         const isMyTurn = activePlayer === this.localPlayerIndex;
         this.setEndTurnEnabled(isMyTurn);
-        this.showTurnBanner(isMyTurn);
+        this.showTurnBanner(isMyTurn, this.spectatorNames ? `${this.spectatorNames[activePlayer]}'S TURN` : undefined);
       }),
 
       EventBus.on(EV.UI_TOAST, ({ message, color }) => this.showToast(message, color)),

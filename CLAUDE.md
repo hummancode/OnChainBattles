@@ -50,7 +50,8 @@ npx hardhat ignition deploy --network fuji ignition/modules/Escrow.ts
 | Folder | Purpose |
 |--------|---------|
 | `src/scenes/` | Phaser scenes (10 total, see scene flow below) |
-| `src/renderers/` | Decoupled rendering layer (BoardRenderer, HandRenderer, HUDRenderer, OverlayRenderer) |
+| `src/renderers/` | Decoupled rendering layer (BoardRenderer, HandRenderer [compact rows + hover preview], HUDRenderer, OverlayRenderer, CardRowRenderer) |
+| `src/audio/` | SoundFX — synthesized Web Audio effects (no asset files), mute persisted |
 | `src/game/` | Pure game engine (no Phaser dependency) |
 | `src/game/phases/` | Turn phases: Draw → LEG → Play → Act → End |
 | `src/game/abilities/` | Strategy pattern: registry + 19 handler files |

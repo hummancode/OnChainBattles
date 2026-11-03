@@ -28,6 +28,9 @@ export class UnitThumbnail {
   /** Cell map key — maintained by BoardRenderer for O(1) reverse lookup. */
   cellKey: string = '';
 
+  /** Latest render data (stats kept current by updateStats) — used for the hover preview. */
+  data: CardRenderData;
+
   // Direct references to mutable children — never string lookups
   private atkBadgeBg: Phaser.GameObjects.Graphics | null = null;
   private atkBadgeText: Phaser.GameObjects.Text | null = null;
@@ -55,6 +58,7 @@ export class UnitThumbnail {
   ) {
     this.scene = scene;
     this.instanceId = data.id;
+    this.data = { ...data };
 
     const L = layout.cards.thumbnail;
     const BT = theme.board;
@@ -184,8 +188,8 @@ export class UnitThumbnail {
 
 /** Update only the fields that are provided. undefined = no change. */
   updateStats(atk: number | undefined, currentHP: number | undefined, maxHP: number | undefined, canAct: boolean): void {
-    if (atk !== undefined) this.setAtk(atk);
-    if (currentHP !== undefined) this.setDef(currentHP, maxHP);
+    if (atk !== undefined) { this.setAtk(atk); this.data.atk = atk; }
+    if (currentHP !== undefined) { this.setDef(currentHP, maxHP); this.data.currentHP = currentHP; if (maxHP !== undefined) this.data.maxHP = maxHP; }
     this.setCanAct(canAct);
   }
 
