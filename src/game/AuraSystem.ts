@@ -18,7 +18,7 @@ import type { AuraProcessor, EconomyProcessor, StatDelta } from './auras/AuraPro
 import { createStatChain, createEconomyChain, runStatChain } from './auras/AuraProcessorChain';
 import { getCard } from './data/CardRegistry';
 import { AbilityType } from './types/AbilityTypes';
-import { params, beginAuditTrail, endAuditTrail } from './auras/auraHelpers';
+import { params, beginAuditTrail, endAuditTrail, addDelta } from './auras/auraHelpers';
 import type { EvAuraApplied } from './types/EventTypes';
 
 export class AuraSystem {
@@ -62,6 +62,15 @@ export class AuraSystem {
     for (const unit of allUnits) {
       if (!unit.isActive) continue;
       runStatChain(this.statChain, unit, allUnits, board, deltas);
+    }
+
+    // ── Step 3b: Timed movement buffs (War Horn) — player-wide, not unit-sourced ──
+    for (const unit of allUnits) {
+      for (const eff of mods[unit.owner].timedEffects) {
+        if (eff.type === 'WAR_HORN_MOVEMENT') {
+          addDelta(deltas, unit.instanceId, 0, 0, eff.value ?? 1, 'war_horn:WAR_HORN_MOVEMENT');
+        }
+      }
     }
     endAuditTrail();
 

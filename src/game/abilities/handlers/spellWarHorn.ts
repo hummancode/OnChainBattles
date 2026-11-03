@@ -8,6 +8,8 @@ function warHornHandler(ctx: AbilityContext): AbilityResult {
   const drawEvents: GameEvent[] = [
     { type: 'CARD_DRAWN', player: ctx.owner, cardId: '__DRAW__', handIndex: -1, deckRemaining: -1 },
     { type: 'CARD_DRAWN', player: ctx.owner, cardId: '__DRAW__', handIndex: -1, deckRemaining: -1 },
+    // Engine turns this into a 1-turn WAR_HORN_MOVEMENT timed effect; AuraSystem applies it.
+    { type: 'WAR_HORN_SOUNDED', player: ctx.owner, moveBonus: 1 },
   ];
 
   const pending: PendingCommand = {

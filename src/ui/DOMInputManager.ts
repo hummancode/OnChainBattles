@@ -41,6 +41,8 @@ export interface InputConfig {
 interface ManagedInput {
   element: HTMLInputElement;
   domElement: Phaser.GameObjects.DOMElement;
+  /** Aborting removes every listener registered with its signal. */
+  listeners: AbortController;
 }
 
 // ─── Default styling tokens ────────────────────────────────────
@@ -63,6 +65,9 @@ export class DOMInputManager {
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
+    // Safety net: never leak inputs/listeners if a scene forgets to call destroyAll().
+    scene.events.once('shutdown', this.destroyAll, this);
+    scene.events.once('destroy', this.destroyAll, this);
   }
 
   // ─── Public API ────────────────────────────────────────────────
@@ -76,6 +81,8 @@ export class DOMInputManager {
     const h = config.height ?? DEFAULTS.height;
 
     const input = document.createElement('input');
+    const listeners = new AbortController();
+    const opts = { signal: listeners.signal };
     input.type = 'text';
     input.placeholder = config.placeholder ?? '';
     if (config.maxLength) input.maxLength = config.maxLength;
@@ -87,7 +94,7 @@ export class DOMInputManager {
         const pos = input.selectionStart;
         input.value = input.value.toUpperCase();
         input.setSelectionRange(pos, pos);
-      });
+      }, opts);
     }
 
     // ── Styling ────────────────────────────────────────────
@@ -111,11 +118,11 @@ export class DOMInputManager {
     input.addEventListener('focus', () => {
       input.style.borderColor = DEFAULTS.focusBorder;
       input.style.boxShadow = `0 0 8px ${DEFAULTS.focusBorder}44`;
-    });
+    }, opts);
     input.addEventListener('blur', () => {
       input.style.borderColor = DEFAULTS.border;
       input.style.boxShadow = 'none';
-    });
+    }, opts);
 
     // Extra overrides
     if (config.cssOverrides) {
@@ -127,7 +134,7 @@ export class DOMInputManager {
     // automatically handling canvas scaling and centering.
     const domElement = this.scene.add.dom(config.gameX, config.gameY, input);
 
-    this.inputs.push({ element: input, domElement });
+    this.inputs.push({ element: input, domElement, listeners });
 
     return input;
   }
@@ -136,6 +143,7 @@ export class DOMInputManager {
   destroyInput(input: HTMLInputElement): void {
     const idx = this.inputs.findIndex(m => m.element === input);
     if (idx !== -1) {
+      this.inputs[idx].listeners.abort();
       this.inputs[idx].domElement.destroy();
       this.inputs.splice(idx, 1);
     }
@@ -144,6 +152,7 @@ export class DOMInputManager {
   /** Remove ALL managed inputs */
   destroyAll(): void {
     for (const managed of this.inputs) {
+      managed.listeners.abort();
       managed.domElement.destroy();
     }
     this.inputs = [];

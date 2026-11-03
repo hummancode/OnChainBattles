@@ -374,7 +374,7 @@ export default class DeckBuilderScene extends Phaser.Scene {
     // Toggle persistent header visibility based on view
     const showHeader = this.state.currentView === DeckView.DECK_LIST;
     for (const obj of this.headerObjects) {
-      (obj as Phaser.GameObjects.Components.Visible).setVisible(showHeader);
+      (obj as unknown as Phaser.GameObjects.Components.Visible).setVisible(showHeader);
     }
 
     if (this.state.currentView === DeckView.DECK_LIST) {

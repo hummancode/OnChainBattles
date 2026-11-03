@@ -80,6 +80,28 @@
       "released_at": "2026-03-12T23:02:58.165219"
     }
   ],
-  "unreleased": [],
+  "unreleased": [
+    {
+      "id": "20261103100000000000",
+      "category": "Bug Fix",
+      "text": "War Horn now actually grants all your units +1 movement for the rest of the turn.",
+      "created": "2026-11-03T10:00:00",
+      "edited": null
+    },
+    {
+      "id": "20261103100001000000",
+      "category": "Bug Fix",
+      "text": "Fixed clicking a hand card right after playing/discarding another selecting the wrong card.",
+      "created": "2026-11-03T10:00:01",
+      "edited": null
+    },
+    {
+      "id": "20261103100002000000",
+      "category": "Bug Fix",
+      "text": "Fixed duplicate card appearing when the hand exceeds its visible limit.",
+      "created": "2026-11-03T10:00:02",
+      "edited": null
+    }
+  ],
   "revoked": []
 }

@@ -293,6 +293,12 @@ export interface EvDiseaseApplied {
   duration: number;
 }
 
+export interface EvWarHornSounded {
+  type: 'WAR_HORN_SOUNDED';
+  player: Player;            // All of this player's units gain +moveBonus this turn
+  moveBonus: number;
+}
+
 // ─────────────────────────────────────────────
 // UNION TYPE
 // EventBus.emit() and .on() are typed against this union.
@@ -329,6 +335,7 @@ export type GameEvent =
   | EvDeckShuffled
   | EvScoutResult
   | EvStructureSpawned
-  | EvDiseaseApplied;
+  | EvDiseaseApplied
+  | EvWarHornSounded;
 
 export type GameEventType = GameEvent['type'];

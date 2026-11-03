@@ -538,6 +538,16 @@ export class GameEngine implements IGameEngineAPI {
         break;
       }
 
+      case 'WAR_HORN_SOUNDED': {
+        // Duration 1: added during PLAY, removed by the caster's END-phase tick.
+        this.mods[event.player].addTimedEffect({
+          type: 'WAR_HORN_MOVEMENT',
+          duration: 1,
+          value: event.moveBonus,
+        });
+        break;
+      }
+
       // Informational events — no state mutation needed
       default:
         break;

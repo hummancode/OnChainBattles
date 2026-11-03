@@ -13,16 +13,16 @@ Used to identify weak areas and improve code quality over time.
 
 | Category | Count | User-Found | Claude-Found | Test-Found |
 |----------|-------|------------|--------------|------------|
-| logic | 17 | 5 | 12 | 0 |
+| logic | 18 | 5 | 13 | 0 |
 | network | 7 | 5 | 2 | 0 |
 | state | 10 | 4 | 6 | 0 |
 | rendering | 4 | 1 | 2 | 1 |
-| race-condition | 2 | 2 | 0 | 0 |
-| memory-leak | 2 | 0 | 2 | 0 |
+| race-condition | 3 | 2 | 1 | 0 |
+| memory-leak | 3 | 0 | 3 | 0 |
 | web3 | 1 | 0 | 1 | 0 |
-| type-safety | 5 | 2 | 3 | 0 |
+| type-safety | 6 | 2 | 4 | 0 |
 | security | 5 | 1 | 4 | 0 |
-| **TOTAL** | **55** | **20** | **34** | **1** |
+| **TOTAL** | **59** | **20** | **38** | **1** |
 
 ---
 
@@ -582,6 +582,46 @@ Used to identify weak areas and improve code quality over time.
 - **Prevention**: Any authentication flow must account for page refresh / reconnection. Guest sessions need a short-lived reconnection token stored in sessionStorage.
 - **Files**: `src/auth/AuthManager.ts`, `src/GameState.ts`, `src/scenes/LoginScene.ts`, `src/scenes/BattleScene.ts`, `src/network/SocketManager.ts`, `src/lobby/LobbySocketManager.ts`, `src/scenes/battle/GameOverHandler.ts`, `src/scenes/battle/NetworkCoordinator.ts`, `server/game/SessionManager.ts`, `server/rooms/RoomManager.ts`, `server/app.ts`, `server/lobby/LobbyManager.ts`, `server/lobby/lobbyHelpers.ts`, `shared/types/NetworkEvents.ts`
 
+### BUG-056: War Horn +1 movement buff never applied
+- **Date**: 2026-11-03
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: Playing War Horn drew 2 / discarded 1, but units did not gain the +1 movement promised by the card text.
+- **Root cause**: `WAR_HORN_MOVEMENT` timed-effect type existed but nothing ever created it, and `AuraSystem` never read timed effects when computing `currentMovement`.
+- **Fix**: Handler emits new `WAR_HORN_SOUNDED` event → GameEngine adds a 1-turn `WAR_HORN_MOVEMENT` timed effect → AuraSystem applies `+value` move delta (audited as `war_horn:WAR_HORN_MOVEMENT`) to all the caster's units. EndPhase re-evaluates auras when the effect expires so the buff drops immediately.
+- **Prevention**: Every declared `TimedEffectType` needs a creator, a consumer, and an expiry path — grep for all three when adding one. Card text should have a matching engine test.
+- **Files**: `src/game/abilities/handlers/spellWarHorn.ts`, `src/game/types/EventTypes.ts`, `src/game/GameEngine.ts`, `src/game/AuraSystem.ts`, `src/game/phases/EndPhase.ts`, `tests/engine/abilities/warHorn.test.ts`
+
+### BUG-057: HandRenderer stale indices during card-removal tween (wrong card played)
+- **Date**: 2026-11-03
+- **Category**: `race-condition`
+- **Discovered by**: `claude`
+- **Symptom**: Clicking a hand card within 200ms of playing/discarding another selected the wrong index — the engine (already shifted) played a different card. Back-to-back removals (e.g. War Horn discard right after casting) spliced the wrong card. Drawing past `maxVisible` rendered a duplicate card and each rebuild leaked a "+N more" label.
+- **Root cause**: `removeCard()` deferred splicing `cards`/`cardContainers` to the tween's `onComplete`, so the view model lagged the engine hand. Pointer closures captured fixed indices. `addCard()` assumed the new card was always visible.
+- **Fix**: Model is spliced synchronously; only a detached, non-interactive container fades out. Pointer handlers resolve their index at event time via `cardContainers.indexOf(container)`. Overflow cases fall back to `rebuild()`, which now destroys the tracked overflow label.
+- **Prevention**: Never let an animation own the timing of a state change — update state first, animate a detached visual. Don't capture array indices in long-lived closures.
+- **Files**: `src/renderers/HandRenderer.ts`, `tests/renderers/handRenderer.test.ts`, `tests/mocks/phaser.ts`
+
+### BUG-058: DOMInputManager HTML listeners never removed
+- **Date**: 2026-11-03
+- **Category**: `memory-leak`
+- **Discovered by**: `claude`
+- **Symptom**: Input/focus/blur listeners accumulated on scene revisits; inputs leaked if a scene shut down without calling `destroyAll()`.
+- **Root cause**: Listeners were added with `addEventListener` and no matching removal; no scene-lifecycle hook.
+- **Fix**: Each input gets an `AbortController`; all its listeners use the signal and are aborted on `destroyInput`/`destroyAll`. Manager auto-calls `destroyAll()` on scene `shutdown`/`destroy`.
+- **Prevention**: Use `AbortController` signals for DOM listeners so cleanup is one call; tie manager lifetimes to scene events.
+- **Files**: `src/ui/DOMInputManager.ts`
+
+### BUG-059: DeckBuilderScene fails strict type check (TS2352)
+- **Date**: 2026-11-03
+- **Category**: `type-safety`
+- **Discovered by**: `claude`
+- **Symptom**: `tsc --noEmit` reported a hard error (not a baseline unused-var warning) in `renderCurrentView`.
+- **Root cause**: Direct cast `GameObject as Components.Visible` — types don't overlap under Phaser 4 typings.
+- **Fix**: Cast through `unknown`.
+- **Prevention**: Run `tsc --noEmit` in CI alongside tests.
+- **Files**: `src/scenes/DeckBuilderScene.ts`
+
 ---
 
 ## Weakness Analysis
@@ -596,6 +636,8 @@ Used to identify weak areas and improve code quality over time.
 2. **Symmetry** — Every set needs a clear, every subscribe needs unsubscribe, every local action needs network send (5 bugs).
 3. **Player perspective** — Coordinates/offsets must account for both players (2 bugs).
 4. **Deep vs shallow** — Copy and freeze operations must be recursive (2 bugs).
+5. **State before animation** — Update the view model synchronously; tweens animate detached visuals only and never own state timing (BUG-057).
+6. **Declared-but-unwired** — Every enum variant (e.g. `TimedEffectType`) needs a producer, consumer and expiry path (BUG-056).
 
 ### User-Found vs Claude-Found
 - **User found 12 bugs** (34%) — gameplay-visible issues (freezes, wrong movement, UI blocking, route/scene bugs).

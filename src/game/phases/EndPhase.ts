@@ -30,11 +30,12 @@ export function runEndPhase(ctx: GameContext): boolean {
   const mod = ctx.mods[ap];
 
   // 1. Tick timed effects (duration --)
-  mod.tickEffects();
+  const expired = mod.tickEffects();
+  const statEffectExpired = expired.some(e => e.type === 'WAR_HORN_MOVEMENT');
 
   // 2. Resolve Treason returns (ownership change requires aura recalc)
   const hadTreason = resolveTreasonReturns(ctx);
-  if (hadTreason) {
+  if (hadTreason || statEffectExpired) {
     const auraEvent = ctx.auras.evaluateAuras(ctx.board, ctx.mods);
     ctx.emit(auraEvent);
   }

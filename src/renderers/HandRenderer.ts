@@ -35,6 +35,7 @@ export class HandRenderer {
   private cardContainers: Phaser.GameObjects.Container[] = [];
   private selectedIndex: number | null = null;
   private hoveredIndex: number | null = null;
+  private overflowLabel: Phaser.GameObjects.Text | null = null;
 
   // Opponent hand
   private oppCardCount: number = 0;
@@ -71,7 +72,14 @@ export class HandRenderer {
   addCard(card: CardRenderData): void {
     this.cards.push(card);
     const H = this.layout.leftHUD.hand;
-    const newCount = Math.min(this.cards.length, H.maxVisible);
+
+    // Overflow: the new card isn't visible — full rebuild keeps the "+N more" label right.
+    if (this.cards.length > H.maxVisible) {
+      this.rebuild();
+      return;
+    }
+
+    const newCount = this.cards.length;
     const newIndex = newCount - 1;
 
     // Reposition existing cards to updated fan layout (no destroy/recreate)
@@ -83,13 +91,7 @@ export class HandRenderer {
       { ...this.cards[newIndex], isSelected: false }, 'full', pos.x, pos.y,
     );
     cardContainer.setRotation(Phaser.Math.DegToRad(pos.angle));
-
-    const fullW = this.layout.cards.full.width;
-    const fullH = this.layout.cards.full.height;
-    setContainerHitArea(cardContainer, fullW, fullH);
-    cardContainer.on('pointerover',  () => this.onCardHover(newIndex));
-    cardContainer.on('pointerout',   () => this.onCardHoverEnd(newIndex));
-    cardContainer.on('pointerdown',  () => this.onCardClick(newIndex));
+    this.bindCardInput(cardContainer);
 
     this.handContainer.add(cardContainer);
     this.cardContainers.push(cardContainer);
@@ -101,32 +103,45 @@ export class HandRenderer {
     });
   }
 
-  /** Remove a card from the hand (on play/discard). */
+  /**
+   * Remove a card from the hand (on play/discard).
+   * The data model (cards / cardContainers / selection) is updated SYNCHRONOUSLY
+   * so it always mirrors the engine hand; only the detached visual fades out.
+   */
   removeCard(index: number): void {
     if (index < 0 || index >= this.cards.length) return;
 
+    this.cards.splice(index, 1);
+    if (this.selectedIndex === index) this.selectedIndex = null;
+    else if (this.selectedIndex !== null && this.selectedIndex > index) this.selectedIndex--;
+    if (this.hoveredIndex === index) this.hoveredIndex = null;
+    else if (this.hoveredIndex !== null && this.hoveredIndex > index) this.hoveredIndex--;
+
     const container = this.cardContainers[index];
-    if (container) {
-      this.scene.tweens.add({
-        targets: container,
-        alpha: 0,
-        y: container.y - 30,
-        duration: 200,
-        ease: 'Quad.easeIn',
-        onComplete: () => {
-          container.destroy();
-          this.cards.splice(index, 1);
-          this.cardContainers.splice(index, 1);
-          if (this.selectedIndex === index) this.selectedIndex = null;
-          if (this.selectedIndex !== null && this.selectedIndex > index) this.selectedIndex--;
-          // Rebind pointer closures (indices shifted) + reposition
-          this.rebindPointerHandlers();
-          this.repositionCards(Math.min(this.cards.length, this.layout.leftHUD.hand.maxVisible));
-        },
-      });
-    } else {
-      this.cards.splice(index, 1);
+    if (!container) {
+      // Card was in the hidden overflow region
       this.rebuild();
+      return;
+    }
+
+    this.cardContainers.splice(index, 1);
+    container.removeAllListeners();
+    container.disableInteractive();
+    this.scene.tweens.add({
+      targets: container,
+      alpha: 0,
+      y: container.y - 30,
+      duration: 200,
+      ease: 'Quad.easeIn',
+      onComplete: () => container.destroy(),
+    });
+
+    const H = this.layout.leftHUD.hand;
+    if (this.cards.length >= H.maxVisible) {
+      // A previously hidden card becomes visible — rebuild (fading container is detached, unaffected)
+      this.rebuild();
+    } else {
+      this.repositionCards(this.cards.length);
     }
   }
 
@@ -166,6 +181,8 @@ export class HandRenderer {
     // Destroy existing card visuals
     this.cardContainers.forEach(c => c.destroy());
     this.cardContainers = [];
+    this.overflowLabel?.destroy();
+    this.overflowLabel = null;
 
     const H = this.layout.leftHUD.hand;
     const count = Math.min(this.cards.length, H.maxVisible);
@@ -183,14 +200,7 @@ export class HandRenderer {
       cardContainer.setRotation(Phaser.Math.DegToRad(pos.angle));
 
       // Interactivity
-const fullW = this.layout.cards.full.width;
-const fullH = this.layout.cards.full.height;
-setContainerHitArea(cardContainer, fullW, fullH);
-
-      const idx = i; // capture for closure
-      cardContainer.on('pointerover',  () => this.onCardHover(idx));
-      cardContainer.on('pointerout',   () => this.onCardHoverEnd(idx));
-      cardContainer.on('pointerdown',  () => this.onCardClick(idx));
+      this.bindCardInput(cardContainer);
 
       this.handContainer.add(cardContainer);
       this.cardContainers.push(cardContainer);
@@ -211,6 +221,7 @@ setContainerHitArea(cardContainer, fullW, fullH);
           }
         ).setOrigin(0.5, 0);
         this.handContainer.add(moreLabel);
+        this.overflowLabel = moreLabel;
       }
     }
   }
@@ -229,19 +240,19 @@ setContainerHitArea(cardContainer, fullW, fullH);
     }
   }
 
-  /** Rebind pointer handlers after splice (indices shifted). */
-  private rebindPointerHandlers(): void {
-    const fullW = this.layout.cards.full.width;
-    const fullH = this.layout.cards.full.height;
-    for (let i = 0; i < this.cardContainers.length; i++) {
-      const c = this.cardContainers[i];
-      c.removeAllListeners();
-      setContainerHitArea(c, fullW, fullH);
-      const idx = i;
-      c.on('pointerover',  () => this.onCardHover(idx));
-      c.on('pointerout',   () => this.onCardHoverEnd(idx));
-      c.on('pointerdown',  () => this.onCardClick(idx));
-    }
+  /**
+   * Attach pointer handlers that resolve the card's index AT EVENT TIME.
+   * Never capture an index in the closure — indices shift when cards are removed.
+   */
+  private bindCardInput(c: Phaser.GameObjects.Container): void {
+    setContainerHitArea(c, this.layout.cards.full.width, this.layout.cards.full.height);
+    const withIndex = (fn: (i: number) => void) => () => {
+      const i = this.cardContainers.indexOf(c);
+      if (i >= 0) fn(i);
+    };
+    c.on('pointerover', withIndex(i => this.onCardHover(i)));
+    c.on('pointerout',  withIndex(i => this.onCardHoverEnd(i)));
+    c.on('pointerdown', withIndex(i => this.onCardClick(i)));
   }
 
   // cardPosition extracted → helpers/CardLayoutCalc.ts fanPosition()
@@ -387,10 +398,7 @@ setContainerHitArea(cardContainer, fullW, fullH);
 
       EventBus.on(EV.CARD_PLAYED, ({ handIndex, isLocal }) => {
   if (!isLocal) return;  // ← opponent played — opponent hand is count-based via HUD_REFRESH
-  this.removeCard(handIndex);
-  if (this.selectedIndex === handIndex) {
-    this.setSelected(null);
-  }
+  this.removeCard(handIndex);  // also clears/shifts selectedIndex
 }),
 
 EventBus.on(EV.CARD_DISCARDED, ({ handIndex, isLocal }) => {

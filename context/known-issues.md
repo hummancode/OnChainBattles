@@ -4,7 +4,6 @@
 
 ### Game Logic
 - Pre-existing 16 unused variable TS warnings (baseline, don't fix — see CLAUDE.md)
-- War Horn spell missing +1 movement buff — `WAR_HORN_MOVEMENT` timed effect never created, aura system doesn't read it
 - Mutual king death: attacker always wins (may be intentional design — dying blow counter)
 
 ### Network / Reconnection
@@ -14,8 +13,6 @@
 - **No state sync on rejoin** — server sends `rejoinSuccess` but no board state or missed actions
 
 ### UI
-- HandRenderer: stale index closures during 200ms card removal tween (clicking during animation can play wrong card)
-- DOMInputManager: HTML event listeners not removed on scene destroy (accumulates on revisits)
 - IGameEngineAPI.getValidDeployPositions interface takes unused `cardIndex` param
 
 ### Security (Dev-Only)
@@ -28,6 +25,14 @@
 - **Fix**: Added `StatBuff` type and `activeBuffs: StatBuff[]` to every Unit. Each aura processor labels its `addDelta()` calls with source (e.g. `commander:BOARD_HALF_ATK`, `pikeman:PIKEMAN_FLANK`). CombatResolver returns `DamageBreakdown` with base ATK, cavalry counter, backstab, ambush, and active aura buffs — included in every `UNIT_ATTACKED` event.
 - **Game log now shows**: `[pikeman_3] attacked [king_2] — 2 dmg (base:1, pikeman:PIKEMAN_FLANK:atk+1)` and board snapshots include `activeBuffs` per unit.
 - **Principle**: Every stat modification must be traceable to its source. No silent deltas.
+
+---
+
+## Fixed (3 November 2026)
+- **War Horn +1 movement (BUG-056)** — new `WAR_HORN_SOUNDED` event → 1-turn `WAR_HORN_MOVEMENT` timed effect → AuraSystem move delta. Note: only affects distance-based movers (OMNI_n, VERTICAL_2); fixed-pattern movers (custom patterns, jump, forward-1) ignore `currentMovement`.
+- **HandRenderer stale indices (BUG-057)** — model spliced synchronously, click index resolved at event time; overflow duplicate card + label leak fixed.
+- **DOMInputManager listener leak (BUG-058)** — AbortController per input + auto-cleanup on scene shutdown.
+- **DeckBuilderScene TS2352 (BUG-059)** — `tsc --noEmit` is clean again (aside from baseline unused-var warnings).
 
 ---
 

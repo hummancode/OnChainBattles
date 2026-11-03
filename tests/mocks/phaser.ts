@@ -6,6 +6,7 @@ export default {
   Scene: class {},
   GameObjects: { Container: class {}, Graphics: class {}, Text: class {} },
   Geom: { Rectangle: class { static Contains() { return false; } } },
+  Math: { DegToRad: (d: number) => d * Math.PI / 180 },
 };
 
 export const Scene = class {};
