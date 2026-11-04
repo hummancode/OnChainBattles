@@ -16,13 +16,13 @@ Used to identify weak areas and improve code quality over time.
 | logic | 41 | 5 | 33 | 3 |
 | network | 16 | 6 | 9 | 1 |
 | state | 27 | 4 | 22 | 1 |
-| rendering | 11 | 1 | 9 | 1 |
+| rendering | 15 | 1 | 13 | 1 |
 | race-condition | 6 | 2 | 4 | 0 |
 | memory-leak | 7 | 0 | 7 | 0 |
 | web3 | 3 | 0 | 3 | 0 |
 | type-safety | 7 | 2 | 5 | 0 |
 | security | 13 | 1 | 12 | 0 |
-| **TOTAL** | **133** | **21** | **106** | **6** |
+| **TOTAL** | **137** | **21** | **110** | **6** |
 
 ---
 
@@ -1392,3 +1392,42 @@ Used to identify weak areas and improve code quality over time.
 - **Prevention**: Throttles must defer, not discard, work that is still needed.
 - **Files**: src/scenes/battle/NetworkCoordinator.ts
 
+### BUG-134: Pikeman and King's Guard showed placeholder art on the board
+- **Date**: 2026-11-04
+- **Category**: `rendering`
+- **Discovered by**: `claude`
+- **Symptom**: Board tiles for Pikeman and King's Guard were the striped 'PIKEMAN' / 'KNIGHTS GUARD' placeholder although real art existed.
+- **Root cause**: The real Pikeman thumbnail was saved as `pikeman_thumb-2.png` (loader reads `pikeman_thumb.png`); King's Guard had no thumbnail, only full art (`kings_guard.png`).
+- **Fix**: Copied the real thumbnail over the placeholder; generated `knights_guard_thumb.png` from the full art (centre crop, 100×100).
+- **Prevention**: Placeholder assets are tiny (≈2–4 KB) — a size check over `public/assets/cards` lists them; Militia and the spells still need real art.
+- **Files**: public/assets/cards/thumb/pikeman_thumb.png, public/assets/cards/thumb/knights_guard_thumb.png
+
+### BUG-135: LEG icon overlapped the LEG number
+- **Date**: 2026-11-04
+- **Category**: `rendering`
+- **Discovered by**: `claude`
+- **Symptom**: HUD read '✠0 LEG' — the icon sat on top of the first digit.
+- **Root cause**: The icon had a fixed x while the LEG text is centred and changes width.
+- **Fix**: Icon is re-positioned to the text's left edge on every LEG update.
+- **Prevention**: Anchor decorations to the element they decorate, not to a fixed layout point.
+- **Files**: src/renderers/HUDRenderer.ts
+
+### BUG-136: Card previews were hidden under the tutorial panel
+- **Date**: 2026-11-04
+- **Category**: `rendering`
+- **Discovered by**: `claude`
+- **Symptom**: Hovering a hand card (or board unit) during the tutorial showed the large preview cut off by the tutorial box.
+- **Root cause**: Preview depth 950 < tutorial panel 960.
+- **Fix**: Hand and board previews use depth 970.
+- **Prevention**: Keep a depth table: transient hover UI above instructional overlays, below modal/network overlays (999).
+- **Files**: src/renderers/HandRenderer.ts, src/renderers/BoardRenderer.ts
+
+### BUG-137: Host saw a meaningless READY button; guest's button never showed its state
+- **Date**: 2026-11-04
+- **Category**: `rendering`
+- **Discovered by**: `claude`
+- **Symptom**: The host could toggle 'ready' (ignored by the server), and the guest's button always said READY after readying.
+- **Root cause**: LobbyScene always created the button and never updated its label from lobby state.
+- **Fix**: Host gets only START; the guest's button label follows the server state (READY / UNREADY).
+- **Prevention**: Buttons that toggle server state render from that state (State-Driven Rendering).
+- **Files**: src/scenes/LobbyScene.ts

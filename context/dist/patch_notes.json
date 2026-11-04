@@ -515,6 +515,35 @@
       "released_at": "2026-03-12T23:02:58.165219"
     }
   ],
-  "unreleased": [],
+  "unreleased": [
+    {
+      "id": "20261104190000000000",
+      "category": "Bug Fix",
+      "text": "Pikeman and King's Guard now show their real artwork on the board.",
+      "created": "2026-11-04T19:00:00",
+      "edited": null
+    },
+    {
+      "id": "20261104190001000000",
+      "category": "Bug Fix",
+      "text": "The LEG counter icon no longer covers the number.",
+      "created": "2026-11-04T19:01:00",
+      "edited": null
+    },
+    {
+      "id": "20261104190002000000",
+      "category": "Bug Fix",
+      "text": "Card previews stay visible while the tutorial is open.",
+      "created": "2026-11-04T19:02:00",
+      "edited": null
+    },
+    {
+      "id": "20261104190003000000",
+      "category": "Bug Fix",
+      "text": "Lobby: the host just sees START; the guest's READY button shows whether they're ready.",
+      "created": "2026-11-04T19:03:00",
+      "edited": null
+    }
+  ],
   "revoked": []
 }

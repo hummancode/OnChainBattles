@@ -291,7 +291,7 @@ export class HandRenderer {
     if (!data || !row) return;
     const y = Math.max(4, Math.min(720 - PREVIEW.height - 4, row.y - 40));
     this.preview = this.cardRenderer.renderPreview({ ...data, isSelected: false }, ROW_X + ROW.width + 14, y);
-    this.preview.setDepth(950);
+    this.preview.setDepth(970); // above the tutorial panel (960): a hovered card is what the player is looking at
   }
 
   private hidePreview(): void {

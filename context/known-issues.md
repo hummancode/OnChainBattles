@@ -18,7 +18,7 @@
 - No refund if a match dies before both `player_ready`; `onSettled` deletes the active-match row before the payout tx confirms (no retry); `tx_hash` stored as null; deposits never verified on-chain; on-chain puzzle `txHash` unverified
 
 ### Open (non-crypto)
-- Missing card art for Militia / Pikeman / Reform (placeholder texture) — needs art files
+- Missing card art (placeholder texture): Militia (board + hand) and most spells' hand art (Civil War, Coup, Earthquake, Motherland, Peasant Revolt, Reform, Treason, War Horn) — needs art files
 - Legacy `createRoom` / `joinRoom` socket events still exist server-side (used by tests); no client uses them since the Quick Play menu was removed
 - Assassin jump attacks from its start square, so Ambush never applies to jumps (design choice, BUG-124)
 

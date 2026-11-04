@@ -30,6 +30,7 @@ export class HUDRenderer {
   private playerHPBar!: Phaser.GameObjects.Graphics;
   private playerHPBarFill!: Phaser.GameObjects.Graphics;
   private playerLEGText!: Phaser.GameObjects.Text;
+  private legIcon?: Phaser.GameObjects.Image;
   private playerLEGRateText!: Phaser.GameObjects.Text;
   private playerWinLossText!: Phaser.GameObjects.Text;
 
@@ -126,6 +127,7 @@ export class HUDRenderer {
 
   updatePlayerLEG(amount: number, rate: number): void {
     this.playerLEGText.setText(`${amount} LEG`);
+    this.placeLegIcon();
     this.playerLEGRateText.setText(`+${rate}/turn`);
   }
 
@@ -288,9 +290,16 @@ export class HUDRenderer {
     }).setOrigin(0.5, 0);
 
     if (this.scene.textures.exists('icon_leg')) {
-      this.scene.add.image(L.legCounter.x - 32, L.legCounter.y + 9, 'icon_leg')
+      this.legIcon = this.scene.add.image(L.legCounter.x - 32, L.legCounter.y + 9, 'icon_leg')
         .setDisplaySize(20, 20);
+      this.placeLegIcon();
     }
+  }
+
+  /** Keep the LEG icon just left of the (centred, variable-width) LEG text — it overlapped the digits. */
+  private placeLegIcon(): void {
+    if (!this.legIcon || !this.playerLEGText) return;
+    this.legIcon.setX(this.playerLEGText.x - this.playerLEGText.width / 2 - 14);
   }
 
   private buildRightHUD(): void {

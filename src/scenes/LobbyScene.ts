@@ -173,13 +173,18 @@ export default class LobbyScene extends Phaser.Scene {
     // ── Bottom Buttons ──────────────────────────────────────
     const btnY = 560;
 
-    this.readyBtn = new MenuButton(this, CX - 200, btnY, '[ READY ]', {
-      color: '#00ff88', fontSize: '24px',
-      onPointerDown: () => this.lobbySM.toggleReady(this.roomCode),
-    });
+    // The host is always ready (the server only checks the guest) — they get START instead.
+    if (!this.isHost) {
+      this.readyBtn = new MenuButton(this, CX - 60, btnY, '[ READY ]', {
+        color: '#00ff88', fontSize: '24px',
+        onPointerDown: () => this.lobbySM.toggleReady(this.roomCode),
+      });
+    } else {
+      this.readyBtn = undefined;
+    }
 
     if (this.isHost) {
-      this.startBtn = new MenuButton(this, CX + 20, btnY, '[ START GAME ]', {
+      this.startBtn = new MenuButton(this, CX - 60, btnY, '[ START GAME ]', {
         color: '#f5a623', fontSize: '24px',
         onPointerDown: () => this.lobbySM.startGame(this.roomCode),
       });
@@ -247,6 +252,10 @@ export default class LobbyScene extends Phaser.Scene {
   private onStateUpdate(state: LobbyState): void {
     this.latestState = state;
     this.renderPlayerList(state);
+
+    // Ready button mirrors the server's view of us
+    const me = state.players.find(p => !p.isHost && p.name === (GameState.playerName || ''));
+    if (this.readyBtn && me) this.readyBtn.text.setText(me.ready ? '[ UNREADY ]' : '[ READY ]');
 
     const modeLabel = state.settings.isCrypto ? 'CRYPTO' : 'FREE';
     const playerCount = state.players.length;

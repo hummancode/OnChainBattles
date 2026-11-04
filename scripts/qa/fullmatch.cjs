@@ -32,8 +32,8 @@ const click = async (p, x, y) => { await p.mouse.move(x, y); await sleep(150); a
   const inputs = await joiner.$$('input');
   await inputs[inputs.length - 1].fill(code);
   await joiner.keyboard.press('Enter'); await sleep(3000);
-  await click(joiner, 440, 560); await sleep(1500);  // READY
-  await click(host, 660, 560); await sleep(9000);    // START GAME
+  await click(joiner, 580, 560); await sleep(1500);  // READY
+  await click(host, 580, 560); await sleep(9000);    // START GAME
   await host.screenshot({ path: 'f01_host_start.png' });
 
   const drive = (p, level) => p.evaluate(async (level) => {
