@@ -77,13 +77,14 @@ export function nextBotAction(engine: GameEngine, me: Player, opts: BotOptions =
   // ── 2. PLAY: deploy / cast ─────────────────────────────────
   if (phase === 'PLAY') {
     if (opts.passive) return { type: 'END_PLAY_PHASE' };
-    const pool = st.modifiers[me].legPool;
     const deploy = engine.getValidDeployPositions();
     // Forward = toward the enemy: higher row for P1, lower for P2.
     const forward = [...deploy].sort((a, b) => (me === Player.P1 ? b.row - a.row : a.row - b.row) || Math.abs(a.col - 3) - Math.abs(b.col - 3));
+    // Engine's own affordability (includes Royal cost penalties / discounts)
+    const affordable = new Set(engine.getAffordableCards());
     const candidates = st.players[me].hand
       .map((id, i) => ({ id, i, def: getCard(id) }))
-      .filter(c => c.def.cost <= pool)
+      .filter(c => affordable.has(c.i))
       .sort((a, b) => b.def.cost - a.def.cost);
     for (const c of candidates) {
       const needsSquare = c.def.class === CardClass.UNIT || c.def.class === CardClass.STRUCTURE;
@@ -147,7 +148,7 @@ function spellLooksUseful(engine: GameEngine, cardId: string): boolean {
   const enemyUnits = st.board.map(c => c.unit).filter(u => u && u.owner !== me && u.cardId !== 'king');
   switch (cardId) {
     case 'coup':    return enemyUnits.some(u => getCard(u!.cardId).allegiance === 'ROYAL');
-    case 'treason': return enemyUnits.some(u => getCard(u!.cardId).allegiance !== 'ROYAL');
+    case 'treason': return enemyUnits.some(u => { const d = getCard(u!.cardId); return d.class === CardClass.UNIT && d.allegiance !== 'ROYAL'; });
     case 'disease': return enemyUnits.some(u => getCard(u!.cardId).class === CardClass.STRUCTURE);
     default:        return true;
   }

@@ -18,7 +18,7 @@
 // ============================================================
 
 import type { Unit } from './types/GameTypes';
-import { MovementType, AtkPattern, CardFlag } from './types/CardTypes';
+import { MovementType, AtkPattern, CardFlag, CardClass } from './types/CardTypes';
 import { getCard } from './data/CardRegistry';
 
 // ─────────────────────────────────────────────
@@ -78,8 +78,11 @@ export function canUnitAttack(unit: Unit): boolean {
   // Already used attack this turn
   if (unit.hasActed) return false;
 
-  // Must have an attack pattern
   const def = getCard(unit.cardId);
+  // Structures never make ACT-phase attacks (Castle strikes in its owner's LEG phase only)
+  if (def.class === CardClass.STRUCTURE) return false;
+
+  // Must have an attack pattern
   const hasAttackPattern = (def.stats?.attackPattern !== AtkPattern.NONE)
     || !!def.stats?.customAttack;
   if (!hasAttackPattern) return false;

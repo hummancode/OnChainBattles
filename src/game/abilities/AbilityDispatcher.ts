@@ -69,7 +69,7 @@ export function resolveOnDeath(
         if (cause !== 'REFORM') {
           combined.events.push({
             type:          'CARD_DRAWN',
-            player:         unit.owner,
+            player:         unit.treasonOwner ?? unit.owner,   // Treason: draw goes to the real owner
             cardId:         '__DRAW__',
             handIndex:      -1,
             deckRemaining:  -1,

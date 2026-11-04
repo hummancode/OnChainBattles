@@ -52,6 +52,25 @@ export function executeMove(ctx: GameContext, unitId: string, col: number, row: 
   if (!isMoveValid(unit, col, row, ctx.board)) return false;
 
   const from = { ...unit.position };
+
+  // Assassin jump attack: the landing square holds an enemy → strike it from the air
+  // (immune to counter-attack). A kill lands the Assassin there; otherwise it stays put.
+  const landingEnemy = ctx.board.getUnit(col, row);
+  if (landingEnemy) {
+    if (unit.baseAtkPattern !== AtkPattern.ON_JUMP || landingEnemy.owner === unit.owner) return false;
+    if (!canUnitAttack(unit)) return false;
+    unit.hasMoved = true;
+    executeCombat(ctx, unit, landingEnemy, true);  // isAssassinJump = true → sets hasActed
+    if (ctx.status !== EngineStatus.GAME_OVER && ctx.board.getUnitById(unitId)
+        && !ctx.board.getUnit(col, row)) {
+      ctx.board.moveUnit(unitId, col, row);
+      unit.lastMoveDirection = { dx: Math.sign(col - from.col), dy: Math.sign(row - from.row) };
+      ctx.emit({ type: 'UNIT_MOVED', instanceId: unitId, cardId: unit.cardId, owner: unit.owner, from, to: { col, row } });
+      ctx.emit(ctx.auras.evaluateAuras(ctx.board, ctx.mods));
+    }
+    return true;
+  }
+
   ctx.board.moveUnit(unitId, col, row);
   unit.hasMoved = true;
 
@@ -79,14 +98,6 @@ export function executeMove(ctx: GameContext, unitId: string, col: number, row: 
   // Always emit — even with empty changes — so the UI can sync ALL unit stats.
   const auraEvent = ctx.auras.evaluateAuras(ctx.board, ctx.mods);
   ctx.emit(auraEvent);
-
-  // Assassin: jump onto enemy = auto-attack on landing (immune to counter-attack)
-  if (unit.baseAtkPattern === AtkPattern.ON_JUMP) {
-    const defender = ctx.board.getUnit(col, row);
-    if (defender && defender.owner !== unit.owner) {
-      executeCombat(ctx, unit, defender, true);  // isAssassinJump = true
-    }
-  }
 
   return true;
 }
@@ -198,15 +209,19 @@ export function handleUnitDeath(
   const unit = ctx.board.getUnitById(instanceId);
   if (!unit) return;
 
+  // A unit borrowed by Treason belongs to its original owner: graveyard, discard and any
+  // on-death draw go to them, not to whoever controlled it when it fell.
+  const trueOwner = unit.treasonOwner ?? owner;
+
   // Record in graveyard
   ctx.graveyard.set(instanceId, cardId);
-  ctx.players[owner].addToGraveyard(instanceId, cardId);
+  ctx.players[trueOwner].addToGraveyard(instanceId, cardId);
 
   // Remove from board
   ctx.board.removeUnit(instanceId);
 
   // Card goes to discard
-  ctx.players[owner].discard.push(cardId);
+  ctx.players[trueOwner].discard.push(cardId);
 
   // On-death abilities (e.g., Foot Soldier draw)
   const deathResult = resolveOnDeath(unit, cause, ctx.board, ctx.players, ctx.mods);

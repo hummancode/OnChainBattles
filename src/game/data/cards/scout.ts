@@ -27,5 +27,5 @@ export const SCOUT_DEF: CardDefinition = {
   abilities: [
     { type: AbilityType.ON_DEPLOY_SCOUT_DECK, params: { count: 2 } },
   ],
-  abilityText: 'Cavalry. On Deploy: reveal the top 2 cards of opponent\'s deck (visible to you only).',
+  abilityText: 'Cavalry. On Deploy: reveal the top 2 cards of opponent\'s deck (visible to you only). Backstab: +1 ATK when attacking from directly behind.',
 };

@@ -459,6 +459,48 @@
       "text": "Units no longer briefly 'lose' their square while sliding to a new one (fast turns and 3x replays).",
       "created": "2026-11-04T16:05:00",
       "edited": null
+    },
+    {
+      "id": "20261104170000000000",
+      "category": "Mechanics",
+      "text": "Casus Belli now deploys your unit on the front row of the enemy half, and the unit's On Deploy ability triggers.",
+      "created": "2026-11-04T17:00:00",
+      "edited": null
+    },
+    {
+      "id": "20261104170001000000",
+      "category": "Mechanics",
+      "text": "Assassin really jumps: 1 step or a 2-square diagonal jump over units; jumping onto an enemy attacks it with no counter.",
+      "created": "2026-11-04T17:01:00",
+      "edited": null
+    },
+    {
+      "id": "20261104170002000000",
+      "category": "Mechanics",
+      "text": "Village now slows every enemy unit next to it, including Knights, Lancers and Scouts.",
+      "created": "2026-11-04T17:02:00",
+      "edited": null
+    },
+    {
+      "id": "20261104170003000000",
+      "category": "Mechanics",
+      "text": "Castle only attacks in your LEG phase; Pikeman's ×3 vs Cavalry also applies when it strikes back.",
+      "created": "2026-11-04T17:03:00",
+      "edited": null
+    },
+    {
+      "id": "20261104170004000000",
+      "category": "Mechanics",
+      "text": "Treason can only steal units, and a stolen unit that dies goes back to its owner's graveyard. Units taken with Coup can't act the turn they're captured.",
+      "created": "2026-11-04T17:04:00",
+      "edited": null
+    },
+    {
+      "id": "20261104170005000000",
+      "category": "Bug Fix",
+      "text": "Card texts updated to match the rules (Scout, King, Disease, Peasant Revolt, Mystic, Militia, Messenger).",
+      "created": "2026-11-04T17:05:00",
+      "edited": null
     }
   ],
   "revoked": []

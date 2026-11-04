@@ -211,7 +211,7 @@ function spellUseful(cardId: string, theirs: Unit[]): boolean {
   const enemies = theirs.filter(u => u.cardId !== 'king');
   switch (cardId) {
     case 'coup':    return enemies.some(u => getCard(u.cardId).allegiance === 'ROYAL');
-    case 'treason': return enemies.some(u => getCard(u.cardId).allegiance !== 'ROYAL');
+    case 'treason': return enemies.some(u => { const d = getCard(u.cardId); return d.class === CardClass.UNIT && d.allegiance !== 'ROYAL'; });
     case 'disease': return enemies.some(u => getCard(u.cardId).class === CardClass.STRUCTURE);
     default:        return true;
   }

@@ -12,5 +12,5 @@ export const KING_DEF: CardDefinition = {
   abilities: [
     { type: AbilityType.AURA_LEG_BONUS, params: { amount: 1 } },
   ],
-  abilityText: 'Pre-placed. Generates +1 LEG/turn. Enemy King in your half: lose 1 LEG this turn. Win condition.',
+  abilityText: 'Pre-placed. LEG rate grows +1 each turn (max 10). Enemy King in your half: lose 1 LEG this turn. Win condition.',
 };

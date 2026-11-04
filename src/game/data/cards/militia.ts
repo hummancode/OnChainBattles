@@ -12,5 +12,5 @@ export const MILITIA_DEF: CardDefinition = {
   abilities: [
     { type: AbilityType.CUSTOM, handler: 'militiaDeployHandler' },
   ],
-  abilityText: 'On Deploy: pull the next Militia copy from your deck to any free square in your half.',
+  abilityText: 'On Deploy: pull the next Militia copy from your deck to a valid deploy square.',
 };

@@ -13,5 +13,5 @@ export const PIKEMAN_DEF: CardDefinition = {
     { type: AbilityType.AURA_CAVALRY_COUNTER, params: { multiplier: 3 } },
     { type: AbilityType.AURA_PIKEMAN_FLANK,   params: { bonusAtk: 1, bonusDef: 1 } },
   ],
-  abilityText: '×3 ATK vs Cavalry. Flank: if any friendly on left AND right squares, gain +1 ATK +1 DEF this turn.',
+  abilityText: '×3 ATK vs Cavalry (also on counter-attacks). Flank: while a friendly is on its left AND right squares, +1 ATK +1 DEF.',
 };

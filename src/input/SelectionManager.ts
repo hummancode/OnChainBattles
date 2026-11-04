@@ -356,9 +356,11 @@ this.state = {
 
   /** Publish current highlights to EventBus so BoardRenderer reacts. */
 private publishHighlights(): void {
+  // A move onto an occupied square is an attack (Assassin jump) — show it in attack colour.
+  const jumpHits = this.state.validMoves.filter(p => this.engine.isOccupied(p.col, p.row));
   EventBus.emit(EV.HIGHLIGHTS_CHANGED, {
-    moves:       this.state.validMoves,
-    attacks:     this.state.validAttacks,
+    moves:       this.state.validMoves.filter(p => !this.engine.isOccupied(p.col, p.row)),
+    attacks:     [...this.state.validAttacks, ...jumpHits],
     attackRange: this.cachedAttackRange,
     deploy:      this.state.validDeploy,
     auras:       [],

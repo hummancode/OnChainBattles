@@ -4,12 +4,15 @@ import type { PendingCommand } from '../../pending/PendingCommand';
 import type { AbilityContext, AbilityResult } from '../types';
 import { Player } from '../types';
 import { getCard } from '../../data/CardRegistry';
+import { Allegiance, CardClass } from '../../types/CardTypes';
 
 function treasonHandler(ctx: AbilityContext): AbilityResult {
   const opp = ctx.owner === Player.P1 ? Player.P2 : Player.P1;
-  const targets = ctx.board.getUnitsOf(opp).filter(u =>
-    getCard(u.cardId).allegiance !== 'ROYAL' && u.cardId !== 'king'
-  );
+  // Units only: no structures, no King, no Royal units
+  const targets = ctx.board.getUnitsOf(opp).filter(u => {
+    const def = getCard(u.cardId);
+    return def.class === CardClass.UNIT && def.allegiance !== Allegiance.ROYAL && u.cardId !== 'king';
+  });
 
   if (targets.length === 0) return { events: [], noValidTarget: true };
 

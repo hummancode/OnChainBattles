@@ -13,16 +13,16 @@ Used to identify weak areas and improve code quality over time.
 
 | Category | Count | User-Found | Claude-Found | Test-Found |
 |----------|-------|------------|--------------|------------|
-| logic | 33 | 5 | 25 | 3 |
+| logic | 41 | 5 | 33 | 3 |
 | network | 15 | 6 | 8 | 1 |
-| state | 25 | 4 | 20 | 1 |
+| state | 26 | 4 | 21 | 1 |
 | rendering | 11 | 1 | 9 | 1 |
 | race-condition | 6 | 2 | 4 | 0 |
 | memory-leak | 7 | 0 | 7 | 0 |
 | web3 | 3 | 0 | 3 | 0 |
 | type-safety | 7 | 2 | 5 | 0 |
 | security | 13 | 1 | 12 | 0 |
-| **TOTAL** | **122** | **21** | **95** | **6** |
+| **TOTAL** | **131** | **21** | **104** | **6** |
 
 ---
 
@@ -1279,3 +1279,93 @@ Used to identify weak areas and improve code quality over time.
 - **Fix**: EngineEventBridge tracks its timers and clears them on unwire; HUD refresh cancels its pending frame.
 - **Prevention**: Every timer/frame request is owned by something with a cleanup path (Symmetry rule).
 - **Files**: src/scenes/battle/EngineEventBridge.ts, src/scenes/battle/HUDRefreshCoordinator.ts
+
+### BUG-123: Casus Belli deployed on the enemy back row and skipped On Deploy
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: The forwarded unit landed next to the enemy King (row 6 for P1) instead of the front row of the enemy half, and its On Deploy ability (Scout, Priest…) never fired.
+- **Root cause**: `spellForwardDeploy` used `rows-1 / 0`; the `deployAt` branch of `selectDiscard` placed the unit without `resolveOnDeploy`.
+- **Fix**: Row = `rows-DEPLOY_ROWS` (P1) / `DEPLOY_ROWS-1` (P2); PlayPhase split into `placeCardUnit` / `deployUnitWithAbilities`, used by both paths. Text: "one unit".
+- **Prevention**: One deploy pipeline for every way a card reaches the board.
+- **Files**: src/game/abilities/handlers/spellForwardDeploy.ts, src/game/phases/PlayPhase.ts, src/game/GameEngine.ts, src/game/data/cards/casus_belli.ts
+
+### BUG-124: Assassin jump attack was dead code
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: Assassin never jumped onto enemies; its move pattern was back-weighted and only its normal (counterable) attack worked.
+- **Root cause**: Custom move patterns skip occupied squares and the ON_JUMP check ran after `moveUnit`, finding the Assassin itself.
+- **Fix**: 1-step diagonal or 2-square diagonal jump over units; a 2-square jump onto an enemy attacks it without counter (`getJumpAttackLandings`, `executeMove`), P2-flipped. UI shows those squares as attacks.
+- **Prevention**: Every card text line needs an engine test (tests/engine/regression/cardAudit.test.ts).
+- **Files**: src/game/data/cards/assassin.ts, src/game/MovementRules.ts, src/game/phases/ActPhase.ts, src/input/SelectionManager.ts
+
+### BUG-125: Village slow ignored fixed movement patterns
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: Lancer, Scout, Knight and Messenger next to a Village kept their full movement.
+- **Root cause**: The −1 lowered `currentMovement`, which custom patterns never read.
+- **Fix**: `shrinkPattern`: each point of slow removes the pattern's farthest ring.
+- **Prevention**: Movement modifiers must apply to every movement model.
+- **Files**: src/game/MovementRules.ts, src/game/data/cards/village.ts
+
+### BUG-126: Castle made normal ACT attacks on top of its LEG-phase area attack
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: Castle attacked twice per turn cycle.
+- **Root cause**: `canUnitAttack` didn't exclude structures; AREA_ADJ counted as an attack pattern.
+- **Fix**: Structures can't make ACT attacks (they still counter and fire in LEG).
+- **Prevention**: Class-level rules belong in UnitQuery gates.
+- **Files**: src/game/UnitQuery.ts, src/game/data/cards/castle.ts
+
+### BUG-127: Pikeman ×3 vs Cavalry missing on counter-attacks
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: A Knight attacking a Pikeman took 1 counter damage instead of 3.
+- **Root cause**: `resolveAttackWithCounter` used raw ATK for the counter.
+- **Fix**: Counter applies the CAVALRY_COUNTER multiplier (shown in the breakdown).
+- **Prevention**: Attack modifiers are applied in one damage function used by both directions.
+- **Files**: src/game/CombatResolver.ts, src/game/data/cards/pikeman.ts
+
+### BUG-128: Treason could target structures; stolen units died into the thief's graveyard
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: Village was a valid Treason target; a controlled unit dying went to the caster's graveyard/discard and its on-death draw to the caster.
+- **Root cause**: Target filter checked only allegiance/King; death handling used `unit.owner` instead of `treasonOwner`.
+- **Fix**: Units only; death → `treasonOwner ?? owner` (ActPhase + AbilityDispatcher). Bots' usefulness filters updated.
+- **Prevention**: Temporary ownership fields must be consulted by every owner-dependent path.
+- **Files**: src/game/abilities/handlers/spellTreason.ts, src/game/phases/ActPhase.ts, src/game/abilities/AbilityDispatcher.ts, src/game/ai/*.ts
+
+### BUG-129: Coup-captured unit could act immediately
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: A unit taken with Coup moved/attacked in the same turn.
+- **Root cause**: Permanent UNIT_CAPTURED didn't set `isJustPlaced`.
+- **Fix**: Captured units wait until their new owner's next turn.
+- **Prevention**: Any ownership change resets act flags explicitly.
+- **Files**: src/game/GameEngine.ts
+
+### BUG-130: Refused spell play reordered the hand (replay/desync)
+- **Date**: 2026-11-04
+- **Category**: `state`
+- **Discovered by**: `claude`
+- **Symptom**: After a no-target spell was refused, later handIndex plays could hit a different card on the server/opponent (fuzz: 5 replay divergences).
+- **Root cause**: `returnSpellToHand` appended the card instead of restoring its slot, but refused actions are never logged or relayed.
+- **Fix**: NO_TARGET refusal puts the card back at its original index; the hand UI re-syncs via reconcileHand.
+- **Prevention**: A refused action must leave the engine bit-for-bit unchanged.
+- **Files**: src/game/phases/PlayPhase.ts
+
+### BUG-131: Messenger logged 'No handler' on every deploy; misleading card texts
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: Console noise; Scout/King/Disease/Revolt/Mystic/Militia/Messenger texts didn't describe what the engine does.
+- **Root cause**: No no-op handler for AURA_SUPPRESS_KING_ATK; texts written before mechanics changed.
+- **Fix**: No-op handler registered; texts updated (Swift, Backstab, LEG rate growth, enemy structure + both sides, auto-placed, highest-cost revive, valid deploy square).
+- **Prevention**: Card text audit is part of every mechanics change.
+- **Files**: src/game/abilities/handlers/passiveNoOp.ts, src/game/data/cards/*.ts

@@ -12,15 +12,17 @@ export const ASSASSIN_DEF: CardDefinition = {
         ],
         canJump: true,
       },
+      // Diagonal step, or a 2-square diagonal jump over anything; a jump landing on an
+      // enemy attacks it (MovementRules.getJumpAttackLandings / ActPhase.executeMove).
       customMove: {
         offsets: [
-          { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 }, { dx: -2, dy: 0 },
-          { dx: 2, dy: 0 }, { dx: 0, dy: 2 },
+          { dx: -1, dy: -1 }, { dx: 1, dy: -1 }, { dx: -1, dy: 1 }, { dx: 1, dy: 1 },
+          { dx: -2, dy: -2 }, { dx: 2, dy: -2 }, { dx: -2, dy: 2 }, { dx: 2, dy: 2 },
         ],
         canJump: true,
       },},
   flags: [],
   ambushBonus: 1,
   abilities: [],
-  abilityText: 'Jumps diagonally. Attacks landing square on jump. Ambush: +1 ATK from rear arc.',
+  abilityText: 'Jumps 1–2 squares diagonally, over units. A 2-square jump onto an enemy attacks it (no counter). Ambush: +1 ATK from rear arc.',
 };

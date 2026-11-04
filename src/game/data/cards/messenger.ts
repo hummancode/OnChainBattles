@@ -21,5 +21,5 @@ export const MESSENGER_DEF: CardDefinition = {
   abilities: [
     { type: AbilityType.AURA_SUPPRESS_KING_ATK, params: {} },
   ],
-  abilityText: 'Aura: adjacent enemy King ATK = 0.',
+  abilityText: 'Swift: can act the turn it\'s deployed. Aura: adjacent enemy King ATK = 0.',
 };

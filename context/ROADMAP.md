@@ -102,7 +102,7 @@ Bot-vs-bot fuzz (`npm run test:fuzz`) + kod incelemesi: motor 10, sunucu 7, iste
 | M.2 | Puzzle'lar cüzdansız çözülebiliyor (BUG-118), bekleme süresi UTC (BUG-119) | ✅ |
 | M.3 | Eski QUICK PLAY (MainMenu/RoomScene) kaldırıldı; lobi tek çok oyunculu yol. Lobi "Invite" bağlantısı → Hub'da katılma penceresi kodla dolu açılıyor | ✅ |
 | M.4 | Pratik botu Kolay / Normal / Zor (SmartBot: takas değerlendirmesi, tehdit haritası, kral güvenliği, sonraki tura saldırı kurma). Ölçüm: Zor–Kolay %85, Zor–Normal %63, Normal–Kolay ≥ %60 | ✅ |
-| M.5 | Kart metni ↔ motor denetimi (15 uyumsuzluk): Casus Belli rakip yarının ön sırası, Assassin çapraz sıçrama saldırısı, Village fixed desenleri de yavaşlatıyor, Castle ACT'te saldırmıyor, Pikeman karşı saldırıda ×3, Treason sadece birim, metin düzeltmeleri | 🔜 |
+| M.5 | Kart metni ↔ motor denetimi (15 uyumsuzluk): Casus Belli rakip yarının ön sırası, Assassin çapraz sıçrama saldırısı, Village fixed desenleri de yavaşlatıyor, Castle ACT'te saldırmıyor, Pikeman karşı saldırıda ×3, Treason sadece birim, Coup ile alınan birim o tur bekler, metin düzeltmeleri (BUG-123…131) | ✅ |
 | M.6 | Sağlamlık: oda / kuyruk / giriş denemesi limitleri, nonce, hareket animasyonu eşlemesi, zamanlayıcı temizliği (BUG-120…122) | ✅ |
 | M.7 | Arayüz turu (tüm sahneler) + iki tarayıcıyla uçtan uca maç | 🔜 |
 

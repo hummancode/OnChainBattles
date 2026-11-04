@@ -10,5 +10,5 @@ export const DISEASE_DEF: CardDefinition = {
   abilities: [
     { type: AbilityType.SPELL_DAMAGE_STRUCTURE_ADJ, params: { damage: 2, duration: 3 } },
   ],
-  abilityText: 'Target a Structure. It takes 2 damage at the start of your turn for 3 turns. Units adjacent to it take 1 damage per tick.',
+  abilityText: 'Target an enemy Structure. It takes 2 damage at the start of your turn for 3 turns. Units adjacent to it (both sides) take 1 damage per tick.',
 };

@@ -80,3 +80,24 @@ describe('SelectionManager review findings', () => {
     expect(played).toBe(0);
   });
 });
+
+describe('Assassin jump attack via the board', () => {
+  it('clicking an enemy on a jump-landing square sends a MOVE (jump attack), highlighted as an attack', () => {
+    const moves: any[] = []; let hl: any = null;
+    const off = EventBus.on(EV.HIGHLIGHTS_CHANGED, (h: any) => { hl = h; });
+    const sm = new SelectionManager({} as any, adapter({
+      getPhase: () => 'ACT',
+      getValidMoves: () => [{ col: 5, row: 3 }, { col: 4, row: 2 }],
+      getValidAttacks: () => [],
+      isOccupied: (c: number, r: number) => (c === 1 && r === 1) || (c === 5 && r === 3),
+      isPlayerUnit: (c: number, r: number) => c === 1 && r === 1,
+      moveUnit: (...a: any[]) => { moves.push(a); },
+    }));
+    sm.onBoardCellClicked(1, 1);           // select assassin
+    expect(hl.attacks).toEqual([{ col: 5, row: 3 }]);
+    expect(hl.moves).toEqual([{ col: 4, row: 2 }]);
+    sm.onBoardCellClicked(5, 3);           // enemy on the landing square
+    expect(moves).toEqual([[1, 1, 5, 3]]);
+    sm.destroy(); off();
+  });
+});

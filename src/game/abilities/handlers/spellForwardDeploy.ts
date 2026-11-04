@@ -6,9 +6,11 @@ import { Player } from '../types';
 import type { Position } from '../../types/GameTypes';
 import { getCard } from '../../data/CardRegistry';
 import { CardClass } from '../../types/CardTypes';
+import { DEPLOY_ROWS } from '../../Board';
 
 function spellForwardDeploy(ctx: AbilityContext): AbilityResult {
-  const frontRow = ctx.owner === Player.P1 ? ctx.board.rows - 1 : 0;
+  // Front row of the enemy half: the enemy deploy zone's row closest to the centre.
+  const frontRow = ctx.owner === Player.P1 ? ctx.board.rows - DEPLOY_ROWS : DEPLOY_ROWS - 1;
   const validPositions: Position[] = [];
   for (let c = 0; c < ctx.board.cols; c++) {
     if (ctx.board.isEmpty(c, frontRow)) validPositions.push({ col: c, row: frontRow });
@@ -22,7 +24,7 @@ function spellForwardDeploy(ctx: AbilityContext): AbilityResult {
     owner:          ctx.owner,
     sourceCardId:   ctx.cardId,
     sourceAbility:  AbilityType.SPELL_FORWARD_DEPLOY,
-    reason:         'Choose an empty square in the enemy front row to deploy a card.',
+    reason:         'Casus Belli: choose an empty square in the front row of the enemy half.',
     validPositions,
     deferredEvents: [],
   };

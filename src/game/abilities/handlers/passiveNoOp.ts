@@ -17,5 +17,6 @@ AbilityHandlerRegistry.register(AbilityType.AURA_VILLAGE_SLOW, noOp);
 AbilityHandlerRegistry.register(AbilityType.AURA_CAVALRY_COUNTER, noOp);
 AbilityHandlerRegistry.register(AbilityType.AURA_PIKEMAN_FLANK, noOp);
 AbilityHandlerRegistry.register(AbilityType.AURA_AUTO_HEAL, noOp);
+AbilityHandlerRegistry.register(AbilityType.AURA_SUPPRESS_KING_ATK, noOp); // Messenger — AuraSystem
 AbilityHandlerRegistry.register(AbilityType.ON_DEATH_DRAW, noOp);
 AbilityHandlerRegistry.register(AbilityType.ON_KILL_LEG_DRAIN, noOp);

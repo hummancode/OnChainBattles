@@ -10,5 +10,5 @@ export const PEASANT_REVOLT_DEF: CardDefinition = {
   abilities: [
     { type: AbilityType.SPELL_REVOLT, params: {} },
   ],
-  abilityText: 'Summon 1 Militia to any free square in your half per Structure on the board (both sides). Permanent penalty to you: −1 LEG rate (min 1) and +2 Royal cost for the rest of the game.',
+  abilityText: 'Summon 1 Militia per Structure on the board (both sides), auto-placed in valid deploy squares. Permanent penalty to you: −1 LEG rate (min 1) and +2 Royal cost for the rest of the game.',
 };

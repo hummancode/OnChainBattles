@@ -13,5 +13,5 @@ export const VILLAGE_DEF: CardDefinition = {
     { type: AbilityType.AURA_VILLAGE_SLOW, params: { amount: 1 } },
     { type: AbilityType.PASSIVE_BUILD_DELAY, params: {} },
   ],
-  abilityText: 'Build Delay: inactive 1 turn. Aura: all adjacent enemy units −1 movement (min 0). Immobilized units may still attack this structure.',
+  abilityText: 'Build Delay: inactive 1 turn. Aura: adjacent enemy units −1 movement (min 0); fixed patterns lose their farthest squares. Immobilized units may still attack this structure.',
 };

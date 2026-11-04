@@ -35,7 +35,7 @@ import type { Position, GameStateSnapshot } from './types/GameTypes';
 import type { GameEvent } from './types/EventTypes';
 import type { PendingCommand } from './pending/PendingCommand';
 import { resolvePending } from './pending/PendingCommandResolver';
-import { Allegiance, CardClass, CardFlag } from './types/CardTypes';
+import { Allegiance, CardClass } from './types/CardTypes';
 import { AbilityType } from './types/AbilityTypes';
 import type { GameContext } from './GameContext';
 import { opponent } from './GameContext';
@@ -43,7 +43,7 @@ import { opponent } from './GameContext';
 // Phase modules
 import { runDrawPhase } from './phases/DrawPhase';
 import { runLEGPhase } from './phases/LEGPhase';
-import { executePlayCard, returnSpellToHand } from './phases/PlayPhase';
+import { executePlayCard, returnSpellToHand, deployUnitWithAbilities } from './phases/PlayPhase';
 import { executeMove, executeAttack, handleUnitDeath } from './phases/ActPhase';
 import { runEndPhase } from './phases/EndPhase';
 
@@ -337,7 +337,7 @@ export class GameEngine implements IGameEngineAPI {
       if (validHandIndices.length === 0) return; // nothing to deploy (hand changed) — spell fizzles
       this.pending = {
         kind: 'DISCARD', owner: cmd.owner, sourceCardId: cmd.sourceCardId, sourceAbility: cmd.sourceAbility,
-        count: 1, reason: 'Casus Belli: choose a unit from your hand to deploy there.',
+        count: 1, reason: 'Casus Belli: choose a unit from your hand to deploy on that square.',
         deferredEvents: [], deployAt: { col, row }, validHandIndices,
       };
       this.status = EngineStatus.AWAITING_INPUT;
@@ -367,15 +367,13 @@ export class GameEngine implements IGameEngineAPI {
     this.clearPending();
 
     if (cmd.deployAt) {
-      // Casus Belli: deploy the picked unit for free on the chosen square.
+      // Casus Belli: deploy the picked unit for free on the chosen square — through the same
+      // placement + On Deploy path as a normal deploy (its own On Deploy ability fires).
       const cardId = ps.hand.splice(handIndex, 1)[0];
       this.emit({ type: 'CARD_PLAYED', player: this.activePlayer, cardId, handIndex, legCost: 0 } as GameEvent);
-      const unit = this.unitFactory.create(cardId, this.activePlayer, cmd.deployAt);
-      if (getCard(cardId).flags.includes(CardFlag.SWIFT)) unit.isJustPlaced = false;
-      this.board.placeUnit(unit);
-      this.emit({ type: 'UNIT_PLACED', instanceId: unit.instanceId, cardId, owner: this.activePlayer,
-        col: cmd.deployAt.col, row: cmd.deployAt.row, isActive: unit.isActive } as GameEvent);
-      this.emit(this.auras.evaluateAuras(this.board, this.mods));
+      const ctx = this.buildContext();
+      deployUnitWithAbilities(ctx, cardId, this.activePlayer, cmd.deployAt);
+      this.syncFromContext(ctx);
       return;
     }
 
@@ -675,6 +673,8 @@ export class GameEngine implements IGameEngineAPI {
         if (event.permanent) {
           u.treasonOwner = null;
           u.originalPos = null;
+          // Coup: joins its new side like a fresh deploy — can't act until its new owner's next turn
+          u.isJustPlaced = true;
         } else {
           u.treasonOwner = event.from;                     // returned at the caster's END phase
           u.originalPos = { ...u.position };

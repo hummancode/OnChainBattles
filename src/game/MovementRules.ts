@@ -36,9 +36,16 @@ export function getValidMoves(unit: Unit, board: Board): Position[] {
   // Custom pattern takes priority
   if (def.stats?.customMove) {
     // Movement bonuses (War Horn) extend fixed patterns: every move reaches `bonus` more
-    // squares along its own direction. Penalties don't shrink patterns (unchanged rule).
-    const bonus = Math.max(0, unit.currentMovement - unit.baseMovement);
-    return resolveCustomPattern(unit, extendPattern(def.stats.customMove, bonus), board, false);
+    // squares along its own direction. Penalties (Village) shrink them: each point drops the
+    // pattern's farthest ring of squares (see shrinkPattern).
+    const bonus   = Math.max(0, unit.currentMovement - unit.baseMovement);
+    const penalty = Math.max(0, unit.baseMovement - unit.currentMovement);
+    const pattern = shrinkPattern(extendPattern(def.stats.customMove, bonus), penalty);
+    const moves = resolveCustomPattern(unit, pattern, board, false);
+    // Assassin (ON_JUMP): a jump of 2+ squares may land on an enemy — that is its jump attack
+    // (ActPhase.executeMove resolves it, immune to counter-attack).
+    if (unit.baseAtkPattern === AtkPattern.ON_JUMP) moves.push(...getJumpAttackLandings(unit, pattern, board));
+    return moves;
   }
 
   // Enum-based fallback
@@ -290,6 +297,34 @@ export function extendPattern(pattern: CustomPattern, steps: number): CustomPatt
     }
   }
   return { ...pattern, offsets };
+}
+
+/**
+ * Shrink a fixed movement pattern by `steps` movement points: each point removes the
+ * pattern's farthest ring (offsets at its max Chebyshev distance). A 2-square pattern
+ * slowed by 1 keeps only its adjacent squares. (Units whose movement drops to 0 can't move
+ * at all — UnitQuery.canUnitMove.)
+ */
+export function shrinkPattern(pattern: CustomPattern, steps: number): CustomPattern {
+  if (steps <= 0) return pattern;
+  const dist = (o: PatternOffset) => Math.max(Math.abs(o.dx), Math.abs(o.dy));
+  const maxDist = pattern.offsets.reduce((m, o) => Math.max(m, dist(o)), 0);
+  return { ...pattern, offsets: pattern.offsets.filter(o => dist(o) <= maxDist - steps) };
+}
+
+/** ON_JUMP landings on enemy units, 2+ squares away (adjacent enemies use the normal attack). */
+function getJumpAttackLandings(unit: Unit, pattern: CustomPattern, board: Board): Position[] {
+  const dySign = unit.owner === Player.P1 ? 1 : -1;
+  const out: Position[] = [];
+  for (const o of pattern.offsets) {
+    if (Math.max(Math.abs(o.dx), Math.abs(o.dy)) < 2) continue;
+    const nc = unit.position.col + o.dx, nr = unit.position.row + o.dy * dySign;
+    if (!board.isInBounds(nc, nr)) continue;
+    if (!pattern.canJump && !isPathClear(unit.position.col, unit.position.row, o.dx, o.dy * dySign, board, true)) continue;
+    const occ = board.getUnit(nc, nr);
+    if (occ && occ.owner !== unit.owner) out.push({ col: nc, row: nr });
+  }
+  return out;
 }
 
 function resolveCustomPattern(

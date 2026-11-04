@@ -12,5 +12,5 @@ export const MYSTIC_DEF: CardDefinition = {
   abilities: [
     { type: AbilityType.CUSTOM, handler: 'mysticDeployHandler' },
   ],
-  abilityText: 'On Deploy: revive one unit from your graveyard to any free square in your half. Permanently −1 your LEG rate (min 1).',
+  abilityText: 'On Deploy: revives your highest-cost dead unit to a valid deploy square. Permanently −1 your LEG rate (min 1).',
 };

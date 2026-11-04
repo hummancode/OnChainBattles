@@ -11,5 +11,5 @@ export const CASUS_BELLI_DEF: CardDefinition = {
     { type: AbilityType.SPELL_DRAIN_LEG_RATE_PERM, params: { amount: 1, target: 'OPPONENT' } },
     { type: AbilityType.SPELL_FORWARD_DEPLOY,       params: {} },
   ],
-  abilityText: 'Permanently −1 opponent\'s LEG rate (min 1). Then deploy one card from your hand to any free square in the front row of enemy half.',
+  abilityText: 'Permanently −1 opponent\'s LEG rate (min 1). Then deploy one unit from your hand to any free square in the front row of the enemy half.',
 };

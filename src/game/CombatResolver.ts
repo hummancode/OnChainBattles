@@ -132,12 +132,15 @@ export function resolveAttackWithCounter(
   if (!canReachAttacker) return events;
 
   // ── 3. Counter-attack: defender → attacker (dying blow) ──
-  const counterDamage = Math.max(0, defenderPreDamageAtk);
+  // Pikeman's ×3 vs Cavalry applies to its counter-attack too.
+  const cavalryCounter = isUnitCavalry(attacker) && hasFlag(defender, 'CAVALRY_COUNTER')
+    ? defenderPreDamageAtk * 2 : 0;
+  const counterDamage = Math.max(0, defenderPreDamageAtk + cavalryCounter);
   const attackerNewHP = Math.max(0, attacker.currentDef - counterDamage);
 
   const counterBreakdown: DamageBreakdown = {
     baseAtk: defenderPreDamageAtk,
-    cavalryCounter: 0,
+    cavalryCounter,
     backstabBonus: 0,
     ambushBonus: 0,
     totalDamage: counterDamage,

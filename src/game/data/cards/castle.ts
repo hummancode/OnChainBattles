@@ -15,5 +15,5 @@ export const CASTLE_DEF: CardDefinition = {
     { type: AbilityType.PASSIVE_BUILD_DELAY,  params: {} },
     { type: AbilityType.PASSIVE_SPAWN,        params: { cardId: 'foot_soldier', interval: 3 } },
   ],
-  abilityText: 'Build Delay: inactive for 1 turn after placement. Attacks all adjacent enemies each LEG phase. Adjacent friendlies +1 DEF. Spawns 1 Foot Soldier every 3 turns. −1 Royal cost.',
+  abilityText: 'Build Delay: inactive for 1 turn after placement. Attacks all adjacent enemies each of your LEG phases. Adjacent friendlies +1 DEF. Spawns 1 Foot Soldier every 3 turns. −1 Royal cost.',
 };
