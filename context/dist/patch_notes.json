@@ -1,6 +1,209 @@
 {
   "patches": [
     {
+      "version": "0.04",
+      "date": "2026-11-04",
+      "summary": "MVP 1: rules match the cards, Easy/Normal/Hard bot, invite links, rock-solid online sync (crypto paused)",
+      "notes": [
+        {
+          "id": "20261104100000000000",
+          "category": "New Content",
+          "text": "Your hand is now a readable list: cost, name, ATK/DEF and type at a glance. Hover a card for a large preview; cards you can't afford are dimmed.",
+          "created": "2026-11-04T10:00:00",
+          "edited": null
+        },
+        {
+          "id": "20261104100001000000",
+          "category": "New Content",
+          "text": "Hover any unit on the board to see its full card with current stats.",
+          "created": "2026-11-04T10:00:01",
+          "edited": null
+        },
+        {
+          "id": "20261104100002000000",
+          "category": "New Content",
+          "text": "Combat feels punchier: attackers lunge, targets shake, fallen units fade away, new units pop onto the board.",
+          "created": "2026-11-04T10:00:02",
+          "edited": null
+        },
+        {
+          "id": "20261104100003000000",
+          "category": "New Content",
+          "text": "Sound effects for deploying, attacking, deaths, your turn and wins/losses. Toggle with the speaker button or the M key.",
+          "created": "2026-11-04T10:00:03",
+          "edited": null
+        },
+        {
+          "id": "20261104100004000000",
+          "category": "Bug Fix",
+          "text": "Replays show whose turn it is by name and no longer show an END TURN button.",
+          "created": "2026-11-04T10:00:04",
+          "edited": null
+        },
+        {
+          "id": "20261104100005000000",
+          "category": "Bug Fix",
+          "text": "Reconnecting to a match now requires your own account/guest session — a seat can't be taken just by knowing your name.",
+          "created": "2026-11-04T10:00:05",
+          "edited": null
+        },
+        {
+          "id": "20261104100006000000",
+          "category": "Bug Fix",
+          "text": "Practice and tutorial games no longer change your win/loss record; REMATCH after practice starts a new bot game.",
+          "created": "2026-11-04T10:00:06",
+          "edited": null
+        },
+        {
+          "id": "20261104100007000000",
+          "category": "Bug Fix",
+          "text": "Solving a puzzle now actually adds its prize card to your collection.",
+          "created": "2026-11-04T10:00:07",
+          "edited": null
+        },
+        {
+          "id": "20261104150000000000",
+          "category": "Bug Fix",
+          "text": "Fixed a batch of rule bugs found by automated bot-vs-bot testing: Mystic now revives your strongest fallen unit, Casus Belli deploys a unit from your hand, Civil War and Disease last their full duration, Treason returns units correctly.",
+          "created": "2026-11-04T15:00:00",
+          "edited": null
+        },
+        {
+          "id": "20261104150001000000",
+          "category": "Bug Fix",
+          "text": "Ending your turn while a choice is open, or clicking during your opponent's choice, no longer desyncs the match.",
+          "created": "2026-11-04T15:01:00",
+          "edited": null
+        },
+        {
+          "id": "20261104150002000000",
+          "category": "Bug Fix",
+          "text": "Clicking a selected hand card again now really deselects it.",
+          "created": "2026-11-04T15:02:00",
+          "edited": null
+        },
+        {
+          "id": "20261104150003000000",
+          "category": "Bug Fix",
+          "text": "Results are counted exactly once, and the result / lobby screens work every time (not just the first match).",
+          "created": "2026-11-04T15:03:00",
+          "edited": null
+        },
+        {
+          "id": "20261104150004000000",
+          "category": "Bug Fix",
+          "text": "Your hand no longer shows phantom cards when drawing at the hand limit.",
+          "created": "2026-11-04T15:04:00",
+          "edited": null
+        },
+        {
+          "id": "20261104150005000000",
+          "category": "Bug Fix",
+          "text": "Rooms can't be joined, restarted or taken over while a match is running; long matches are no longer cleaned up as stale.",
+          "created": "2026-11-04T15:05:00",
+          "edited": null
+        },
+        {
+          "id": "20261104150006000000",
+          "category": "Bug Fix",
+          "text": "The Hub shows your last match result again.",
+          "created": "2026-11-04T15:06:00",
+          "edited": null
+        },
+        {
+          "id": "20261104160000000000",
+          "category": "New Content",
+          "text": "Practice vs Bot now has three difficulties: Easy, Normal and Hard. Hard weighs trades, keeps its King safe and sets up attacks. Your last choice is remembered.",
+          "created": "2026-11-04T16:00:00",
+          "edited": null
+        },
+        {
+          "id": "20261104160001000000",
+          "category": "New Content",
+          "text": "Lobby INVITE button copies a link; opening it takes your friend straight to the join dialog with the room code filled in.",
+          "created": "2026-11-04T16:01:00",
+          "edited": null
+        },
+        {
+          "id": "20261104160002000000",
+          "category": "Mechanics",
+          "text": "Crypto stakes and wallet features are paused for MVP 1 — every match is free play.",
+          "created": "2026-11-04T16:02:00",
+          "edited": null
+        },
+        {
+          "id": "20261104160003000000",
+          "category": "Bug Fix",
+          "text": "Puzzles can be solved with a normal account, no wallet needed; the 24 h retry timer is now exact.",
+          "created": "2026-11-04T16:03:00",
+          "edited": null
+        },
+        {
+          "id": "20261104160004000000",
+          "category": "Mechanics",
+          "text": "The old Quick Play menu was removed — Host / Browse / Join is the one way to play online.",
+          "created": "2026-11-04T16:04:00",
+          "edited": null
+        },
+        {
+          "id": "20261104160005000000",
+          "category": "Bug Fix",
+          "text": "Units no longer briefly 'lose' their square while sliding to a new one (fast turns and 3x replays).",
+          "created": "2026-11-04T16:05:00",
+          "edited": null
+        },
+        {
+          "id": "20261104170000000000",
+          "category": "Mechanics",
+          "text": "Casus Belli now deploys your unit on the front row of the enemy half, and the unit's On Deploy ability triggers.",
+          "created": "2026-11-04T17:00:00",
+          "edited": null
+        },
+        {
+          "id": "20261104170001000000",
+          "category": "Mechanics",
+          "text": "Assassin really jumps: 1 step or a 2-square diagonal jump over units; jumping onto an enemy attacks it with no counter.",
+          "created": "2026-11-04T17:01:00",
+          "edited": null
+        },
+        {
+          "id": "20261104170002000000",
+          "category": "Mechanics",
+          "text": "Village now slows every enemy unit next to it, including Knights, Lancers and Scouts.",
+          "created": "2026-11-04T17:02:00",
+          "edited": null
+        },
+        {
+          "id": "20261104170003000000",
+          "category": "Mechanics",
+          "text": "Castle only attacks in your LEG phase; Pikeman's ×3 vs Cavalry also applies when it strikes back.",
+          "created": "2026-11-04T17:03:00",
+          "edited": null
+        },
+        {
+          "id": "20261104170004000000",
+          "category": "Mechanics",
+          "text": "Treason can only steal units, and a stolen unit that dies goes back to its owner's graveyard. Units taken with Coup can't act the turn they're captured.",
+          "created": "2026-11-04T17:04:00",
+          "edited": null
+        },
+        {
+          "id": "20261104170005000000",
+          "category": "Bug Fix",
+          "text": "Card texts updated to match the rules (Scout, King, Disease, Peasant Revolt, Mystic, Militia, Messenger).",
+          "created": "2026-11-04T17:05:00",
+          "edited": null
+        },
+        {
+          "id": "20261104180000000000",
+          "category": "Bug Fix",
+          "text": "Online matches no longer fall out of sync when a card ability triggers (the server now uses exactly the same rules as your game).",
+          "created": "2026-11-04T18:00:00",
+          "edited": null
+        }
+      ]
+    },
+    {
       "version": "0.03",
       "date": "2026-11-03",
       "summary": "Multiplayer reliability, server authority, replays, bot + tutorial, card fixes",
@@ -312,203 +515,6 @@
       "released_at": "2026-03-12T23:02:58.165219"
     }
   ],
-  "unreleased": [
-    {
-      "id": "20261104100000000000",
-      "category": "New Content",
-      "text": "Your hand is now a readable list: cost, name, ATK/DEF and type at a glance. Hover a card for a large preview; cards you can't afford are dimmed.",
-      "created": "2026-11-04T10:00:00",
-      "edited": null
-    },
-    {
-      "id": "20261104100001000000",
-      "category": "New Content",
-      "text": "Hover any unit on the board to see its full card with current stats.",
-      "created": "2026-11-04T10:00:01",
-      "edited": null
-    },
-    {
-      "id": "20261104100002000000",
-      "category": "New Content",
-      "text": "Combat feels punchier: attackers lunge, targets shake, fallen units fade away, new units pop onto the board.",
-      "created": "2026-11-04T10:00:02",
-      "edited": null
-    },
-    {
-      "id": "20261104100003000000",
-      "category": "New Content",
-      "text": "Sound effects for deploying, attacking, deaths, your turn and wins/losses. Toggle with the speaker button or the M key.",
-      "created": "2026-11-04T10:00:03",
-      "edited": null
-    },
-    {
-      "id": "20261104100004000000",
-      "category": "Bug Fix",
-      "text": "Replays show whose turn it is by name and no longer show an END TURN button.",
-      "created": "2026-11-04T10:00:04",
-      "edited": null
-    },
-    {
-      "id": "20261104100005000000",
-      "category": "Bug Fix",
-      "text": "Reconnecting to a match now requires your own account/guest session — a seat can't be taken just by knowing your name.",
-      "created": "2026-11-04T10:00:05",
-      "edited": null
-    },
-    {
-      "id": "20261104100006000000",
-      "category": "Bug Fix",
-      "text": "Practice and tutorial games no longer change your win/loss record; REMATCH after practice starts a new bot game.",
-      "created": "2026-11-04T10:00:06",
-      "edited": null
-    },
-    {
-      "id": "20261104100007000000",
-      "category": "Bug Fix",
-      "text": "Solving a puzzle now actually adds its prize card to your collection.",
-      "created": "2026-11-04T10:00:07",
-      "edited": null
-    },
-    {
-      "id": "20261104150000000000",
-      "category": "Bug Fix",
-      "text": "Fixed a batch of rule bugs found by automated bot-vs-bot testing: Mystic now revives your strongest fallen unit, Casus Belli deploys a unit from your hand, Civil War and Disease last their full duration, Treason returns units correctly.",
-      "created": "2026-11-04T15:00:00",
-      "edited": null
-    },
-    {
-      "id": "20261104150001000000",
-      "category": "Bug Fix",
-      "text": "Ending your turn while a choice is open, or clicking during your opponent's choice, no longer desyncs the match.",
-      "created": "2026-11-04T15:01:00",
-      "edited": null
-    },
-    {
-      "id": "20261104150002000000",
-      "category": "Bug Fix",
-      "text": "Clicking a selected hand card again now really deselects it.",
-      "created": "2026-11-04T15:02:00",
-      "edited": null
-    },
-    {
-      "id": "20261104150003000000",
-      "category": "Bug Fix",
-      "text": "Results are counted exactly once, and the result / lobby screens work every time (not just the first match).",
-      "created": "2026-11-04T15:03:00",
-      "edited": null
-    },
-    {
-      "id": "20261104150004000000",
-      "category": "Bug Fix",
-      "text": "Your hand no longer shows phantom cards when drawing at the hand limit.",
-      "created": "2026-11-04T15:04:00",
-      "edited": null
-    },
-    {
-      "id": "20261104150005000000",
-      "category": "Bug Fix",
-      "text": "Rooms can't be joined, restarted or taken over while a match is running; long matches are no longer cleaned up as stale.",
-      "created": "2026-11-04T15:05:00",
-      "edited": null
-    },
-    {
-      "id": "20261104150006000000",
-      "category": "Bug Fix",
-      "text": "The Hub shows your last match result again.",
-      "created": "2026-11-04T15:06:00",
-      "edited": null
-    },
-    {
-      "id": "20261104160000000000",
-      "category": "New Content",
-      "text": "Practice vs Bot now has three difficulties: Easy, Normal and Hard. Hard weighs trades, keeps its King safe and sets up attacks. Your last choice is remembered.",
-      "created": "2026-11-04T16:00:00",
-      "edited": null
-    },
-    {
-      "id": "20261104160001000000",
-      "category": "New Content",
-      "text": "Lobby INVITE button copies a link; opening it takes your friend straight to the join dialog with the room code filled in.",
-      "created": "2026-11-04T16:01:00",
-      "edited": null
-    },
-    {
-      "id": "20261104160002000000",
-      "category": "Mechanics",
-      "text": "Crypto stakes and wallet features are paused for MVP 1 — every match is free play.",
-      "created": "2026-11-04T16:02:00",
-      "edited": null
-    },
-    {
-      "id": "20261104160003000000",
-      "category": "Bug Fix",
-      "text": "Puzzles can be solved with a normal account, no wallet needed; the 24 h retry timer is now exact.",
-      "created": "2026-11-04T16:03:00",
-      "edited": null
-    },
-    {
-      "id": "20261104160004000000",
-      "category": "Mechanics",
-      "text": "The old Quick Play menu was removed — Host / Browse / Join is the one way to play online.",
-      "created": "2026-11-04T16:04:00",
-      "edited": null
-    },
-    {
-      "id": "20261104160005000000",
-      "category": "Bug Fix",
-      "text": "Units no longer briefly 'lose' their square while sliding to a new one (fast turns and 3x replays).",
-      "created": "2026-11-04T16:05:00",
-      "edited": null
-    },
-    {
-      "id": "20261104170000000000",
-      "category": "Mechanics",
-      "text": "Casus Belli now deploys your unit on the front row of the enemy half, and the unit's On Deploy ability triggers.",
-      "created": "2026-11-04T17:00:00",
-      "edited": null
-    },
-    {
-      "id": "20261104170001000000",
-      "category": "Mechanics",
-      "text": "Assassin really jumps: 1 step or a 2-square diagonal jump over units; jumping onto an enemy attacks it with no counter.",
-      "created": "2026-11-04T17:01:00",
-      "edited": null
-    },
-    {
-      "id": "20261104170002000000",
-      "category": "Mechanics",
-      "text": "Village now slows every enemy unit next to it, including Knights, Lancers and Scouts.",
-      "created": "2026-11-04T17:02:00",
-      "edited": null
-    },
-    {
-      "id": "20261104170003000000",
-      "category": "Mechanics",
-      "text": "Castle only attacks in your LEG phase; Pikeman's ×3 vs Cavalry also applies when it strikes back.",
-      "created": "2026-11-04T17:03:00",
-      "edited": null
-    },
-    {
-      "id": "20261104170004000000",
-      "category": "Mechanics",
-      "text": "Treason can only steal units, and a stolen unit that dies goes back to its owner's graveyard. Units taken with Coup can't act the turn they're captured.",
-      "created": "2026-11-04T17:04:00",
-      "edited": null
-    },
-    {
-      "id": "20261104170005000000",
-      "category": "Bug Fix",
-      "text": "Card texts updated to match the rules (Scout, King, Disease, Peasant Revolt, Mystic, Militia, Messenger).",
-      "created": "2026-11-04T17:05:00",
-      "edited": null
-    },
-    {
-      "id": "20261104180000000000",
-      "category": "Bug Fix",
-      "text": "Online matches no longer fall out of sync when a card ability triggers (the server now uses exactly the same rules as your game).",
-      "created": "2026-11-04T18:00:00",
-      "edited": null
-    }
-  ],
+  "unreleased": [],
   "revoked": []
 }

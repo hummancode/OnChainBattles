@@ -1,6 +1,6 @@
 # OnChainBattles — Yol Haritası
 
-_Son güncelleme: 4 Kasım 2026 (Faz 1–4 + genel inceleme tamam, MVP 1 sürüyor; kripto askıda)_
+_Son güncelleme: 4 Kasım 2026 (Faz 1–4, genel inceleme ve MVP 1 / v0.04 tamam; kripto askıda)_
 
 Durum işaretleri: ✅ bitti · 🔜 sıradaki · ⏳ planlı
 
@@ -94,7 +94,7 @@ Bot-vs-bot fuzz (`npm run test:fuzz`) + kod incelemesi: motor 10, sunucu 7, iste
 
 ---
 
-## MVP 1 — temel oyun, sağlamlık, arayüz 🔜 (kripto askıda)
+## MVP 1 — temel oyun, sağlamlık, arayüz ✅ v0.04 (4 Kasım 2026, kripto askıda)
 
 | # | İş | Durum |
 |---|----|-------|

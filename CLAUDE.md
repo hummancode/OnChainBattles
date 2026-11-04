@@ -30,6 +30,12 @@ npm run test:game           # single run — full suite
 npm run test:game:watch     # watch mode
 npm run test:smoke          # game loop smoke test (run after major changes)
 
+# Bot-vs-bot engine fuzz (writes fuzz-report.txt; FUZZ_GAMES=N)
+npm run test:fuzz
+
+# Two-browser full online match (needs server + client running)
+node scripts/qa/fullmatch.cjs
+
 # Smart contract tests (Hardhat)
 npx hardhat test
 
@@ -49,7 +55,7 @@ npx hardhat ignition deploy --network fuji ignition/modules/Escrow.ts
 
 | Folder | Purpose |
 |--------|---------|
-| `src/scenes/` | Phaser scenes (10 total, see scene flow below) |
+| `src/scenes/` | Phaser scenes (see scene flow below) |
 | `src/renderers/` | Decoupled rendering layer (BoardRenderer, HandRenderer [compact rows + hover preview], HUDRenderer, OverlayRenderer, CardRowRenderer) |
 | `src/audio/` | SoundFX — synthesized Web Audio effects (no asset files), mute persisted |
 | `src/game/` | Pure game engine (no Phaser dependency) |
@@ -59,7 +65,7 @@ npx hardhat ignition deploy --network fuji ignition/modules/Escrow.ts
 | `src/game/pending/` | PendingCommand (discriminated union) + PendingCommandResolver |
 | `src/game/data/` | CardRegistry (frozen), DeckDefinitions, MovementPresets, card definitions |
 | `src/game/interfaces/` | IBoard, IPlayerState, IGameModifiers |
-| `src/game/ai/` | SimpleBot — greedy AI returning one GameAction (practice + tutorial) |
+| `src/game/ai/` | SimpleBot (Easy, greedy) + SmartBot (Normal/Hard) — return one GameAction (practice + tutorial) |
 | `src/network/` | SocketManager (multiplayer relay) |
 | `src/web3/` | WalletManager + EscrowManager (MetaMask/Core Wallet, Fuji testnet) |
 | `src/auth/` | AuthManager (player authentication) |
@@ -71,9 +77,9 @@ npx hardhat ignition deploy --network fuji ignition/modules/Escrow.ts
 
 ```
 PreloadScene → LoginScene → HubScene → ┬→ RoomBrowserScene → LobbyScene → BattleScene → ResultScene
-                                        ├→ BattleScene {vsBot} (practice / tutorial, offline)
-                                        ├→ DeckBuilderScene
-                                        └→ MainMenuScene → RoomScene → BattleScene → ResultScene
+                                        ├→ BattleScene {vsBot: difficulty easy|normal|hard} (practice / tutorial, offline)
+                                        ├→ DeckBuilderScene / PuzzleScene / ProfileScene
+                                        └→ (?room=CODE invite link opens the Hub join dialog)
 ```
 
 ### Backend structure
@@ -107,6 +113,7 @@ PreloadScene → LoginScene → HubScene → ┬→ RoomBrowserScene → LobbySc
 - **Vite**: `vite/config.dev.mjs` and `vite/config.prod.mjs`
 - **Hardhat**: `hardhat.config.ts` (Solidity 0.8.19, Fuji network)
 - **Environment**: `.env.development` / `.env.production` — `VITE_SOCKET_URL`, contract address
+- **Crypto is suspended (MVP 1)**: stakes, wallet login/linking and on-chain puzzles are hidden unless `VITE_ENABLE_CRYPTO=true` (client) / `ENABLE_CRYPTO=true` (server). Keep new crypto UI behind `CRYPTO_ENABLED` (`src/config/features.ts`) and server paths behind `cryptoEnabled()` (`server/config/features.ts`)
 - **Card definitions**: `src/game/data/cards/` (one file per card)
 - **UI layouts**: `public/layouts/` (JSON position configs per scene)
 - **Themes**: `public/themes/` (color schemes)

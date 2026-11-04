@@ -14,11 +14,13 @@
 - SimpleBot is a single greedy difficulty; it ignores structures' long-term value and never holds cards back
 - IGameEngineAPI.getValidDeployPositions interface takes unused `cardIndex` param
 
-### Found in the 4 Nov 2026 review — left open
-- **Crypto (Phase 5)**: no refund if a match dies before both `player_ready`; `onSettled` deletes the active-match row before the payout tx confirms (no retry); `tx_hash` stored as null; deposits are never verified on-chain; puzzle-attempt `txHash` unverified + cooldown parses a UTC timestamp as local time
-- **Abuse limits**: room creation and per-room action queue are unbounded; `loginAttempts` map never pruned; wallet nonce can be overwritten by a second request
-- **Design question**: Casus Belli deploys on the enemy back row (row 6 for P1) while the card text says "front row of the enemy half" (row 4)
-- **Minor UI**: BoardRenderer re-keys a moved unit after its tween (fast follow-up events can target the old key); EngineEventBridge `setTimeout` / HUD refresh `requestAnimationFrame` aren't cancelled on scene shutdown
+### Suspended with crypto (MVP 1 — hidden behind ENABLE_CRYPTO)
+- No refund if a match dies before both `player_ready`; `onSettled` deletes the active-match row before the payout tx confirms (no retry); `tx_hash` stored as null; deposits never verified on-chain; on-chain puzzle `txHash` unverified
+
+### Open (non-crypto)
+- Missing card art for Militia / Pikeman / Reform (placeholder texture) — needs art files
+- Legacy `createRoom` / `joinRoom` socket events still exist server-side (used by tests); no client uses them since the Quick Play menu was removed
+- Assassin jump attacks from its start square, so Ambush never applies to jumps (design choice, BUG-124)
 
 ### Security (Dev-Only)
 - Hardcoded dev JWT secret in middleware.ts (`'ocb-dev-secret-DO-NOT-USE-IN-PROD'`)
@@ -32,6 +34,13 @@
 - **Principle**: Every stat modification must be traceable to its source. No silent deltas.
 
 ---
+
+## Fixed (4 November 2026 — MVP 1, BUG-118…133)
+- Crypto hidden behind flags, wallet-free puzzles + UTC cooldown, invite links, legacy Quick Play removed
+- Bot Easy / Normal / Hard (SmartBot)
+- Card rules ↔ text audit: Casus Belli front row + On Deploy, Assassin jump attack, Village slows fixed patterns, Castle LEG-only, Pikeman counter ×3, Treason units only / original owner's graveyard, Coup capture waits a turn, refused spell keeps hand order
+- Server limits (rooms, queue, login attempts, nonce reuse), immediate board re-key on move, deferred refresh cleanup
+- **Server engine had no ability handlers** (BUG-132) — found by the two-browser full-match QA script; resync retry instead of dropping (BUG-133)
 
 ## Fixed (4 November 2026 — general bug review, BUG-092…117)
 - **Engine (fuzz + review, BUG-092…101)**: bot-vs-bot fuzzing (`npm run test:fuzz`) went from 214 crashes / 154 invariant breaks / 6 replay divergences in 400 games to zero; fixes to Mystic revive, Casus Belli deploy, Civil War / Disease durations, Treason return, exhaustion, king-death checks after resolutions, refunds
