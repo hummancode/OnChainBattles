@@ -22,6 +22,7 @@
         "test:game": "vitest run",
         "test:game:watch": "vitest",
         "test:smoke": "vitest run tests/engine/gameLoop.test.ts",
+        "test:fuzz": "vitest run --config vitest.fuzz.config.ts",
         "test:engine": "vitest run tests/engine --bail=1",
         "test:server": "vitest run tests/server --bail=1",
         "test:all": "vitest run --bail=3",

@@ -47,6 +47,7 @@ loadDeck(cardIds: string[], playerIndex: number = 0): void {
   this.hand      = [];
   this.discard   = [];
   this.graveyard = [];
+  this.graveyardCards = [];
 }
 
   // ─────────────────────────────────────────────
@@ -233,8 +234,24 @@ private seededShuffle(arr: string[], seed: number): void {
   // ─────────────────────────────────────────────
 
   /** Record a dead unit. instanceId → cardId mapping stored externally; here just track instanceIds. */
-  addToGraveyard(instanceId: string): void {
+  /** cardIds of dead units, parallel to `graveyard` (Mystic needs to know what to revive). */
+  graveyardCards: string[] = [];
+
+  addToGraveyard(instanceId: string, cardId?: string): void {
     this.graveyard.push(instanceId);
+    if (cardId) this.graveyardCards.push(cardId);
+  }
+
+  /** Take one dead copy of `cardId` back out of the graveyard + discard (revive). */
+  takeFromGraveyard(cardId: string): boolean {
+    const gi = this.graveyardCards.lastIndexOf(cardId);
+    if (gi === -1) return false;
+    this.graveyardCards.splice(gi, 1);
+    const ii = this.graveyard.findIndex(id => id.startsWith(cardId + '_'));
+    if (ii !== -1) this.graveyard.splice(ii, 1);
+    const di = this.discard.lastIndexOf(cardId);
+    if (di !== -1) this.discard.splice(di, 1);
+    return true;
   }
 
   /** Get all graveyard instanceIds (GameEngine resolves which are revivable). */

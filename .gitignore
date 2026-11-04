@@ -36,3 +36,4 @@ server/data/
 
 # Claude Code local settings
 .claude/
+fuzz-report.txt

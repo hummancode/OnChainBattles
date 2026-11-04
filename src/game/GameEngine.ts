@@ -35,7 +35,8 @@ import type { Position, GameStateSnapshot } from './types/GameTypes';
 import type { GameEvent } from './types/EventTypes';
 import type { PendingCommand } from './pending/PendingCommand';
 import { resolvePending } from './pending/PendingCommandResolver';
-import { Allegiance } from './types/CardTypes';
+import { Allegiance, CardClass, CardFlag } from './types/CardTypes';
+import { AbilityType } from './types/AbilityTypes';
 import type { GameContext } from './GameContext';
 import { opponent } from './GameContext';
 
@@ -43,7 +44,7 @@ import { opponent } from './GameContext';
 import { runDrawPhase } from './phases/DrawPhase';
 import { runLEGPhase } from './phases/LEGPhase';
 import { executePlayCard, returnSpellToHand } from './phases/PlayPhase';
-import { executeMove, executeAttack } from './phases/ActPhase';
+import { executeMove, executeAttack, handleUnitDeath } from './phases/ActPhase';
 import { runEndPhase } from './phases/EndPhase';
 
 // Query + pattern modules
@@ -307,6 +308,7 @@ export class GameEngine implements IGameEngineAPI {
     this.clearPending();
     const events = resolvePending(cmd, { kind: 'TARGET', instanceId }, { board: this.board, mods: this.mods });
     for (const e of events) { this.applyEvent(e); this.emit(e); }
+    this.checkKingDeaths();
     // Ownership changes / removals change auras (state-driven UI re-syncs from AURA_APPLIED)
     if (events.some(e => e.type === 'UNIT_CAPTURED' || e.type === 'UNIT_BANISHED')) {
       this.emit(this.auras.evaluateAuras(this.board, this.mods));
@@ -318,6 +320,20 @@ export class GameEngine implements IGameEngineAPI {
     if (!this.pending.validPositions.some(p => p.col === col && p.row === row)) return;
     const cmd = this.pending;
     this.clearPending();
+    if (cmd.sourceAbility === AbilityType.SPELL_FORWARD_DEPLOY) {
+      // Casus Belli step 2: which UNIT from hand goes on the chosen square.
+      const hand = this.players[cmd.owner].hand;
+      const validHandIndices = hand.map((id, i) => getCard(id).class === CardClass.UNIT ? i : -1).filter(i => i >= 0);
+      if (validHandIndices.length === 0) return; // nothing to deploy (hand changed) — spell fizzles
+      this.pending = {
+        kind: 'DISCARD', owner: cmd.owner, sourceCardId: cmd.sourceCardId, sourceAbility: cmd.sourceAbility,
+        count: 1, reason: 'Casus Belli: choose a unit from your hand to deploy there.',
+        deferredEvents: [], deployAt: { col, row }, validHandIndices,
+      };
+      this.status = EngineStatus.AWAITING_INPUT;
+      this.emit({ type: 'PENDING_DISCARD', reason: this.pending.reason, count: 1 } as GameEvent);
+      return;
+    }
     const events = resolvePending(cmd, { kind: 'POSITION', col, row });
     for (const e of events) { this.applyEvent(e); this.emit(e); }
   }
@@ -329,14 +345,29 @@ export class GameEngine implements IGameEngineAPI {
     this.clearPending();
     const events = resolvePending(cmd, { kind: 'COLUMN', col }, { board: this.board });
     for (const e of events) { this.applyEvent(e); this.emit(e); }
+    this.checkKingDeaths();
   }
 
   selectDiscard(handIndex: number): void {
     if (!this.pending || this.pending.kind !== 'DISCARD') return;
     const ps = this.players[this.activePlayer];
     if (handIndex < 0 || handIndex >= ps.hand.length) return;
+    if (this.pending.validHandIndices && !this.pending.validHandIndices.includes(handIndex)) return;
     const cmd = this.pending;
     this.clearPending();
+
+    if (cmd.deployAt) {
+      // Casus Belli: deploy the picked unit for free on the chosen square.
+      const cardId = ps.hand.splice(handIndex, 1)[0];
+      this.emit({ type: 'CARD_PLAYED', player: this.activePlayer, cardId, handIndex, legCost: 0 } as GameEvent);
+      const unit = this.unitFactory.create(cardId, this.activePlayer, cmd.deployAt);
+      if (getCard(cardId).flags.includes(CardFlag.SWIFT)) unit.isJustPlaced = false;
+      this.board.placeUnit(unit);
+      this.emit({ type: 'UNIT_PLACED', instanceId: unit.instanceId, cardId, owner: this.activePlayer,
+        col: cmd.deployAt.col, row: cmd.deployAt.row, isActive: unit.isActive } as GameEvent);
+      this.emit(this.auras.evaluateAuras(this.board, this.mods));
+      return;
+    }
 
     // Actually discard the card from hand
     const cardId = ps.hand.splice(handIndex, 1)[0];
@@ -420,7 +451,7 @@ export class GameEngine implements IGameEngineAPI {
    * This is the ONLY coupling point between engine and phases.
    */
   private buildContext(): GameContext {
-    return {
+    const ctx: GameContext = {
       board:        this.board,
       mods:         this.mods,
       players:      this.players,
@@ -441,8 +472,32 @@ export class GameEngine implements IGameEngineAPI {
           this.applyEvent(event);
           this.emit(event);
         }
+        // Effects (Castle, Disease, Earthquake…) can drop a King to 0 mid-phase.
+        if (this.checkKingDeaths()) ctx.status = EngineStatus.GAME_OVER;
       },
     };
+    return ctx;
+  }
+
+  /**
+   * A King at 0 HP (or gone) outside combat ends the game right away — draw if both fell
+   * in the same batch (e.g. Earthquake through the centre column). Combat has its own
+   * check (ActPhase); END phase double-checks. Returns true if the game is (now) over.
+   */
+  private checkKingDeaths(): boolean {
+    if (this.status === EngineStatus.GAME_OVER) return true;
+    const dead = (p: Player) => { const k = this.board.getKing(p); return !k || k.currentDef <= 0; };
+    const d1 = dead(Player.P1), d2 = dead(Player.P2);
+    if (!d1 && !d2) return false;
+    this.status = EngineStatus.GAME_OVER;
+    this.pending = null;
+    this.emit({
+      type: 'GAME_OVER',
+      result: d1 && d2
+        ? { winner: null, loser: null, isDraw: true, reason: 'KING_DESTROYED', turns: this.turnNumber }
+        : { winner: d1 ? Player.P2 : Player.P1, loser: d1 ? Player.P1 : Player.P2, reason: 'KING_DESTROYED', turns: this.turnNumber },
+    });
+    return true;
   }
 
   /**
@@ -471,8 +526,16 @@ export class GameEngine implements IGameEngineAPI {
           // so subscribers already holding this event object see a consistent ID.
           const newUnit = this.unitFactory.create(event.cardId, event.owner, { col: event.col, row: event.row });
           newUnit.isActive = event.isActive;
-          newUnit.instanceId = event.instanceId;
+          // '' → keep the factory's deterministic id and write it back (applied before emit)
+          if (event.instanceId) newUnit.instanceId = event.instanceId;
+          else event.instanceId = newUnit.instanceId;
           this.board.placeUnit(newUnit);
+          if (event.fromGraveyard) this.players[event.owner].takeFromGraveyard(event.cardId);
+          if (event.fromDeck) {
+            const deck = this.players[event.owner].deck;
+            const i = deck.indexOf(event.cardId);
+            if (i !== -1) deck.splice(i, 1);
+          }
         }
         break;
       }
@@ -482,6 +545,17 @@ export class GameEngine implements IGameEngineAPI {
         if (target) {
           this.board.updateUnitStats(target.instanceId, { currentDef: event.targetNewHP });
         }
+        break;
+      }
+
+      case 'UNIT_DIED': {
+        // Deaths from effects (spells, Disease, Castle) arrive here; combat deaths are handled
+        // in ActPhase before emitting and never reach applyEvent. Without this the unit
+        // stayed on the board at 0 HP and the next aura pass revived it to 1.
+        if (!this.board.getUnitById(event.instanceId)) break;
+        const ctx = this.buildContext();
+        handleUnitDeath(ctx, event.instanceId, event.cardId, event.owner, event.cause);
+        if (ctx.pending) { this.pending = ctx.pending; this.status = EngineStatus.AWAITING_INPUT; }
         break;
       }
 
@@ -560,12 +634,25 @@ export class GameEngine implements IGameEngineAPI {
         break;
       }
 
+      case 'CIVIL_WAR_DECLARED': {
+        // Timed effects tick at their owner's END. The caster already collected LEG this
+        // turn, so its effect lasts one tick longer → both players skip exactly `turns` gains.
+        for (const p of [Player.P1, Player.P2]) {
+          const mod = this.mods[p];
+          mod.removeEffect('CIVIL_WAR_FREEZE');
+          mod.addTimedEffect({ type: 'CIVIL_WAR_FREEZE', duration: event.turns + (p === event.caster ? 1 : 0) });
+          mod.legRateFrozen = true;
+        }
+        break;
+      }
+
       case 'DISEASE_APPLIED': {
         // Add DISEASE_TICK timed effect to the caster's mods.
         // Ticks during caster's LEG phase via runDiseaseTicks().
         this.mods[event.caster].addTimedEffect({
           type: 'DISEASE_TICK',
-          duration: event.duration,
+          // +1: applied in PLAY, the caster's END tick runs before the first damage tick
+          duration: event.duration + 1,
           value: event.damage,
           targetInstanceId: event.targetInstanceId,
         });
@@ -581,8 +668,10 @@ export class GameEngine implements IGameEngineAPI {
         } else {
           u.treasonOwner = event.from;                     // returned at the caster's END phase
           u.originalPos = { ...u.position };
+          // Fresh for its new controller this turn (its owner may have used it last turn)
+          u.hasMoved = false; u.hasActed = false; u.lastMoveDirection = null; u.isJustPlaced = false;
         }
-        u.owner = event.to;
+        this.board.setOwner(u.instanceId, event.to); // invalidates getUnitsOf caches
         break;
       }
 

@@ -122,8 +122,10 @@ export function executePlayCard(
   // Handle pending interaction (Priest, Mystic, Disease, etc.)
   if (result.pending) {
     ctx.status = EngineStatus.AWAITING_INPUT;
-    // Spells are refundable if their target choice is cancelled; units just fizzle.
-    ctx.pending = def.class === CardClass.SPELL
+    // Spells are refundable if their target choice is cancelled — but only when nothing has
+    // happened yet (Casus Belli applies its LEG-rate drain first; refunding that would make
+    // the drain free). Units just fizzle.
+    ctx.pending = def.class === CardClass.SPELL && result.events.length === 0
       ? { ...result.pending, refund: { cardId, legCost: cost } }
       : result.pending;
     ctx.emit({

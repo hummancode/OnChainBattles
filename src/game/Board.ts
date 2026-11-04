@@ -248,6 +248,21 @@ export class Board implements IBoard {
     const unit = this.unitIndex.get(instanceId);
     if (!unit) return;
     Object.assign(unit, updates);
+    // A transform (Reform) changes the instanceId — keep the id index in sync,
+    // or the unit becomes un-attackable / un-targetable (getUnitById misses it).
+    if (updates.instanceId && updates.instanceId !== instanceId) {
+      this.unitIndex.delete(instanceId);
+      this.unitIndex.set(updates.instanceId, unit);
+    }
+    this.invalidateUnitCache();
+  }
+
+  /** Change a unit's owner (Coup capture, Treason steal/return). Invalidates per-owner caches. */
+  setOwner(instanceId: string, owner: Player): void {
+    const unit = this.unitIndex.get(instanceId);
+    if (!unit) return;
+    unit.owner = owner;
+    this.invalidateUnitCache();
   }
 
   /**
@@ -260,7 +275,11 @@ export class Board implements IBoard {
       u.hasActed = false;
       u.isJustPlaced = false;  // Unit placed last turn can now act
       u.lastMoveDirection = null;
-      // Treason exhausted flag clears at end of opponent turn
+      // Treason return: exhausted for exactly one of its owner's turns (it was never cleared before)
+      if (u.isExhausted) {
+        if (u.exhaustedFresh) u.exhaustedFresh = false;
+        else u.isExhausted = false;
+      }
     });
   }
 

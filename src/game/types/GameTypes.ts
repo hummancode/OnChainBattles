@@ -105,6 +105,8 @@ export interface Unit {
   // Persistent state
   isActive: boolean;         // false during BUILD_DELAY
   isExhausted: boolean;      // Treason: unit returned, can't act this turn
+  /** Set when exhausted at the opponent's END; survives the owner's next turn-start reset once. */
+  exhaustedFresh?: boolean;
 
   // Treason tracking
   treasonOwner: Player | null;   // Original owner if under Treason

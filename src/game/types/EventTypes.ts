@@ -19,6 +19,10 @@ export interface EvUnitPlaced {
   col: number;
   row: number;
   isActive: boolean;         // false = BUILD_DELAY — render as inactive
+  /** Summon pulled this card out of the owner's deck (Militia). */
+  fromDeck?: boolean;
+  /** Revived from the owner's graveyard (Mystic). */
+  fromGraveyard?: boolean;
 }
 
 export interface EvUnitMoved {
@@ -293,6 +297,13 @@ export interface EvDiseaseApplied {
   duration: number;
 }
 
+/** Civil War: both LEG rates frozen at 0 for `turns` of each player's turns. */
+export interface EvCivilWarDeclared {
+  type: 'CIVIL_WAR_DECLARED';
+  caster: Player;
+  turns: number;
+}
+
 /** Ownership flip (Coup capture = permanent, Treason = until the caster's END phase). */
 export interface EvUnitCaptured {
   type: 'UNIT_CAPTURED';
@@ -370,6 +381,7 @@ export type GameEvent =
   | EvDiseaseApplied
   | EvWarHornSounded
   | EvCardReturned
+  | EvCivilWarDeclared
   | EvUnitCaptured
   | EvUnitBanished;
 

@@ -74,10 +74,11 @@ function resolveTreasonReturns(ctx: GameContext): boolean {
       if (moved && !ctx.board.getUnit(origPos.col, origPos.row)) {
         ctx.board.moveUnit(unit.instanceId, origPos.col, origPos.row);
       }
-      unit.owner = unit.treasonOwner;
+      ctx.board.setOwner(unit.instanceId, unit.treasonOwner);
       unit.treasonOwner = null;
       unit.originalPos = null;
       unit.isExhausted = true;
+      unit.exhaustedFresh = true; // stays exhausted for its owner's next turn, then clears
       ctx.emit({
         type: 'UNIT_EXHAUSTED',
         instanceId: unit.instanceId,

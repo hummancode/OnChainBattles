@@ -4,6 +4,8 @@ import type { PendingCommand } from '../../pending/PendingCommand';
 import type { AbilityContext, AbilityResult } from '../types';
 import { Player } from '../types';
 import type { Position } from '../../types/GameTypes';
+import { getCard } from '../../data/CardRegistry';
+import { CardClass } from '../../types/CardTypes';
 
 function spellForwardDeploy(ctx: AbilityContext): AbilityResult {
   const frontRow = ctx.owner === Player.P1 ? ctx.board.rows - 1 : 0;
@@ -11,7 +13,9 @@ function spellForwardDeploy(ctx: AbilityContext): AbilityResult {
   for (let c = 0; c < ctx.board.cols; c++) {
     if (ctx.board.isEmpty(c, frontRow)) validPositions.push({ col: c, row: frontRow });
   }
-  if (validPositions.length === 0 || ctx.players[ctx.owner].hand.length === 0) return { events: [], noValidTarget: true };
+  // Needs a free square AND a unit in hand to deploy there (the spell itself is no longer in hand)
+  const hasUnit = ctx.players[ctx.owner].hand.some(id => getCard(id).class === CardClass.UNIT);
+  if (validPositions.length === 0 || !hasUnit) return { events: [], noValidTarget: true };
 
   const pending: PendingCommand = {
     kind:           'POSITION',

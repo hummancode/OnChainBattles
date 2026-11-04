@@ -45,12 +45,16 @@ export function resolvePending(
   if (command.kind === 'POSITION' && selection.kind === 'POSITION') {
     events.push({
       type: 'UNIT_PLACED',
-      instanceId: `${command.sourceCardId}_pending_${Date.now()}`,
+      // '' = engine assigns a deterministic id from its unit counter (Date.now() here
+      // made every client and the server create different ids → hash mismatches).
+      instanceId: '',
       cardId: command.sourceCardId,
       owner: command.owner,
       col: selection.col,
       row: selection.row,
       isActive: true,
+      fromDeck: command.sourceAbility === 'militiaDeployHandler',
+      fromGraveyard: command.sourceAbility === 'mysticDeployHandler',
     } as GameEvent);
   }
 
@@ -118,8 +122,8 @@ function resolveTarget(
       type: 'DISEASE_APPLIED',
       caster: cmd.owner,
       targetInstanceId: structure.instanceId,
-      damage: 2,  // default; engine can override from card params
-      duration: 3, // default; engine can override from card params
+      damage:   diseaseParams(cmd.sourceCardId).damage,
+      duration: diseaseParams(cmd.sourceCardId).duration,
     } as GameEvent);
     return;
   }
@@ -164,4 +168,12 @@ function resolveTarget(
     // This is handled by the engine after these events apply.
     return;
   }
+}
+
+/** Disease numbers come from the card definition (they were hard-coded). */
+function diseaseParams(cardId: string): { damage: number; duration: number } {
+  try {
+    const ab = getCard(cardId).abilities.find(a => a.type === AbilityType.SPELL_DAMAGE_STRUCTURE_ADJ) as any;
+    return { damage: ab?.params?.damage ?? 2, duration: ab?.params?.duration ?? 3 };
+  } catch { return { damage: 2, duration: 3 }; }
 }

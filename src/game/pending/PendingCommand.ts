@@ -52,6 +52,10 @@ export type PendingCommand = ({
       sourceCardId: string;
       sourceAbility: string;
       count: number;
+      /** Casus Belli step 2: the picked hand card is DEPLOYED here instead of discarded. */
+      deployAt?: Position;
+      /** Hand indices that may be picked (default: any). */
+      validHandIndices?: number[];
       reason: string;
       deferredEvents: GameEvent[];
     });

@@ -41,6 +41,11 @@ export function nextBotAction(engine: GameEngine, me: Player, opts: BotOptions =
     switch (pending.kind) {
       case 'DISCARD': {
         const hand = st.players[me].hand;
+        if (pending.validHandIndices) {
+          // Casus Belli deploy: put the strongest allowed unit forward
+          const best = [...pending.validHandIndices].sort((a, b) => getCard(hand[b]).cost - getCard(hand[a]).cost)[0];
+          return { type: 'SELECT_DISCARD', handIndex: best ?? 0 };
+        }
         let idx = 0;
         hand.forEach((id, i) => { if (getCard(id).cost < getCard(hand[idx]).cost) idx = i; });
         return { type: 'SELECT_DISCARD', handIndex: idx };

@@ -13,16 +13,16 @@ Used to identify weak areas and improve code quality over time.
 
 | Category | Count | User-Found | Claude-Found | Test-Found |
 |----------|-------|------------|--------------|------------|
-| logic | 24 | 5 | 19 | 0 |
-| network | 12 | 6 | 6 | 0 |
-| state | 17 | 4 | 13 | 0 |
+| logic | 31 | 5 | 23 | 3 |
+| network | 13 | 6 | 6 | 1 |
+| state | 19 | 4 | 14 | 1 |
 | rendering | 10 | 1 | 8 | 1 |
 | race-condition | 4 | 2 | 2 | 0 |
 | memory-leak | 5 | 0 | 5 | 0 |
 | web3 | 3 | 0 | 3 | 0 |
 | type-safety | 7 | 2 | 5 | 0 |
 | security | 7 | 1 | 6 | 0 |
-| **TOTAL** | **91** | **21** | **69** | **1** |
+| **TOTAL** | **101** | **21** | **74** | **6** |
 
 ---
 
@@ -942,6 +942,106 @@ Used to identify weak areas and improve code quality over time.
 - **Prevention**: Entry animations must end at the state value, not a hard-coded "visible" value (cf. BUG-057 — state first, animation second).
 - **Files**: `src/renderers/HandRenderer.ts`, `tests/renderers/handRenderer.test.ts`
 
+### BUG-092: Reformed units could not be attacked, moved or targeted
+- **Date**: 2026-11-04
+- **Category**: `state`
+- **Discovered by**: `test`
+- **Symptom**: Found by the bot-vs-bot fuzz run (400 games, full card pool, invariants + replay determinism after every action). Attacks on reformed Swordsmen were refused although the UI offered them.
+- **Root cause**: UNIT_TRANSFORMED changes `instanceId` via `Board.updateUnitStats` (Object.assign) but `unitIndex` stayed keyed by the old id.
+- **Fix**: `updateUnitStats` re-indexes on id change and invalidates caches.
+- **Prevention**: Any field that is also an index key must be updated through the owner of the index.
+- **Files**: `src/game/Board.ts`
+
+### BUG-093: Casus Belli crashed the engine and its cancel was a free LEG-rate drain
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `test`
+- **Symptom**: Found by the bot-vs-bot fuzz run (400 games, full card pool, invariants + replay determinism after every action). `selectPosition` threw 'reading movement'; cancelling after the drain refunded the card.
+- **Root cause**: POSITION resolution placed the spell itself as a unit; the refund was attached even though an effect had already applied; no step to pick which hand card.
+- **Fix**: Two-step deploy: square, then a UNIT from hand (DISCARD-kind pending with `deployAt` + `validHandIndices`, reused UI/network/bot/timer). Spells are only refundable if nothing has happened yet. Plays without a unit just drain.
+- **Prevention**: A refund must undo everything or not happen; summons must name what they summon.
+- **Files**: `src/game/GameEngine.ts`, `src/game/phases/PlayPhase.ts`, `src/game/abilities/handlers/spellForwardDeploy.ts`, `src/game/pending/PendingCommand.ts`, `src/game/ai/SimpleBot.ts`, `server/game/SessionManager.ts`
+
+### BUG-094: Summoned units got Date.now() ids — clients and server desynced
+- **Date**: 2026-11-04
+- **Category**: `network`
+- **Discovered by**: `test`
+- **Symptom**: Found by the bot-vs-bot fuzz run (400 games, full card pool, invariants + replay determinism after every action). Replays diverged; two engines given the same actions produced different instanceIds (state hash mismatch → resync).
+- **Root cause**: PendingCommandResolver (POSITION) and Peasant Revolt built ids from `Date.now()`.
+- **Fix**: Events carry `instanceId: ''`; the engine assigns the deterministic factory id and writes it back before emitting.
+- **Prevention**: Nothing in the engine may read the clock or Math.random; the fuzz replay check catches it.
+- **Files**: `src/game/pending/PendingCommandResolver.ts`, `src/game/abilities/handlers/spellRevolt.ts`, `src/game/GameEngine.ts`
+
+### BUG-095: Militia duplicated itself instead of pulling a copy from the deck
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `test`
+- **Symptom**: Found by the bot-vs-bot fuzz run (400 games, full card pool, invariants + replay determinism after every action). Every Militia deploy created a new Militia while the deck kept its copies (endless chain).
+- **Root cause**: Resolver spawned the unit without removing it from the deck.
+- **Fix**: UNIT_PLACED `fromDeck` removes one copy from the owner's deck.
+- **Prevention**: 'Pull from deck' must move a card, never create one.
+- **Files**: `src/game/pending/PendingCommandResolver.ts`, `src/game/GameEngine.ts`
+
+### BUG-096: Ownership changes left a stale per-owner unit cache
+- **Date**: 2026-11-04
+- **Category**: `state`
+- **Discovered by**: `claude`
+- **Symptom**: After a Coup capture the unit still counted for its old owner (auras/economy, deploy rows, getKing).
+- **Root cause**: UNIT_CAPTURED and Treason return assigned `unit.owner` directly; `Board._unitsOfCache` was not invalidated.
+- **Fix**: `Board.setOwner()` used for every ownership change.
+- **Prevention**: Mutate indexed/cached entities only through the container that caches them.
+- **Files**: `src/game/Board.ts`, `src/game/GameEngine.ts`, `src/game/phases/EndPhase.ts`
+
+### BUG-097: Spell/effect damage never killed anything (units revived at 1 HP)
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `test`
+- **Symptom**: Found by the bot-vs-bot fuzz run (400 games, full card pool, invariants + replay determinism after every action). 0-HP units (even Kings) stayed on the board; Earthquake, Disease and Castle could never kill.
+- **Root cause**: `GameEngine.applyEvent` had no UNIT_DIED case (only combat handled deaths); the next aura pass clamps HP to ≥1; effect damage to a King emits no death at all.
+- **Fix**: UNIT_DIED applied through the shared `handleUnitDeath` (graveyard, discard, On Death); King deaths checked after every effect batch → GAME_OVER (draw if both).
+- **Prevention**: Every event a handler returns must be applied by the engine; check invariants (no 0-HP unit on board) in fuzz tests.
+- **Files**: `src/game/GameEngine.ts`, `src/game/phases/ActPhase.ts`
+
+### BUG-098: Treason: returned unit exhausted forever; stolen unit often unusable
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: A unit handed back stayed exhausted permanently; a unit its owner had used couldn't act for the thief.
+- **Root cause**: `isExhausted` was never cleared; temporary capture didn't reset move/act flags.
+- **Fix**: Exhausted for exactly one owner turn (`exhaustedFresh`); capture resets turn flags.
+- **Prevention**: Every flag needs a clear path (symmetry).
+- **Files**: `src/game/Board.ts`, `src/game/phases/EndPhase.ts`, `src/game/GameEngine.ts`, `src/game/types/GameTypes.ts`
+
+### BUG-099: Civil War permanently lowered both LEG rates to 1
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: Instead of a 3-turn freeze at 0, both players got a permanent rate penalty.
+- **Root cause**: Handler emitted LEG_RATE_CHANGED → 0, which applyEvent turns into a permanent clamped penalty; CIVIL_WAR_FREEZE was never added.
+- **Fix**: CIVIL_WAR_DECLARED event → CIVIL_WAR_FREEZE timed effect on both players (caster +1 tick), each skips exactly 3 gains.
+- **Prevention**: Use timed effects for temporary rules; trace the tick order (owner's END).
+- **Files**: `src/game/abilities/handlers/spellFreezeLeg.ts`, `src/game/GameEngine.ts`, `src/game/types/EventTypes.ts`
+
+### BUG-100: Mystic could never revive; its LEG cost was skippable
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: The revive target prompt never resolved; cancelling also skipped the permanent −1 LEG rate.
+- **Root cause**: TARGET pending listed graveyard instanceIds but selectTarget only accepts units on the board; drain was a deferred event.
+- **Fix**: Revives the strongest dead unit via a POSITION prompt (graveyard now tracks cardIds; card leaves graveyard + discard); drain applied immediately.
+- **Prevention**: Pending kinds must point at things the UI can actually select.
+- **Files**: `src/game/abilities/handlers/customMystic.ts`, `src/game/PlayerState.ts`, `src/game/phases/ActPhase.ts`, `src/game/GameEngine.ts`
+
+### BUG-101: Disease ticked 2 times instead of 3 and ignored its card params
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: Disease dealt 4 damage instead of 6.
+- **Root cause**: Effect added in PLAY with duration 3; the caster's END tick ran before the first damage tick. Damage/duration were hard-coded.
+- **Fix**: Duration +1 at application; numbers read from the card definition.
+- **Prevention**: Same lesson as BUG-044: trace creation → tick → check order.
+- **Files**: `src/game/GameEngine.ts`, `src/game/pending/PendingCommandResolver.ts`
+
 ---
 
 ## Weakness Analysis
@@ -963,6 +1063,7 @@ Used to identify weak areas and improve code quality over time.
 9. **Verify framework lifecycles** — Phaser never calls `scene.shutdown()`; scenes are reused, so anything bound to a scene must be released on its 'shutdown' event (BUG-072, BUG-077).
 10. **Server decides what matters** — validation and results come from the server's own engine, never from client claims (BUG-074).
 11. **Walk the whole card pool in tests** — handler coverage, every pending kind wired end-to-end; three spells were dead for months behind a registry-key mismatch (BUG-081, BUG-082).
+12. **Fuzz the engine with the bot** — bot-vs-bot over random full-pool decks with invariants (no 0-HP unit on board, positions consistent, Kings present) and replay determinism found 6 bugs in one run (BUG-092…097). Keep running it after rule changes.
 
 ### User-Found vs Claude-Found
 - **User found 12 bugs** (34%) — gameplay-visible issues (freezes, wrong movement, UI blocking, route/scene bugs).

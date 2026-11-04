@@ -1,17 +1,11 @@
 import { AbilityHandlerRegistry } from '../AbilityHandlerRegistry';
 import { AbilityType } from '../../types/AbilityTypes';
 import type { AbilityContext, AbilityResult } from '../types';
-import { Player } from '../types';
 
 function spellFreezeLeg(ctx: AbilityContext): AbilityResult {
-  const p1Rate = ctx.mods[Player.P1].getEffectiveLEGRate();
-  const p2Rate = ctx.mods[Player.P2].getEffectiveLEGRate();
-  return {
-    events: [
-      { type: 'LEG_RATE_CHANGED', player: Player.P1, oldRate: p1Rate, newRate: 0, reason: 'CIVIL_WAR' },
-      { type: 'LEG_RATE_CHANGED', player: Player.P2, oldRate: p2Rate, newRate: 0, reason: 'CIVIL_WAR' },
-    ]
-  };
+  // A timed freeze, not a rate penalty: LEG_RATE_CHANGED → 0 used to become a PERMANENT
+  // penalty (clamped to rate 1) and the CIVIL_WAR_FREEZE effect was never created.
+  return { events: [{ type: 'CIVIL_WAR_DECLARED', caster: ctx.owner, turns: ctx.params?.duration ?? 3 }] };
 }
 
 AbilityHandlerRegistry.register(AbilityType.SPELL_FREEZE_LEG_RATE, spellFreezeLeg);

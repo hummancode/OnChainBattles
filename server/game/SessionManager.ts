@@ -364,7 +364,10 @@ export class SessionManager {
 
     const auto: GameAction[] = [];
     const pending = sim.pendingKind;
-    if (pending === 'DISCARD') auto.push({ type: 'SELECT_DISCARD', handIndex: 0, auto: true });
+    if (pending === 'DISCARD') {
+      const valid = (sim.pendingCommand as { validHandIndices?: number[] } | null)?.validHandIndices;
+      auto.push({ type: 'SELECT_DISCARD', handIndex: valid?.[0] ?? 0, auto: true });
+    }
     else if (pending) auto.push({ type: 'CANCEL_PENDING', auto: true });
     if (sim.phase === 'PLAY') auto.push({ type: 'END_PLAY_PHASE', auto: true });
     auto.push({ type: 'END_ACT_PHASE', auto: true });

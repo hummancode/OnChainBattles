@@ -188,7 +188,7 @@ function kingDiedInCombat(unit: Unit, events: any[]): boolean {
 // DEATH HANDLING
 // ─────────────────────────────────────────────
 
-function handleUnitDeath(
+export function handleUnitDeath(
   ctx: GameContext,
   instanceId: string,
   cardId: string,
@@ -200,7 +200,7 @@ function handleUnitDeath(
 
   // Record in graveyard
   ctx.graveyard.set(instanceId, cardId);
-  ctx.players[owner].addToGraveyard(instanceId);
+  ctx.players[owner].addToGraveyard(instanceId, cardId);
 
   // Remove from board
   ctx.board.removeUnit(instanceId);

@@ -15,7 +15,7 @@ function peasantRevoltHandler(ctx: AbilityContext): AbilityResult {
   for (let i = 0; i < toSummon; i++) {
     events.push({
       type:       'UNIT_PLACED',
-      instanceId: `militia_revolt_${i}_${Date.now()}`,
+      instanceId: '', // engine assigns a deterministic id
       cardId:     'militia',
       owner:      ctx.owner,
       col:        freeSquares[i].col,

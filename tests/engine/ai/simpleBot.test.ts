@@ -68,3 +68,20 @@ describe('SimpleBot', () => {
     expect(nextBotAction(e, Player.P1, { passive: true }).type).toBe('END_PLAY_PHASE');
   });
 });
+
+describe('SimpleBot — Casus Belli deploy step', () => {
+  it('picks an allowed hand index', () => {
+    GameState.gameSeed = 3;
+    const e = new GameEngine();
+    e.startGame();
+    const eng: any = e;
+    eng.players[Player.P1].hand = ['casus_belli', 'disease', 'pikeman'];
+    eng.mods[Player.P1].legOverflow = true; eng.mods[Player.P1].legPool = 10;
+    expect(applyAction(e, { type: 'PLAY_CARD', handIndex: 0, col: 0, row: 0 })).toBe(true);
+    expect(applyAction(e, nextBotAction(e, Player.P1))).toBe(true);   // position
+    const a = nextBotAction(e, Player.P1);
+    expect(a).toMatchObject({ type: 'SELECT_DISCARD' });
+    expect(applyAction(e, a)).toBe(true);
+    expect(eng.board.getUnitsOf(Player.P1).some((u: any) => u.cardId === 'pikeman')).toBe(true);
+  });
+});
