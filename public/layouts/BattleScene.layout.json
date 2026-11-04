@@ -18,39 +18,40 @@
   "leftHUD": {
     "x": 0,
     "y": 0,
-    "width": 280,
+    "width": 276,
     "height": 720,
-    "playerName": { "x": 140, "y": 20 },
-    "kingHPBar": { "x": 30, "y": 50, "width": 220, "height": 12 },
-    "legCounter": { "x": 140, "y": 100 },
-    "legRate": { "x": 140, "y": 130 },
-    "winLoss": { "x": 140, "y": 160 },
+    "playerName": { "x": 136, "y": 570 },
+    "kingHPBar": { "x": 26, "y": 600, "width": 220, "height": 14 },
+    "legCounter": { "x": 26, "y": 640 },
+    "legRate": { "x": 246, "y": 690 },
+    "winLoss": { "x": 26, "y": 690 },
     "hand": {
-      "x": 140, "y": 200,
+      "x": 140, "y": 44,
       "cardWidth": 70, "cardHeight": 95,
-      "spacing": 10, "maxVisible": 10,
+      "spacing": 10, "maxVisible": 8,
       "fanAngle": 0, "selectedScale": 1.15
     }
   },
  "rightHUD": {
-    "x": 1000, "y": 0, "width": 280, "height": 720,
-    "opponentName": { "x": 1160, "y": 20 },
-    "kingHPBar": { "x": 1060, "y": 50, "width": 200, "height": 12 },
-    "legCounter": { "x": 1160, "y": 100 },
+    "x": 1004, "y": 0, "width": 276, "height": 720,
+    "opponentName": { "x": 1140, "y": 14 },
+    "kingHPBar": { "x": 1030, "y": 44, "width": 220, "height": 14 },
+    "legCounter": { "x": 1030, "y": 84 },
     "hand": {
-      "x": 1160, "y": 200,
-      "cardWidth": 70, "cardHeight": 95,
-      "spacing": 10, "maxVisible": 10,
-      "fanAngle": 4, "selectedScale": 1
+      "x": 1030, "y": 108,
+      "cardWidth": 20, "cardHeight": 28,
+      "spacing": 4, "maxVisible": 10,
+      "fanAngle": 0, "selectedScale": 1
     }
   },
-"bottomBar": {
-    "x": 1007, "y": 300, "width": 110, "height": 120,
-    "phaseLabel": { "x": 1062, "y": 308 },
-    "endTurnBtn": { "x": 1062, "y": 352, "width": 104, "height": 40 },
+  "bottomBar": {
+    "x": 1010, "y": 156, "width": 260, "height": 170,
+    "phaseLabel": { "x": 1140, "y": 190 },
+    "endTurnBtn": { "x": 1140, "y": 272, "width": 220, "height": 42 },
     "passBtn": { "x": 0, "y": 0, "width": 0, "height": 0 },
     "cardPlayZone": { "x": 0, "y": 0, "width": 0, "height": 0 }
   },
+  "battleLog": { "x": 1010, "y": 334, "width": 260, "height": 378 },
   "cards": {
     "full": {
       "width": 140, "height": 200,

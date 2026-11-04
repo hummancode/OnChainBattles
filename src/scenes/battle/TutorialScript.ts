@@ -33,25 +33,25 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: 'end_play',
     title: '2 · Finish playing cards',
-    text: 'Press END TURN to leave the PLAY phase and enter the ACT phase.',
+    text: 'Press TO ACT PHASE (right panel) to leave the PLAY phase and enter the ACT phase.',
     advanceOn: (t, p, me) => t === 'PHASE_CHANGED' && p?.phase === 'ACT' && mine(p, me),
   },
   {
     id: 'end_turn',
     title: '3 · End your turn',
-    text: "Units can't act on the turn they're deployed. Press END TURN again to pass the turn.",
+    text: "Units can't act on the turn they're deployed. Press END TURN to pass the turn.",
     advanceOn: (t, p, me) => t === 'TURN_STARTED' && !mine(p, me),
   },
   {
     id: 'bot_turn',
     title: "Opponent's turn",
-    text: 'The bot is taking its turn… (In online matches every turn has a 90-second clock shown under END TURN.)',
+    text: 'The bot is taking its turn… (In online matches every turn has a 90-second clock shown under the phase button.)',
     advanceOn: (t, p, me) => t === 'TURN_STARTED' && mine(p, me),
   },
   {
     id: 'deploy_again',
     title: '4 · Grow your army',
-    text: 'You gain more LEG every turn. Deploy another card if you can, then press END TURN to enter ACT.',
+    text: 'You gain more LEG every turn. Deploy another card if you can, then press TO ACT PHASE.',
     advanceOn: (t, p, me) => t === 'PHASE_CHANGED' && p?.phase === 'ACT' && mine(p, me),
   },
   {

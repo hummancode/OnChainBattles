@@ -578,6 +578,13 @@
       "text": "Clearer board: flat squares with your half, the enemy half and the middle row in their own colours, A–G / 1–7 labels, thick team-coloured frames, bigger ATK/DEF badges, a pulsing edge on units that can still act and dimmed units that already did. Moves show as blue dots, attacks as red crosshairs, deploy squares as green frames.",
       "created": "2026-11-04T22:00:00",
       "edited": null
+    },
+    {
+      "id": "20261104230000000000",
+      "category": "New Content",
+      "text": "New battle HUD: your hand on the left with your King/LEG panel below it, the opponent's panel top-right, a PLAY → ACT → END phase tracker with one button that says what it does (TO ACT PHASE / END TURN), LEG shown as gems, and a Battle Log of plays, hits and deaths. Card previews now always open in the same spot on the right.",
+      "created": "2026-11-04T23:00:00",
+      "edited": null
     }
   ],
   "revoked": []

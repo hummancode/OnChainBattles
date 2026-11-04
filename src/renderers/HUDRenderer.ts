@@ -30,9 +30,15 @@ export class HUDRenderer {
   private playerHPBar!: Phaser.GameObjects.Graphics;
   private playerHPBarFill!: Phaser.GameObjects.Graphics;
   private playerLEGText!: Phaser.GameObjects.Text;
-  private legIcon?: Phaser.GameObjects.Image;
   private playerLEGRateText!: Phaser.GameObjects.Text;
   private playerWinLossText!: Phaser.GameObjects.Text;
+  private handHeaderText!: Phaser.GameObjects.Text;
+  private playerLegGfx!: Phaser.GameObjects.Graphics;
+  private opponentLegGfx!: Phaser.GameObjects.Graphics;
+  private stepper: Array<{ bg: Phaser.GameObjects.Graphics; label: Phaser.GameObjects.Text; phase: string; x: number }> = [];
+  private endTurnLabel?: Phaser.GameObjects.Text;
+  private lastPhase = 'DRAW';
+  private isMyTurn = true;
 
   // ── Right HUD elements ──
   private rightPanel!: Phaser.GameObjects.Graphics;
@@ -110,9 +116,11 @@ export class HUDRenderer {
         .setColor(snap.isPlayerTurn ? '#00FF88' : '#FF8866');
     }
     this.playerWinLossText.setText(`${snap.playerWins}W / ${snap.playerLosses}L`);
+    this.handHeaderText?.setText(`YOUR HAND · ${snap.playerHandCount ?? 0}`);
 
-    const isMyTurn = snap.isPlayerTurn;
-    this.setEndTurnEnabled(isMyTurn);
+    this.isMyTurn = snap.isPlayerTurn;
+    this.setEndTurnEnabled(this.isMyTurn);
+    this.refreshEndTurnLabel();
   }
 
   updatePlayerHP(current: number, max: number): void {
@@ -128,23 +136,61 @@ export class HUDRenderer {
   updatePlayerLEG(amount: number, rate: number): void {
     this.playerLEGText.setText(`${amount} LEG`);
     this.placeLegIcon();
-    this.playerLEGRateText.setText(`+${rate}/turn`);
+    this.playerLEGRateText.setText(`+${rate} / turn`);
+    const L = this.layout.leftHUD.legCounter;
+    this.drawLegDiamonds(this.playerLegGfx, L.x, L.y + 26, amount, Math.max(rate, amount));
   }
 
   updateOpponentLEG(count: number): void {
     this.opponentLEGText.setText(`${count} LEG`);
+    const L = this.layout.rightHUD.legCounter;
+    this.drawLegDiamonds(this.opponentLegGfx, L.x + 64, L.y + 1, count, count);
+  }
+
+  /** LEG as gems: filled = available now, hollow = room up to this turn's cap (the LEG rate). */
+  private drawLegDiamonds(g: Phaser.GameObjects.Graphics | undefined, x: number, cy: number, filled: number, slots: number): void {
+    if (!g) return;
+    g.clear();
+    const n = Math.min(10, Math.max(0, slots)), s = 7, step = 17;
+    for (let i = 0; i < n; i++) {
+      const cx = x + s + i * step;
+      const pts = [{ x: cx, y: cy - s }, { x: cx + s, y: cy }, { x: cx, y: cy + s }, { x: cx - s, y: cy }] as unknown as Phaser.Math.Vector2[];
+      if (i < filled) {
+        g.fillStyle(0xF5C542, 1); g.fillPoints(pts, true);
+        g.lineStyle(1, 0x7A5A10, 1); g.strokePoints(pts, true);
+      } else {
+        g.lineStyle(1.5, 0x8A7440, 0.8); g.strokePoints(pts, true);
+      }
+    }
+    if (filled > 10) {
+      // Overflow (Motherland): show the extra as a number
+      g.fillStyle(0xF5C542, 1);
+    }
   }
 
   updatePhaseLabel(phase: string, turn: number): void {
-    this.phaseLabelText.setText(`TURN ${turn} · ${phase}`);
+    this.phaseLabelText.setText(`TURN ${turn}`);
+    this.lastPhase = phase;
+    // Stepper: PLAY → ACT → END (DRAW/LEG are automatic and light up PLAY's predecessor)
+    const order = ['PLAY', 'ACT', 'END'];
+    const idx = order.indexOf(phase);
+    for (const st of this.stepper) {
+      const i = order.indexOf(st.phase);
+      const active = i === idx, done = idx > i;
+      st.bg.clear();
+      st.bg.fillStyle(active ? 0xF5C542 : done ? 0x3A4A66 : 0x161E2E, 1);
+      st.bg.fillRoundedRect(st.x - 34, -12, 68, 24, 12);
+      st.bg.lineStyle(1, active ? 0xFFE08A : 0x44506A, 1);
+      st.bg.strokeRoundedRect(st.x - 34, -12, 68, 24, 12);
+      st.label.setColor(active ? '#1A1200' : done ? '#9AA6BE' : '#6C7890').setFontStyle(active ? 'bold' : 'normal');
+    }
+    this.refreshEndTurnLabel();
+  }
 
-    const phaseColors: Record<string, string> = {
-      'DRAW': '#AAAAAA',
-      'PLAY': '#00FF88',
-      'ACT':  '#F5A623',
-      'END':  '#888888',
-    };
-    this.phaseLabelText.setColor(phaseColors[phase] ?? '#FFFFFF');
+  /** The one action button says exactly what it will do. */
+  private refreshEndTurnLabel(): void {
+    if (!this.endTurnLabel) return;
+    this.endTurnLabel.setText(!this.isMyTurn ? 'WAITING…' : this.lastPhase === 'PLAY' ? 'TO ACT PHASE  ▸' : 'END TURN');
   }
 
   setEndTurnEnabled(enabled: boolean): void {
@@ -169,8 +215,8 @@ export class HUDRenderer {
     this.bannerObj?.destroy();
   }
 
-  // Board centre (grid origin + half of 7 cells)
-  private get boardCenterX(): number { return 283 + (7 * 102) / 2; }
+  // Board centre (grid origin + half of the grid)
+  private get boardCenterX(): number { const g = this.layout.grid; return g.originX + (g.cols * g.cellSize) / 2; }
 
   private toastObj?: Phaser.GameObjects.Text;
   private toastTimer?: Phaser.Time.TimerEvent;
@@ -197,12 +243,12 @@ export class HUDRenderer {
   /** Big "YOUR TURN" / "OPPONENT'S TURN" banner over the board on every turn change. */
   private showTurnBanner(isMyTurn: boolean, spectatorLabel?: string): void {
     this.bannerObj?.destroy();
-    const x = this.boardCenterX, y = 360;
-    const bg = this.scene.add.rectangle(0, 0, 520, 84, 0x000000, 0.75)
+    const x = this.boardCenterX, y = 96;
+    const bg = this.scene.add.rectangle(0, 0, 400, 50, 0x000000, 0.8)
       .setStrokeStyle(2, isMyTurn ? 0x00FF88 : 0xFF6666, 0.9);
     const label = this.scene.add.text(0, 0, spectatorLabel ?? (isMyTurn ? 'YOUR TURN' : "OPPONENT'S TURN"), {
       fontFamily: this.theme.fonts.heading.family,
-      fontSize: '40px', fontStyle: 'bold',
+      fontSize: '28px', fontStyle: 'bold',
       color: isMyTurn ? '#00FF88' : '#FF8866',
     }).setOrigin(0.5);
     const c = this.scene.add.container(x, y, [bg, label]).setDepth(940).setAlpha(0).setScale(0.9);
@@ -222,7 +268,7 @@ export class HUDRenderer {
     this.timerOwner = activePlayer;
     if (!this.timerText) {
       const B = this.layout.bottomBar;
-      this.timerText = this.scene.add.text(B.phaseLabel.x, B.endTurnBtn.y + B.endTurnBtn.height / 2 + 8, '', {
+      this.timerText = this.scene.add.text(B.phaseLabel.x, B.endTurnBtn.y + B.endTurnBtn.height / 2 + 6, '', {
         fontFamily: this.theme.fonts.body.family,
         fontSize: `${this.theme.fonts.body.size + 2}px`,
         fontStyle: 'bold',
@@ -248,6 +294,15 @@ export class HUDRenderer {
   // PRIVATE — BUILD
   // ─────────────────────────────────────────────
 
+  /** Rounded "card" block used by every HUD section. */
+  private block(x: number, y: number, w: number, h: number, accent: number): Phaser.GameObjects.Graphics {
+    const g = this.scene.add.graphics();
+    g.fillStyle(0x0B1220, 0.92); g.fillRoundedRect(x, y, w, h, 8);
+    g.lineStyle(1, 0x2A3650, 1); g.strokeRoundedRect(x, y, w, h, 8);
+    g.fillStyle(accent, 1); g.fillRoundedRect(x, y, w, 4, { tl: 8, tr: 8, bl: 0, br: 0 });
+    return g;
+  }
+
   private buildLeftHUD(): void {
     const L = this.layout.leftHUD;
     const T = this.theme.hud;
@@ -256,6 +311,14 @@ export class HUDRenderer {
     this.leftPanel = this.scene.add.graphics();
     this.leftPanel.fillStyle(ThemeLoader.hexToNum(T.panelBg), T.panelAlpha);
     this.leftPanel.fillRect(L.x, L.y, L.width, L.height);
+
+    // Hand header (the rows themselves are drawn by HandRenderer below it)
+    this.handHeaderText = this.scene.add.text(18, 14, 'YOUR HAND', {
+      fontFamily: this.theme.fonts.heading.family, fontSize: '13px', fontStyle: 'bold', color: '#C9A45C',
+    });
+
+    // Player block (bottom-left — your side of the board)
+    this.block(12, 558, 252, 152, ThemeLoader.hexToNum(this.theme.board.unitBandPlayer));
 
     this.playerNameText = this.scene.add.text(L.playerName.x, L.playerName.y, 'PLAYER', {
       fontFamily: this.theme.fonts.heading.family,
@@ -271,35 +334,35 @@ export class HUDRenderer {
     this.drawHPBar(this.playerHPBarFill, L.kingHPBar, 30, 30);
     this.playerHPText = this.makeHPText(L.kingHPBar);
 
-    this.playerLEGText = this.scene.add.text(L.legCounter.x, L.legCounter.y, '1 LEG', {
+    // LEG: number + gems
+    this.playerLEGText = this.scene.add.text(L.legCounter.x + 22, L.legCounter.y, '1 LEG', {
       fontFamily: this.theme.fonts.heading.family,
-      fontSize: `${this.theme.fonts.heading.size}px`,
+      fontSize: '18px', fontStyle: 'bold',
       color: T.legColor,
-    }).setOrigin(0.5, 0);
+    }).setOrigin(0, 0);
+    this.playerLegGfx = this.scene.add.graphics();
 
-    this.playerLEGRateText = this.scene.add.text(L.legRate.x, L.legRate.y, '+1/turn', {
+    this.playerLEGRateText = this.scene.add.text(L.legRate.x, L.legRate.y, '+1 / turn', {
       fontFamily: this.theme.fonts.small.family,
-      fontSize: `${this.theme.fonts.small.size}px`,
+      fontSize: `${this.theme.fonts.small.size + 1}px`,
       color: T.legRateColor,
-    }).setOrigin(0.5, 0);
+    }).setOrigin(1, 0);
 
     this.playerWinLossText = this.scene.add.text(L.winLoss.x, L.winLoss.y, '0W / 0L', {
       fontFamily: this.theme.fonts.small.family,
-      fontSize: `${this.theme.fonts.small.size}px`,
+      fontSize: `${this.theme.fonts.small.size + 1}px`,
       color: C.TEXT_SECONDARY,
-    }).setOrigin(0.5, 0);
+    }).setOrigin(0, 0);
 
     if (this.scene.textures.exists('icon_leg')) {
-      this.legIcon = this.scene.add.image(L.legCounter.x - 32, L.legCounter.y + 9, 'icon_leg')
-        .setDisplaySize(20, 20);
-      this.placeLegIcon();
+      this.scene.add.image(L.legCounter.x + 8, L.legCounter.y + 11, 'icon_leg')
+        .setDisplaySize(18, 18);
     }
   }
 
   /** Keep the LEG icon just left of the (centred, variable-width) LEG text — it overlapped the digits. */
   private placeLegIcon(): void {
-    if (!this.legIcon || !this.playerLEGText) return;
-    this.legIcon.setX(this.playerLEGText.x - this.playerLEGText.width / 2 - 14);
+    // Text is left-aligned beside a fixed icon now — nothing to re-centre.
   }
 
   private buildRightHUD(): void {
@@ -309,6 +372,14 @@ export class HUDRenderer {
     this.rightPanel = this.scene.add.graphics();
     this.rightPanel.fillStyle(ThemeLoader.hexToNum(T.panelBg), T.panelAlpha);
     this.rightPanel.fillRect(L.x, L.y, L.width, L.height);
+
+    // Opponent block (top-right — their side of the board)
+    this.block(1010, 6, 260, 142, ThemeLoader.hexToNum(this.theme.board.unitBandEnemy));
+    // Turn block + log block frames
+    const B = this.layout.bottomBar;
+    this.block(B.x, B.y, B.width, B.height, 0xC9A45C);
+    const G = this.layout.battleLog;
+    if (G) this.block(G.x, G.y, G.width, G.height, 0x44506A);
 
     this.opponentNameText = this.scene.add.text(L.opponentName.x, L.opponentName.y, 'OPPONENT', {
       fontFamily: this.theme.fonts.heading.family,
@@ -328,34 +399,43 @@ export class HUDRenderer {
 
     this.opponentLEGText = this.scene.add.text(L.legCounter.x, L.legCounter.y, '1 LEG', {
       fontFamily: this.theme.fonts.heading.family,
-      fontSize: `${this.theme.fonts.heading.size}px`,
+      fontSize: '15px', fontStyle: 'bold',
       color: T.legColor,
-    }).setOrigin(0.5, 0);
+    }).setOrigin(0, 0.5);
+    this.opponentLegGfx = this.scene.add.graphics();
   }
 
   private buildBottomBar(): void {
     const L = this.layout.bottomBar;
     const T = this.theme.hud;
 
-    // Phase label — positioned in right HUD area
-    this.phaseLabelText = this.scene.add.text(
-      L.phaseLabel.x, L.phaseLabel.y,
-      'TURN 1 · DRAW',
-      {
-        fontFamily: this.theme.fonts.body.family,
-        fontSize: `${this.theme.fonts.body.size}px`,
-        color: T.phaseLabelColor,
-      }
-    ).setOrigin(0.5, 0);
-
-    this.turnOwnerText = this.scene.add.text(L.phaseLabel.x, L.phaseLabel.y - 20, '', {
-      fontFamily: this.theme.fonts.body.family,
-      fontSize: `${this.theme.fonts.body.size}px`,
+    // "YOUR TURN" / "THEIR TURN" + turn number
+    this.turnOwnerText = this.scene.add.text(L.phaseLabel.x, L.y + 10, '', {
+      fontFamily: this.theme.fonts.heading.family,
+      fontSize: '20px',
       fontStyle: 'bold',
       color: '#FFFFFF',
     }).setOrigin(0.5, 0);
+    this.phaseLabelText = this.scene.add.text(L.phaseLabel.x, L.y + 36, 'TURN 1', {
+      fontFamily: this.theme.fonts.body.family,
+      fontSize: '12px',
+      color: T.phaseLabelColor,
+    }).setOrigin(0.5, 0);
 
-    // End Turn button — positioned in right HUD area below phase label
+    // Phase stepper PLAY → ACT → END
+    const sy = L.y + 72;
+    const c = this.scene.add.container(L.phaseLabel.x, sy);
+    ['PLAY', 'ACT', 'END'].forEach((phase, i) => {
+      const x = (i - 1) * 76;
+      const bg = this.scene.add.graphics();
+      const label = this.scene.add.text(x, 0, phase, {
+        fontFamily: this.theme.fonts.body.family, fontSize: '12px', color: '#6C7890',
+      }).setOrigin(0.5);
+      c.add([bg, label]);
+      this.stepper.push({ bg, label, phase, x });
+    });
+
+    // The phase button — says what it does (TO ACT PHASE ▸ / END TURN / WAITING…)
     if (L.endTurnBtn.width > 0 && L.endTurnBtn.height > 0) {
       this.endTurnBtn = createButton(this.scene, {
         x: L.endTurnBtn.x - L.endTurnBtn.width / 2,
@@ -367,9 +447,10 @@ export class HUDRenderer {
         fontFamily: this.theme.fonts.body.family,
         onClick: () => { if (this.onEndTurn) this.onEndTurn(); },
       });
+      this.endTurnLabel = this.endTurnBtn.list.find(o => o instanceof Phaser.GameObjects.Text) as Phaser.GameObjects.Text | undefined;
+      this.endTurnLabel?.setFontStyle('bold');
     }
-
-    // PASS button removed — END TURN handles phase advancement for both PLAY and ACT
+    this.updatePhaseLabel('PLAY', 1);
   }
 
   // ─────────────────────────────────────────────

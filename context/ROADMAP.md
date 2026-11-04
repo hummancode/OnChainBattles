@@ -132,7 +132,7 @@ Sınırlı hamle hakkıyla (3–5) çözülen, rakibin her turda otomatik cevap 
 | Adım | İş | Durum |
 |---|---|---|
 | 1 | Tahta okunurluğu: düz kareler (kendi yarın / rakip yarısı / nötr sıra ayrı tonlarda), A–G / 1–7 etiketleri, takım renkli kalın çerçeve + köşe şeridi, büyük ATK/DEF rozetleri, hareket edebilen birimde nabız gibi parlayan kenar, hamlesini yapmış birim sönük; hareket = mavi nokta, saldırı = kırmızı nişangâh, konuşlanma = yeşil köşeli çerçeve | ✅ |
-| 2 | HUD + el yerleşimi: üst rakip şeridi, alt oyuncu şeridi + el, faz göstergesi (PLAY → ACT → END), olay günlüğü, sabit önizleme alanı, LEG elmasları | ⏳ |
+| 2 | HUD + el yerleşimi (tahta tam yükseklikte kaldığı için şeritler yerine sütun blokları): sol üst el, sol alt oyuncu bloğu (isim, Kral HP, LEG elmasları + oran, W/L); sağ üst rakip bloğu (HP, LEG, küçük kart sırtları); sağ orta sıra + faz göstergesi PLAY → ACT → END + ne yapacağını söyleyen tek buton (TO ACT PHASE / END TURN / WAITING…); sağ alt savaş günlüğü (`battleLog.ts`, testli); hover önizlemesi hep aynı sabit yerde; tur bandı tahtanın ortası yerine üstte | ✅ |
 | 3 | Menüler + tipografi: ortak buton/panel bileşeni, başlık + gövde fontu, Hub / Lobi / Sonuç | ⏳ |
 
 ---

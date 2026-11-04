@@ -44,8 +44,9 @@ export class SfxCoordinator {
         if (s) SoundFX.play(s);
       }));
     }
-    this.button = scene.add.text(1262, 708, '', { fontSize: '20px' })
-      .setOrigin(1, 1).setDepth(990).setInteractive({ useHandCursor: true })
+    // Beside the BATTLE LOG title (it used to sit on the newest log line)
+    this.button = scene.add.text(1258, 344, '', { fontSize: '16px' })
+      .setOrigin(1, 0).setDepth(990).setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.toggle());
     this.key = scene.input.keyboard?.addKey('M');
     this.key?.on('down', this.onKey);

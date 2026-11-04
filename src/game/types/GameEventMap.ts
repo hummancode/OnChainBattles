@@ -82,6 +82,8 @@ export interface GameEventMap {
   HUD_REFRESH:         HUDSnapshot;
   TURN_TIMER:          { activePlayer: number; remainingMs: number; durationMs: number };
   UI_TOAST:            { message: string; color?: string };
+  /** One battle-log line (EngineEventBridge → BattleLogRenderer). */
+  BATTLE_LOG:          { text: string; tone: 'you' | 'enemy' | 'turn' | 'neutral' };
   TURN_BANNER:         { isPlayerTurn: boolean; turn: number };
 
   // Network (currently unused — reserved)

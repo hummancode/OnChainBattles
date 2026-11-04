@@ -167,6 +167,7 @@ class LayoutLoaderClass {
         leftHUD: raw.leftHUD ?? this.defaultLeftHUD(),
         rightHUD: raw.rightHUD ?? this.defaultRightHUD(),
         bottomBar: raw.bottomBar ?? this.defaultBottomBar(),
+        battleLog: raw.battleLog,
         cards: {
           full: { ...DEFAULTS.cards.full, ...raw.cards?.full },
           thumbnail: { ...DEFAULTS.cards.thumbnail, ...raw.cards?.thumbnail },

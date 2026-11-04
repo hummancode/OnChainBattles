@@ -57,7 +57,7 @@ export class ScenarioCoordinator {
   // ─── Side panel (bottom-left, under the hand) ───────────────
   private buildSidePanel(): void {
     const s = this.runner.scenario;
-    const x = 140, y = 600;
+    const x = 138, y = 446;
     const bg = this.scene.add.rectangle(0, 0, 250, 200, 0x0b1020, 0.9).setStrokeStyle(2, 0xe67e22, 0.7);
     const title = this.scene.add.text(0, -88, s.title, { fontSize: '15px', fontFamily: FONT, fontStyle: 'bold', color: GOLD }).setOrigin(0.5, 0);
     const obj = this.scene.add.text(0, -66, s.text.objective, {

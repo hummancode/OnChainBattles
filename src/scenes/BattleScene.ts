@@ -9,6 +9,7 @@
 //   - GameOverHandler:        GAME_OVER → ResultScene
 // ============================================================
 
+import { BattleLogRenderer } from '../renderers/BattleLogRenderer';
 import { ScenarioRunner } from '../game/scenarios/ScenarioRunner';
 import { SCENARIOS } from '../game/scenarios/scenarios';
 import { ScenarioCoordinator } from './battle/ScenarioCoordinator';
@@ -214,6 +215,7 @@ export default class BattleScene extends Phaser.Scene {
     this.handRenderer    = new HandRenderer(this, layout, theme);
     this.hudRenderer     = new HUDRenderer(this, layout, theme);
     this.overlayRenderer = new OverlayRenderer(this, layout, theme);
+    this.battleLog       = new BattleLogRenderer(this, layout, theme);
     this.hudRenderer.setLocalPlayer(localPlayerIndex);
     this.sfx = new SfxCoordinator(this, localPlayerIndex);
 
@@ -311,6 +313,7 @@ export default class BattleScene extends Phaser.Scene {
 
   private tutorial?: TutorialCoordinator;
   private scenarioRunner?: ScenarioRunner;
+  private battleLog?: BattleLogRenderer;
   private scenarioUI?: ScenarioCoordinator;
 
   /** Story puzzle: coordinator UI + the opponent's paced, automatic replies. */
@@ -453,6 +456,8 @@ export default class BattleScene extends Phaser.Scene {
     this.handRenderer?.destroy?.();
     this.hudRenderer?.destroy?.();
     this.overlayRenderer?.destroy?.();
+    this.battleLog?.destroy();
+    this.battleLog = undefined;
     this.selectionManager?.destroy?.();
   }
 

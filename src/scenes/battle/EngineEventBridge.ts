@@ -4,6 +4,7 @@
 // Converts raw engine events into UI-adapted payloads.
 // ============================================================
 
+import { describeEvent } from './battleLog';
 import { EventBus, EV } from '../../events/EventBus';
 import { getCard } from '../../game/data/CardRegistry';
 import type { CardRenderData } from '../../game/types/UITypes';
@@ -117,7 +118,20 @@ export function wireEngineToEventBus(engine: any, localPlayerIndex: number): () 
     timers.add(t);
   };
 
+  // Battle log: instanceId → cardId (remembered on placement, else looked up on the board)
+  const unitNames = new Map<string, string>();
+  const nameOf = (id: string): string | null => {
+    const known = unitNames.get(id);
+    if (known) return known;
+    const u = engine.getState().board.find((c: any) => c.unit?.instanceId === id)?.unit;
+    if (u) unitNames.set(id, u.cardId);
+    return u?.cardId ?? null;
+  };
+
   const handler = (event: any) => {
+    if (event.type === 'UNIT_PLACED' && event.instanceId) unitNames.set(event.instanceId, event.cardId);
+    const line = describeEvent(event, localPlayerIndex, nameOf);
+    if (line) EventBus.emit(EV.BATTLE_LOG, line);
     switch (event.type) {
 
       case 'UNIT_PLACED': {

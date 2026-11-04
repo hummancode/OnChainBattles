@@ -67,7 +67,7 @@ function makeScene() {
 }
 
 const layout: any = {
-  leftHUD: { hand: { x: 0, y: 200, maxVisible: 10, cardHeight: 100, selectedScale: 1.1, spacing: 20, fanAngle: 0 } },
+  leftHUD: { hand: { x: 0, y: 44, maxVisible: 10, cardHeight: 100, selectedScale: 1.1, spacing: 20, fanAngle: 0 } },
   rightHUD: { hand: { x: 0, y: 0, maxVisible: 5, cardHeight: 100, cardWidth: 70, spacing: 5 } },
   cards: { full: { width: 80, height: 100 } },
 };

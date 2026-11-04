@@ -151,6 +151,8 @@ export interface BattleLayoutJSON {
   leftHUD: LeftHUDLayout;
   rightHUD: RightHUDLayout;
   bottomBar: BottomBarLayout;
+  /** Right-column battle log / card preview area (step-2 HUD). */
+  battleLog?: { x: number; y: number; width: number; height: number };
   cards: CardsLayout;
   overlays: OverlaysLayout;
 }

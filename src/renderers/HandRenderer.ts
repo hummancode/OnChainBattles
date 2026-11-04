@@ -21,7 +21,7 @@ import { CardRowRenderer, ROW } from './CardRowRenderer';
 
 /** Rows fit between the LEG/record block and the bottom of the screen. */
 const ROW_X = 15;
-const ROW_BOTTOM = 712;
+const ROW_BOTTOM = 552; // the player block (name / King / LEG) sits below
 
 export class HandRenderer {
   private scene: Phaser.Scene;
@@ -289,8 +289,8 @@ export class HandRenderer {
     const data = this.cards[index];
     const row = this.cardContainers[index];
     if (!data || !row) return;
-    const y = Math.max(4, Math.min(720 - PREVIEW.height - 4, row.y - 40));
-    this.preview = this.cardRenderer.renderPreview({ ...data, isSelected: false }, ROW_X + ROW.width + 14, y);
+    // Fixed spot in the right column (over the battle log) — never over the board
+    this.preview = this.cardRenderer.renderPreview({ ...data, isSelected: false }, 1140 - PREVIEW.width / 2, 360);
     this.preview.setDepth(970); // above the tutorial panel (960): a hovered card is what the player is looking at
   }
 
@@ -309,16 +309,11 @@ export class HandRenderer {
 
     const H = this.layout.rightHUD.hand;
     const count = Math.min(this.oppCardCount, H.maxVisible);
-    // Compress the vertical step so the last card back still ends on screen (was running off at 5+).
-    const BOTTOM = 712;
-    const fullStep = H.cardHeight + H.spacing;
-    const step = count > 1 ? Math.min(fullStep, (BOTTOM - H.y - H.cardHeight) / (count - 1)) : fullStep;
-
+    // One compact row of small backs (they used to fill the whole right column)
     for (let i = 0; i < count; i++) {
-      const py = H.y + i * step;
       const back = this.cardRenderer.renderBack(
-        H.x - H.cardWidth / 2,
-        py,
+        H.x + i * (H.cardWidth + H.spacing),
+        H.y,
         H.cardWidth,
         H.cardHeight
       );
@@ -332,11 +327,11 @@ export class HandRenderer {
     if (this.oppCountLabel) {
       this.oppCountLabel.setText(label);
     } else {
-      this.oppCountLabel = this.scene.add.text(H.x, H.y - 20, label, {
+      this.oppCountLabel = this.scene.add.text(1250, H.y + H.cardHeight / 2, label, {
         fontFamily: this.theme.fonts.small.family,
-        fontSize: `${this.theme.fonts.small.size}px`,
+        fontSize: `${this.theme.fonts.small.size + 1}px`,
         color: this.theme.colors.TEXT_SECONDARY,
-      }).setOrigin(0.5, 1);
+      }).setOrigin(1, 0.5);
       this.oppHandContainer.add(this.oppCountLabel);
     }
   }

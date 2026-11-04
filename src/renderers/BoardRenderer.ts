@@ -563,7 +563,7 @@ const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, c
     this.previewTimer = this.scene.time.delayedCall(250, () => {
       if (this.previewFor !== thumb || !this.unitsById.has(thumb.instanceId)) return;
       // Right side, over the opponent's card backs (never over the board itself)
-      this.previewCard = this.cardRenderer.renderPreview({ ...thumb.data, isSelected: false, isExhausted: false }, 1270 - PREVIEW.width, 380);
+      this.previewCard = this.cardRenderer.renderPreview({ ...thumb.data, isSelected: false, isExhausted: false }, 1140 - PREVIEW.width / 2, 360);
       this.previewCard.setDepth(970); // above the tutorial panel (960)
     });
   }
