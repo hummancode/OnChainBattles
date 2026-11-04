@@ -28,7 +28,7 @@ import { syncUIFromEngine, resumePendingAfterRejoin } from './battle/BattleState
 import { replayLog } from '../network/ActionApplier';
 import type { RejoinPayload, GameAction } from '../../shared/types/NetworkEvents';
 import { applyAction } from '../network/ActionApplier';
-import { nextBotAction } from '../game/ai/SimpleBot';
+import { nextBotAction, type BotDifficulty } from '../game/ai/SimpleBot';
 import { TutorialCoordinator } from './battle/TutorialCoordinator';
 import { SfxCoordinator } from './battle/SfxCoordinator';
 import { TUTORIAL_DECK, TUTORIAL_BOT_DECK, TUTORIAL_SEED } from '../game/data/TutorialSetup';
@@ -60,7 +60,7 @@ interface BattleSceneData {
   /** Watch a finished match instead of playing one (no network, no input). */
   replay?: ReplayData;
   /** Offline match vs SimpleBot (P2); `tutorial` adds the guided lesson. */
-  vsBot?: { tutorial?: boolean };
+  vsBot?: { tutorial?: boolean; difficulty?: BotDifficulty };
 }
 
 export default class BattleScene extends Phaser.Scene {
@@ -277,7 +277,7 @@ export default class BattleScene extends Phaser.Scene {
         GameState.gameSeed = 0; // random shuffle for practice
         startEngine();
       }
-      this.startBot(!!vsBot.tutorial);
+      this.startBot(!!vsBot.tutorial, vsBot.difficulty ?? 'normal');
     } else if (rejoin?.battleStarted) {
       // Engine already rebuilt above — paint it and resume.
       syncUIFromEngine(this.engine, localPlayerIndex, this.handRenderer);
@@ -298,7 +298,7 @@ export default class BattleScene extends Phaser.Scene {
   private sfx?: SfxCoordinator;
 
   /** Drive player 2 with SimpleBot; actions go through applyAction like any other source. */
-  private startBot(tutorial: boolean): void {
+  private startBot(tutorial: boolean, difficulty: BotDifficulty): void {
     const BOT = 1;
     if (tutorial) this.tutorial = new TutorialCoordinator(this, 0);
     const timer = this.time.addEvent({
@@ -307,7 +307,11 @@ export default class BattleScene extends Phaser.Scene {
         const st = this.engine.getState();
         if (st.status === 'GAME_OVER') { timer.remove(false); return; }
         if (st.turn.activePlayer !== BOT) return;
-        const action = nextBotAction(this.engine, BOT, { passive: this.tutorial?.script.botPassive ?? false });
+        // The tutorial bot stays Easy (it's scripted to be passive until the lesson ends).
+        const action = nextBotAction(this.engine, BOT, {
+          passive: this.tutorial?.script.botPassive ?? false,
+          difficulty: tutorial ? 'easy' : difficulty,
+        });
         if (applyAction(this.engine, action)) return;
         // Safety net: never let a refused bot action stall the game.
         console.warn('[Bot] action refused, ending phase instead:', action);

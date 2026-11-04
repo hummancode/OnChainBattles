@@ -21,15 +21,24 @@ import type { Position, Unit } from '../types/GameTypes';
 import { Player } from '../types/GameTypes';
 import { getCard } from '../data/CardRegistry';
 import { CardClass } from '../types/CardTypes';
+import { nextSmartAction } from './SmartBot';
+
+export type BotDifficulty = 'easy' | 'normal' | 'hard';
 
 export interface BotOptions {
   /** Tutorial mode: never plays or attacks — just passes its turns. */
   passive?: boolean;
+  /** easy = this greedy bot (default); normal / hard = SmartBot. */
+  difficulty?: BotDifficulty;
 }
 
 const dist = (a: Position, b: Position) => Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row));
 
 export function nextBotAction(engine: GameEngine, me: Player, opts: BotOptions = {}): GameAction {
+  if (!opts.passive && opts.difficulty && opts.difficulty !== 'easy') {
+    const smart = nextSmartAction(engine, me, opts.difficulty);
+    if (smart) return smart;
+  }
   const st = engine.getState();
   const enemy: Player = me === Player.P1 ? Player.P2 : Player.P1;
   const unitAt = (col: number, row: number) => st.board.find(c => c.col === col && c.row === row)?.unit ?? null;

@@ -171,6 +171,16 @@ export class GameEngine implements IGameEngineAPI {
     return getAttackRange(unit, this.board);
   }
 
+  /**
+   * Squares any unit (either side, ignoring turn/exhaustion) could hit from where it stands.
+   * Read-only threat query for the AI and UI hints — never use it to validate an action.
+   */
+  getThreatRange(unitId: string): Position[] {
+    const unit = this.board.getUnitById(unitId);
+    if (!unit || unit.currentAtk <= 0) return [];
+    return getAttackRange(unit, this.board);
+  }
+
   getValidDeployPositions(): Position[] {
     return getValidDeploySquares(this.activePlayer, this.board);
   }

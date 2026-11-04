@@ -11,6 +11,8 @@ import { AuthManager } from '../auth/AuthManager';
 import { DeckLoader } from '../config/DeckLoader';
 import { LobbySocketManager } from '../lobby/LobbySocketManager';
 import { CRYPTO_ENABLED } from '../config/features';
+import { getBotDifficulty, setBotDifficulty, botName } from '../ui/botPrefs';
+import type { BotDifficulty } from '../game/ai/SimpleBot';
 import { ShareHelper } from '../ui/ShareHelper';
 import { DOMInputManager } from '../ui/DOMInputManager';
 import { MenuButton } from '../ui/MenuButton';
@@ -20,6 +22,8 @@ const CX = 640;
 
 export default class HubScene extends Phaser.Scene {
   private lobbySM!: LobbySocketManager;
+  private botOverlay?: Phaser.GameObjects.Container;
+  private botKeys?: AbortController;
   private inputManager?: DOMInputManager;
   /** Keyboard shortcuts of the open dialog (host / join) — aborted when it closes. */
   private joinKeys?: AbortController;
@@ -127,7 +131,7 @@ export default class HubScene extends Phaser.Scene {
     y += gap;
     new MenuButton(this, CX - 125, y, '[ PRACTICE VS BOT ]', {
       color: '#b388ff', fontSize: '18px',
-      onPointerDown: () => this.startBotMatch(false),
+      onPointerDown: () => this.showBotOverlay(),
     });
     new MenuButton(this, CX + 130, y, '[ TUTORIAL ]', {
       color: '#FFD54F', fontSize: '18px',
@@ -283,17 +287,68 @@ export default class HubScene extends Phaser.Scene {
   }
 
   /** Offline match against SimpleBot (optionally the guided tutorial). */
-  private startBotMatch(tutorial: boolean): void {
+  private startBotMatch(tutorial: boolean, difficulty: BotDifficulty = 'easy'): void {
+    if (this.transitioning) return;
+    this.transitioning = true;
     this.cameras.main.fadeOut(250, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       this.scene.start('BattleScene', {
         playerName: GameState.playerName || 'You',
-        opponentName: tutorial ? 'Tutor Bot' : 'Bot',
+        opponentName: tutorial ? 'Tutor Bot' : botName(difficulty),
         isCryptoMode: false,
         roomCode: '',
-        vsBot: { tutorial },
+        vsBot: { tutorial, difficulty },
       });
     });
+  }
+
+  /** Practice: pick Easy / Normal / Hard (last choice remembered and highlighted). */
+  private showBotOverlay(): void {
+    if (this.botOverlay) return;
+    const { width, height } = this.scale;
+    const o = this.add.container(0, 0).setDepth(50);
+    this.botOverlay = o;
+    o.add(this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.6).setInteractive());
+    const g = this.add.graphics();
+    g.fillStyle(0x16213e, 0.95); g.fillRoundedRect(CX - 210, 230, 420, 240, 10);
+    g.lineStyle(2, 0xb388ff, 0.6); g.strokeRoundedRect(CX - 210, 230, 420, 240, 10);
+    o.add(g);
+    o.add(this.add.text(CX, 258, 'Practice vs Bot', {
+      fontSize: '20px', fontFamily: '"Courier New", monospace', fontStyle: 'bold', color: '#FFFFFF',
+    }).setOrigin(0.5));
+
+    const last = getBotDifficulty();
+    const levels: Array<{ d: BotDifficulty; label: string; hint: string; color: string }> = [
+      { d: 'easy',   label: 'EASY',   hint: 'Greedy: always attacks, never plans', color: '#8BC34A' },
+      { d: 'normal', label: 'NORMAL', hint: 'Weighs trades, protects its King',    color: '#4fc3f7' },
+      { d: 'hard',   label: 'HARD',   hint: 'Avoids danger, sets up attacks',       color: '#FF7043' },
+    ];
+    levels.forEach((l, i) => {
+      const y = 305 + i * 46;
+      const btn = new MenuButton(this, CX - 110, y, l.d === last ? `> ${l.label} <` : `[ ${l.label} ]`, {
+        color: l.color, fontSize: '20px',
+        onPointerDown: () => { setBotDifficulty(l.d); this.hideBotOverlay(); this.startBotMatch(false, l.d); },
+      });
+      o.add(btn.text);
+      o.add(this.add.text(CX - 20, y, l.hint, {
+        fontSize: '12px', fontFamily: '"Courier New", monospace', color: '#AAAAAA',
+      }).setOrigin(0, 0.5));
+    });
+    const cancel = new MenuButton(this, CX, 440, '[ CANCEL ]', {
+      color: '#ff4444', fontSize: '16px', onPointerDown: () => this.hideBotOverlay(),
+    });
+    o.add(cancel.text);
+    this.botKeys = new AbortController();
+    window.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Escape') this.hideBotOverlay();
+    }, { signal: this.botKeys.signal });
+  }
+
+  private hideBotOverlay(): void {
+    this.botKeys?.abort();
+    this.botKeys = undefined;
+    this.botOverlay?.destroy();
+    this.botOverlay = undefined;
   }
 
   private hideHostOverlay(): void {
@@ -446,5 +501,6 @@ export default class HubScene extends Phaser.Scene {
   private cleanup(): void {
     this.lobbySM?.detach();
     this.inputManager?.destroyAll();
+    this.hideBotOverlay();
   }
 }

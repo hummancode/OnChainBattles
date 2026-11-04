@@ -14,6 +14,7 @@
 //   - Auto-navigate to MainMenu after 15s
 // ============================================================
 
+import { getBotDifficulty, botName } from '../ui/botPrefs';
 import Phaser from 'phaser';
 import GameState from '../GameState';
 import SocketManager from '../network/SocketManager';
@@ -293,8 +294,8 @@ export default class ResultScene extends Phaser.Scene {
       // Practice: straight into another bot match
       this.cameras.main.fadeOut(200, 0, 0, 0);
       this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('BattleScene', {
-        playerName: GameState.playerName || 'You', opponentName: 'Bot',
-        isCryptoMode: false, roomCode: '', vsBot: { tutorial: false },
+        playerName: GameState.playerName || 'You', opponentName: botName(getBotDifficulty()),
+        isCryptoMode: false, roomCode: '', vsBot: { tutorial: false, difficulty: getBotDifficulty() },
       }));
       return;
     }
