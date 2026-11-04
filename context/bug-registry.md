@@ -14,15 +14,15 @@ Used to identify weak areas and improve code quality over time.
 | Category | Count | User-Found | Claude-Found | Test-Found |
 |----------|-------|------------|--------------|------------|
 | logic | 41 | 5 | 33 | 3 |
-| network | 15 | 6 | 8 | 1 |
-| state | 26 | 4 | 21 | 1 |
+| network | 16 | 6 | 9 | 1 |
+| state | 27 | 4 | 22 | 1 |
 | rendering | 11 | 1 | 9 | 1 |
 | race-condition | 6 | 2 | 4 | 0 |
 | memory-leak | 7 | 0 | 7 | 0 |
 | web3 | 3 | 0 | 3 | 0 |
 | type-safety | 7 | 2 | 5 | 0 |
 | security | 13 | 1 | 12 | 0 |
-| **TOTAL** | **131** | **21** | **104** | **6** |
+| **TOTAL** | **133** | **21** | **106** | **6** |
 
 ---
 
@@ -1064,6 +1064,8 @@ Used to identify weak areas and improve code quality over time.
 10. **Server decides what matters** — validation and results come from the server's own engine, never from client claims (BUG-074).
 11. **Walk the whole card pool in tests** — handler coverage, every pending kind wired end-to-end; three spells were dead for months behind a registry-key mismatch (BUG-081, BUG-082).
 12. **Fuzz the engine with the bot** — bot-vs-bot over random full-pool decks with invariants (no 0-HP unit on board, positions consistent, Kings present) and replay determinism found 6 bugs in one run (BUG-092…097). Keep running it after rule changes.
+13. **Test the shipped artifact end to end** — the server bundle had no ability handlers (side-effect registration lived in the client entry); every unit test passed. A two-browser full match driven by the bot (`fullmatch.js` QA script) found it in one run (BUG-132). Import registrations where they're needed; test bundles, not only sources.
+14. **Every card text line gets an engine test** — 15 text/engine mismatches in one audit (BUG-123…131); see tests/engine/regression/cardAudit.test.ts.
 
 ### User-Found vs Claude-Found
 - **User found 12 bugs** (34%) — gameplay-visible issues (freezes, wrong movement, UI blocking, route/scene bugs).
@@ -1369,3 +1371,24 @@ Used to identify weak areas and improve code quality over time.
 - **Fix**: No-op handler registered; texts updated (Swift, Backstab, LEG rate growth, enemy structure + both sides, auto-placed, highest-cost revive, valid deploy square).
 - **Prevention**: Card text audit is part of every mechanics change.
 - **Files**: src/game/abilities/handlers/passiveNoOp.ts, src/game/data/cards/*.ts
+
+### BUG-132: Authoritative server engine ran with NO ability handlers
+- **Date**: 2026-11-04
+- **Category**: `state`
+- **Discovered by**: `claude`
+- **Symptom**: In a real two-browser match the first ability (Militia deploy, Transform, any aura) produced `STATE MISMATCH` on every following action, then an endless resync loop; the server's results/validation were computed with different rules than the clients.
+- **Root cause**: Handlers self-register on import, and `registerAll` was imported only by `src/main.ts`. The esbuild server bundle (MatchSimulation → GameEngine) never imported it; unit tests imported it via helpers, so nothing caught it.
+- **Fix**: `GameEngine.ts` imports `./abilities/registerAll` itself. New test bundles MatchSimulation with esbuild in a clean Node process and requires the same handler set as the client.
+- **Prevention**: Side-effect registration must be imported by the module that depends on it, never by an app entry point. Test the server bundle, not just the sources.
+- **Files**: src/game/GameEngine.ts, tests/server/serverHandlers.test.ts
+
+### BUG-133: A second desync within 3 s was dropped for good
+- **Date**: 2026-11-04
+- **Category**: `network`
+- **Discovered by**: `claude`
+- **Symptom**: "Resync requested again too soon — ignoring" — the client stayed desynced.
+- **Root cause**: The restart-loop guard returned without scheduling anything.
+- **Fix**: Queue one retry after the cool-down (scene timer, reset on scene setup).
+- **Prevention**: Throttles must defer, not discard, work that is still needed.
+- **Files**: src/scenes/battle/NetworkCoordinator.ts
+

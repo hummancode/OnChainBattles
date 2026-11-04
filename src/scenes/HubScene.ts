@@ -249,6 +249,10 @@ export default class HubScene extends Phaser.Scene {
       cryptoBtn.setColor(isCrypto ? '#f5a623' : '#4fc3f7');
     });
     this.hostOverlay.add(cryptoBtn);
+    } else {
+      this.hostOverlay.add(this.add.text(CX, 362, 'Free play · share the room code or INVITE link', {
+        fontSize: '12px', fontFamily: '"Courier New", monospace', color: '#8899AA',
+      }).setOrigin(0.5));
     }
 
     // Create button
@@ -310,8 +314,8 @@ export default class HubScene extends Phaser.Scene {
     this.botOverlay = o;
     o.add(this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.6).setInteractive());
     const g = this.add.graphics();
-    g.fillStyle(0x16213e, 0.95); g.fillRoundedRect(CX - 210, 230, 420, 240, 10);
-    g.lineStyle(2, 0xb388ff, 0.6); g.strokeRoundedRect(CX - 210, 230, 420, 240, 10);
+    g.fillStyle(0x16213e, 0.95); g.fillRoundedRect(CX - 250, 230, 500, 240, 10);
+    g.lineStyle(2, 0xb388ff, 0.6); g.strokeRoundedRect(CX - 250, 230, 500, 240, 10);
     o.add(g);
     o.add(this.add.text(CX, 258, 'Practice vs Bot', {
       fontSize: '20px', fontFamily: '"Courier New", monospace', fontStyle: 'bold', color: '#FFFFFF',
@@ -325,12 +329,12 @@ export default class HubScene extends Phaser.Scene {
     ];
     levels.forEach((l, i) => {
       const y = 305 + i * 46;
-      const btn = new MenuButton(this, CX - 110, y, l.d === last ? `> ${l.label} <` : `[ ${l.label} ]`, {
+      const btn = new MenuButton(this, CX - 130, y, l.d === last ? `> ${l.label} <` : `[ ${l.label} ]`, {
         color: l.color, fontSize: '20px',
         onPointerDown: () => { setBotDifficulty(l.d); this.hideBotOverlay(); this.startBotMatch(false, l.d); },
       });
       o.add(btn.text);
-      o.add(this.add.text(CX - 20, y, l.hint, {
+      o.add(this.add.text(CX - 40, y, l.hint, {
         fontSize: '12px', fontFamily: '"Courier New", monospace', color: '#AAAAAA',
       }).setOrigin(0, 0.5));
     });

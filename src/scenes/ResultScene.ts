@@ -213,7 +213,7 @@ export default class ResultScene extends Phaser.Scene {
   // ─── HELPERS ───────────────────────────────────────────────
 
   private addNavigationButtons(width: number, height: number): void {
-    const btnY = height - 80;
+    const btnY = height - 130; // leaves room for WATCH REPLAY below, inside the panel
 
     // Hub
     const hubBtn = this.add.text(width / 2 - 160, btnY, '[ HUB ]', {

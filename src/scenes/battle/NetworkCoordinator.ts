@@ -155,6 +155,7 @@ export function handleFinalDisconnect(deps: NetworkCoordinatorDeps): void {
 }
 
 export function setupSocketCallbacks(deps: NetworkCoordinatorDeps): void {
+  resyncRetryQueued = false; // a retry scheduled on a previous scene instance died with it
   SocketManager.setCallbacks({
     onRoomCreated: (code) => GameState.setRoomCode(code),
     onRoomJoined: (code) => GameState.setRoomCode(code),
@@ -198,6 +199,7 @@ export function handleOwnConnectionFailed(deps: NetworkCoordinatorDeps): void {
 
 /** Last resync time — guards against a restart loop if the server keeps disagreeing. */
 let lastResyncAt = 0;
+let resyncRetryQueued = false;
 
 /**
  * Our engine disagrees with the server's. Rebuild the match from the authoritative log by
@@ -206,9 +208,16 @@ let lastResyncAt = 0;
 export function requestResync(deps: NetworkCoordinatorDeps, reason: string): void {
   const now = Date.now();
   if (now - lastResyncAt < 3000) {
-    console.warn('[NetworkCoordinator] Resync requested again too soon — ignoring:', reason);
+    // Don't drop it (the desync would stay forever) — retry once the cool-down ends.
+    // scene.time dies with the scene, so a restart in between cancels the retry.
+    if (!resyncRetryQueued) {
+      resyncRetryQueued = true;
+      console.warn('[NetworkCoordinator] Resync requested again too soon — retrying shortly:', reason);
+      deps.scene.time.delayedCall(3000 - (now - lastResyncAt) + 50, () => { resyncRetryQueued = false; requestResync(deps, reason); });
+    }
     return;
   }
+  resyncRetryQueued = false;
   lastResyncAt = now;
   console.warn('[NetworkCoordinator] Resyncing with server:', reason);
   GameState.pendingResync = true;

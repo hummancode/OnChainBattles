@@ -22,6 +22,10 @@
 // ZERO Phaser imports. Pure TypeScript state machine.
 // ============================================================
 
+// Ability handlers self-register on import. The engine imports them itself so EVERY consumer
+// (client, authoritative server bundle, tests, tools) gets the same rules — the server used
+// to bundle the engine without them (registration lived only in src/main.ts).
+import './abilities/registerAll';
 import { Board } from './Board';
 import { GameModifiers } from './GameModifiers';
 import { PlayerState } from './PlayerState';

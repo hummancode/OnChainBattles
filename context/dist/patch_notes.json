@@ -501,6 +501,13 @@
       "text": "Card texts updated to match the rules (Scout, King, Disease, Peasant Revolt, Mystic, Militia, Messenger).",
       "created": "2026-11-04T17:05:00",
       "edited": null
+    },
+    {
+      "id": "20261104180000000000",
+      "category": "Bug Fix",
+      "text": "Online matches no longer fall out of sync when a card ability triggers (the server now uses exactly the same rules as your game).",
+      "created": "2026-11-04T18:00:00",
+      "edited": null
     }
   ],
   "revoked": []
