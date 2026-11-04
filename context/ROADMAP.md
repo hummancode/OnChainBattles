@@ -108,20 +108,22 @@ Bot-vs-bot fuzz (`npm run test:fuzz`) + kod incelemesi: motor 10, sunucu 7, iste
 
 ---
 
-## Hikâye puzzle'ları (satranç tarzı) 🚧 yarım — devam edilecek
+## Hikâye puzzle'ları (satranç tarzı) ✅ (4 Kasım 2026)
 
-Sınırlı hamle hakkıyla (3–5) çözülen, rakibin her turda otomatik cevap verdiği senaryolar.
+Sınırlı hamle hakkıyla (3–5) çözülen, rakibin her turda otomatik cevap verdiği 6 senaryo (Hub → PUZZLES).
 
-| Parça | Durum |
-|---|---|
-| Motor: `GameEngine.loadPosition` (elle kurulmuş pozisyon) | ✅ |
-| `src/game/scenarios/ScenarioRunner.ts`: hamle bütçesi, hedefler (KILL_KING / KILL_UNITS / SURVIVE), tur limiti, rakip cevabı (senaryo → Zor bot) | ✅ testli |
-| Arayüz: Hub → PUZZLES → `ScenarioSelectScene`; savaşta hikâye girişi, hamle/tur paneli, HINT / RESTART / EXIT, anlatım bantları, sonuç ekranı, ilerleme kaydı | ✅ (ilk puzzle ile tarayıcıda denendi) |
-| Puzzle 1 "Breach the Gate" | ✅ oyunda |
-| Puzzle 2–5 taslakları (`src/game/scenarios/drafts.ts`): mekanikleri çözücüyle doğrulandı, **hikâye metinleri yazılmadı** | ⏳ |
-| Puzzle 6 + metinler, `scenarios.ts`'e taşıma, tam akış QA, sürüm notları | ⏳ |
+| # | Puzzle | Fikir | Hamle / tur |
+|---|---|---|---|
+| 1 | Breach the Gate ★ | Archer yolu açar, Lancer hücum eder | 3 / 1 |
+| 2 | The Night Blade ★ | Nöbetçiyi vur, Assassin 2 kare çapraz sıçrayıp kralı karşılıksız vurur; rakip ölen askerin çektiği kartla yeni bir nöbetçi getirir | 3 / 2 |
+| 3 | Hold the Ford ★★ | Hayatta kal: Pikeman ile Lancer'ı durdur, kralı okçuların çaprazından çek | 3 / 1 |
+| 4 | The Fault Line ★★ | Commander'ı yemle kendi yarısından çıkar (DEF aurası kalkar), sonra Earthquake | 3 / 2 |
+| 5 | A Pretext for War ★★★ | Casus Belli ile Assassin'i düşman ön sırasına indir, onu görebilecek askeri vur, sonraki tur sıçra | 3 / 2 |
+| 6 | The Turncoat ★★★ | Treason ile Lancer'ı satın al, Archer mızrakları temizler, hain Lancer kralı vurur | 4 / 1 |
 
-Araçlar: `tests/engine/scenarios/solver.ts` (kaba kuvvet çözücü), `tests/engine/scenarios/scenarios.test.ts` (çözüm kazanır, pas geçmek kazanmaz, kısa yol yok).
+- Motor: `GameEngine.loadPosition`; kurallar: `src/game/scenarios/ScenarioRunner.ts`; veri: `src/game/scenarios/scenarios.ts`
+- Doğrulama: `tests/engine/scenarios/` — çözüm kazanır, pas kazanmaz, deterministik, bütçe−2 hamleyle çözüm yok (kaba kuvvet çözücü `solver.ts`). Kart kuralı değişince hangi puzzle bozulduysa test söyler.
+- Arayüz QA'sı sırasında genel oyunu etkileyen 2 hata bulundu: büyüler sadece konuşlanma karesine tıklayınca oynanıyordu (BUG-138), Lancer'ın hücum saldırısı arayüzden yapılamıyordu (BUG-139).
 
 ---
 

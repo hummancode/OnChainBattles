@@ -117,3 +117,36 @@ describe('story puzzle input routing', () => {
     sm.destroy();
   });
 });
+
+describe('casting spells', () => {
+  it('a selected spell casts on any board click (not only on deploy squares)', () => {
+    const played: any[] = []; const toasts: string[] = [];
+    const off = EventBus.on(EV.UI_TOAST, ({ message }: any) => toasts.push(message));
+    const sm = new SelectionManager({} as any, adapter({
+      getValidDeployPositions: () => [{ col: 0, row: 0 }],
+      isSpellCard: (i: number) => i === 1,
+      isOccupied: () => false,
+      playCard: (...a: any[]) => { played.push(a); },
+    } as any));
+    sm.onHandCardClicked(1);
+    expect(toasts.some(t => /cast/i.test(t))).toBe(true);
+    sm.onBoardCellClicked(4, 5);
+    expect(played).toEqual([[1, 4, 5]]);
+    sm.destroy(); off();
+  });
+});
+
+describe('Lancer charge through the UI', () => {
+  it('a Lancer that just moved can still be selected to attack', async () => {
+    const { ScenarioRunner } = await import('../../src/game/scenarios/ScenarioRunner');
+    const { SCENARIOS } = await import('../../src/game/scenarios/scenarios');
+    const r = new ScenarioRunner(SCENARIOS.find(s => s.id === 'breach')!);
+    const sm = createSelectionManager(r.engine, {} as any, 0, () => {}, a => r.play(a));
+    const api = (sm as any).engine as IGameEngineAPI;
+    r.play({ type: 'END_PLAY_PHASE' });
+    r.play({ type: 'ATTACK_UNIT', fromCol: 1, fromRow: 3, targetCol: 3, targetRow: 5 });
+    r.play({ type: 'MOVE_UNIT', fromCol: 3, fromRow: 3, col: 3, row: 5 });
+    expect(api.canAct(3, 5)).toBe(true);
+    sm.destroy();
+  });
+});

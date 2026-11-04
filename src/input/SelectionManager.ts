@@ -27,6 +27,8 @@ export interface IGameEngineAPI {
   getValidMoves(col: number, row: number): Array<{ col: number; row: number }>;
   getValidAttacks(col: number, row: number): Array<{ col: number; row: number }>;
   getValidDeployPositions(cardIndex: number): Array<{ col: number; row: number }>;
+  /** Spells need no square: when selected, any board click casts them. */
+  isSpellCard?(handIndex: number): boolean;
   playCard(handIndex: number, col: number, row: number): void;
   moveUnit(fromCol: number, fromRow: number, toCol: number, toRow: number): void;
   attackUnit(fromCol: number, fromRow: number, targetCol: number, targetRow: number): void;
@@ -152,8 +154,10 @@ export class SelectionManager {
       return;
     }
 
-    // Select this card and show valid deploy positions
-    const deployPositions = this.engine.getValidDeployPositions(index);
+    // Select this card and show valid deploy positions (spells: none — any board click casts)
+    const isSpell = this.engine.isSpellCard?.(index) ?? false;
+    const deployPositions = isSpell ? [] : this.engine.getValidDeployPositions(index);
+    if (isSpell) this.toast('Click the board to cast — click the card again to cancel');
 
     this.state = {
       ...this.state,
@@ -273,8 +277,8 @@ this.state = {
     const idx = this.state.selectedHandIndex;
     if (idx === null) { this.clearSelection(); return; }
 
-    // Is this a valid deploy position?
-    const isValid = this.state.validDeploy.some(p => p.col === col && p.row === row);
+    // Spells: any square casts. Units/structures: must be a valid deploy position.
+    const isValid = (this.engine.isSpellCard?.(idx) ?? false) || this.state.validDeploy.some(p => p.col === col && p.row === row);
 
     if (isValid) {
       this.engine.playCard(idx, col, row);

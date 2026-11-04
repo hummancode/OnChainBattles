@@ -65,6 +65,7 @@ npx hardhat ignition deploy --network fuji ignition/modules/Escrow.ts
 | `src/game/pending/` | PendingCommand (discriminated union) + PendingCommandResolver |
 | `src/game/data/` | CardRegistry (frozen), DeckDefinitions, MovementPresets, card definitions |
 | `src/game/interfaces/` | IBoard, IPlayerState, IGameModifiers |
+| `src/game/scenarios/` | Story puzzles: ScenarioTypes, ScenarioRunner (move budget, goals, scripted/bot replies), scenarios.ts data — every puzzle is verified by tests/engine/scenarios |
 | `src/game/ai/` | SimpleBot (Easy, greedy) + SmartBot (Normal/Hard) — return one GameAction (practice + tutorial) |
 | `src/network/` | SocketManager (multiplayer relay) |
 | `src/web3/` | WalletManager + EscrowManager (MetaMask/Core Wallet, Fuji testnet) |
@@ -78,7 +79,8 @@ npx hardhat ignition deploy --network fuji ignition/modules/Escrow.ts
 ```
 PreloadScene → LoginScene → HubScene → ┬→ RoomBrowserScene → LobbyScene → BattleScene → ResultScene
                                         ├→ BattleScene {vsBot: difficulty easy|normal|hard} (practice / tutorial, offline)
-                                        ├→ DeckBuilderScene / PuzzleScene / ProfileScene
+                                        ├→ ScenarioSelectScene → BattleScene {scenario} (story puzzles, offline)
+                                        ├→ DeckBuilderScene / PuzzleScene (community) / ProfileScene
                                         └→ (?room=CODE invite link opens the Hub join dialog)
 ```
 

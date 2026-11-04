@@ -543,6 +543,27 @@
       "text": "Lobby: the host just sees START; the guest's READY button shows whether they're ready.",
       "created": "2026-11-04T19:03:00",
       "edited": null
+    },
+    {
+      "id": "20261104200000000000",
+      "category": "New Content",
+      "text": "Story Puzzles (Hub → PUZZLES): six chess-style puzzles with a story. You get 3–5 moves; the enemy answers every turn, and card reactions (counter-attacks, On Death draws, auras) can turn the tide. Hints, restart and progress tracking included.",
+      "created": "2026-11-04T20:00:00",
+      "edited": null
+    },
+    {
+      "id": "20261104200001000000",
+      "category": "Bug Fix",
+      "text": "Spells are cast by clicking anywhere on the board after selecting them (no more hunting for a deploy square).",
+      "created": "2026-11-04T20:01:00",
+      "edited": null
+    },
+    {
+      "id": "20261104200002000000",
+      "category": "Bug Fix",
+      "text": "The Lancer's charge works from the UI: after moving, select it again to attack.",
+      "created": "2026-11-04T20:02:00",
+      "edited": null
     }
   ],
   "revoked": []

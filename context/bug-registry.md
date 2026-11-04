@@ -13,7 +13,7 @@ Used to identify weak areas and improve code quality over time.
 
 | Category | Count | User-Found | Claude-Found | Test-Found |
 |----------|-------|------------|--------------|------------|
-| logic | 41 | 5 | 33 | 3 |
+| logic | 43 | 5 | 35 | 3 |
 | network | 16 | 6 | 9 | 1 |
 | state | 27 | 4 | 22 | 1 |
 | rendering | 15 | 1 | 13 | 1 |
@@ -22,7 +22,7 @@ Used to identify weak areas and improve code quality over time.
 | web3 | 3 | 0 | 3 | 0 |
 | type-safety | 7 | 2 | 5 | 0 |
 | security | 13 | 1 | 12 | 0 |
-| **TOTAL** | **137** | **21** | **110** | **6** |
+| **TOTAL** | **139** | **21** | **112** | **6** |
 
 ---
 
@@ -1431,3 +1431,23 @@ Used to identify weak areas and improve code quality over time.
 - **Fix**: Host gets only START; the guest's button label follows the server state (READY / UNREADY).
 - **Prevention**: Buttons that toggle server state render from that state (State-Driven Rendering).
 - **Files**: src/scenes/LobbyScene.ts
+
+### BUG-138: Spells could only be cast by clicking a unit deploy square
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: Selecting a spell highlighted the unit deploy squares and any other board click was rejected with 'Deploy on a highlighted square' — confusing, and impossible to guess when those squares are far away (found in story-puzzle QA).
+- **Root cause**: SelectionManager treated every hand card like a unit: casting required a click on `validDeploy`.
+- **Fix**: `isSpellCard` in the input adapter: a selected spell shows no deploy squares, says 'Click the board to cast', and any board click casts it.
+- **Prevention**: Card-class rules belong in the input adapter, not inferred from deploy squares.
+- **Files**: src/input/SelectionManager.ts, src/scenes/battle/InputCoordinator.ts
+
+### BUG-139: Lancer charge (move + attack) was impossible through the UI
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: After moving a Lancer, clicking it said 'This unit can't act right now' — the charge attack could only be done by bots.
+- **Root cause**: `canAct` in the input adapter returned false for any unit in `unitsActedThisTurn`, ignoring LANCER_CHARGE.
+- **Fix**: `canAct` asks the engine: a unit is selectable if it still has valid moves or attacks.
+- **Prevention**: UI permission checks must query the engine rules, never re-implement them.
+- **Files**: src/scenes/battle/InputCoordinator.ts

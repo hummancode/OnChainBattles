@@ -59,6 +59,10 @@ export function createSelectionManager(
       if (!unit) return [];
       return engine.getValidAttackSquares(unit.instanceId).map((p) => ({ col: p.col, row: p.row }));
     },
+    isSpellCard: (handIndex: number) => {
+      const id = engine.getState().players[localPlayerIndex]?.hand[handIndex];
+      return !!id && getCard(id).class === 'SPELL';
+    },
     getValidDeployPositions: () => {
       return engine.getValidDeployPositions().map((p) => ({ col: p.col, row: p.row }));
     },
@@ -113,8 +117,10 @@ export function createSelectionManager(
       if (state.turn?.activePlayer !== localPlayerIndex || state.turn?.phase !== 'ACT') return false;
       const unit = getBoardUnit(col, row);
       if (!unit) return false;
-      // Unit already moved or acted this turn
-      return !state.turn.unitsActedThisTurn.has(unit.instanceId);
+      // Ask the engine what this unit can still do — "already acted" is not enough:
+      // a charging Lancer has moved but may still attack (it was unselectable before).
+      return engine.getValidMoveSquares(unit.instanceId).length > 0
+        || engine.getValidAttackSquares(unit.instanceId).length > 0;
     },
     isPlayerUnit: (col: number, row: number) => {
       const unit = getBoardUnit(col, row);
