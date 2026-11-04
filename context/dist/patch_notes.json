@@ -571,6 +571,13 @@
       "text": "The defeated King now falls from the board when a match ends, and an Assassin's killing leap lands on the King's square.",
       "created": "2026-11-04T21:00:00",
       "edited": null
+    },
+    {
+      "id": "20261104220000000000",
+      "category": "New Content",
+      "text": "Clearer board: flat squares with your half, the enemy half and the middle row in their own colours, A–G / 1–7 labels, thick team-coloured frames, bigger ATK/DEF badges, a pulsing edge on units that can still act and dimmed units that already did. Moves show as blue dots, attacks as red crosshairs, deploy squares as green frames.",
+      "created": "2026-11-04T22:00:00",
+      "edited": null
     }
   ],
   "revoked": []

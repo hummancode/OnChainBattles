@@ -127,6 +127,16 @@ Sınırlı hamle hakkıyla (3–5) çözülen, rakibin her turda otomatik cevap 
 
 ---
 
+## Arayüz revizyonu 🔜
+
+| Adım | İş | Durum |
+|---|---|---|
+| 1 | Tahta okunurluğu: düz kareler (kendi yarın / rakip yarısı / nötr sıra ayrı tonlarda), A–G / 1–7 etiketleri, takım renkli kalın çerçeve + köşe şeridi, büyük ATK/DEF rozetleri, hareket edebilen birimde nabız gibi parlayan kenar, hamlesini yapmış birim sönük; hareket = mavi nokta, saldırı = kırmızı nişangâh, konuşlanma = yeşil köşeli çerçeve | ✅ |
+| 2 | HUD + el yerleşimi: üst rakip şeridi, alt oyuncu şeridi + el, faz göstergesi (PLAY → ACT → END), olay günlüğü, sabit önizleme alanı, LEG elmasları | ⏳ |
+| 3 | Menüler + tipografi: ortak buton/panel bileşeni, başlık + gövde fontu, Hub / Lobi / Sonuç | ⏳ |
+
+---
+
 ## Faz 5 — Web3 / canlıya hazırlık ⏸ (askıda)
 
 - Beraberlik iadesinin (`refundTie`) Fuji'de uçtan uca testi

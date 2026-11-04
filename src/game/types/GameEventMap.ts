@@ -30,7 +30,7 @@ export interface GameEventMap {
   UNIT_EXHAUSTED:      { col: number; row: number };
   UNIT_REFRESHED:      { col: number; row: number };
   UNIT_ACTIVATED:      EvUnitActivated;
-  UNIT_STATS_CHANGED:  { instanceId: string; atk?: number; currentHP?: number; maxHP?: number; canAct?: boolean };
+  UNIT_STATS_CHANGED:  { instanceId: string; atk?: number; currentHP?: number; maxHP?: number; canAct?: boolean; spent?: boolean };
   AURA_APPLIED:        EvAuraApplied;
 
   // ─── Card events (UI-adapted) ─────────────────────────────

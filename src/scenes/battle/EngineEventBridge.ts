@@ -31,6 +31,15 @@ export function unitCanAct(unit: any, activePlayer: number): boolean {
     && !unit.hasMoved && !unit.hasActed && !unit.isJustPlaced && unit.isActive;
 }
 
+/**
+ * How a unit should look right now: `ready` (its side's turn, can still act → glow),
+ * `spent` (its side's turn, already moved/attacked → dimmed), `idle` (everything else).
+ */
+export function unitVisualState(unit: any, activePlayer: number): 'ready' | 'spent' | 'idle' {
+  if (unit.owner !== activePlayer || unit.isJustPlaced || !unit.isActive) return 'idle';
+  return unit.hasMoved || unit.hasActed ? 'spent' : 'ready';
+}
+
 function emitStatsChanged(engine: any, instanceId: string): void {
   const state = engine.getState();
   const cell = state.board.find((c: any) => c.unit?.instanceId === instanceId);
@@ -42,6 +51,7 @@ function emitStatsChanged(engine: any, instanceId: string): void {
     currentHP: u.currentDef,
     maxHP: u.maxDef,
     canAct: unitCanAct(u, state.turn?.activePlayer),
+    spent: unitVisualState(u, state.turn?.activePlayer) === 'spent',
   });
 }
 
@@ -57,7 +67,7 @@ function emitStatsChanged(engine: any, instanceId: string): void {
 export function emitAllUnitStats(engine: any, profiler?: RenderProfiler): void {
   const state = engine.getState();
   const batch: Array<{
-    instanceId: string; atk: number; currentHP: number; maxHP: number; canAct: boolean;
+    instanceId: string; atk: number; currentHP: number; maxHP: number; canAct: boolean; spent: boolean;
   }> = [];
 
   for (const cell of state.board) {
@@ -69,6 +79,7 @@ export function emitAllUnitStats(engine: any, profiler?: RenderProfiler): void {
       currentHP: u.currentDef,
       maxHP: u.maxDef,
       canAct: unitCanAct(u, state.turn?.activePlayer),
+      spent: unitVisualState(u, state.turn?.activePlayer) === 'spent',
     });
   }
 
@@ -274,7 +285,8 @@ export function wireEngineToEventBus(engine: any, localPlayerIndex: number): () 
       case 'TURN_STARTED': {
         profiler.begin('TURN_STARTED');
         EventBus.emit(event.type, event);
-        later(() => refreshCanActIndicators(engine), 300);
+        // New turn: glow (can act) and dim (spent) both reset
+        later(() => { refreshCanActIndicators(engine); emitAllUnitStats(engine); }, 300);
         profiler.end();
         break;
       }

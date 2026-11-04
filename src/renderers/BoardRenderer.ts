@@ -151,9 +151,9 @@ const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, c
   }
 
   /** Update stats by instanceId — always resolves, even mid-tween. */
-  updateStatsByInstanceId(instanceId: string, atk: number | undefined, currentHP: number | undefined, maxHP: number | undefined, canAct: boolean): void {
+  updateStatsByInstanceId(instanceId: string, atk: number | undefined, currentHP: number | undefined, maxHP: number | undefined, canAct: boolean, spent?: boolean): void {
     const thumb = this.unitsById.get(instanceId);
-    if (thumb) thumb.updateStats(atk, currentHP, maxHP, canAct);
+    if (thumb) thumb.updateStats(atk, currentHP, maxHP, canAct, spent);
   }
 
   // ─────────────────────────────────────────────
@@ -332,34 +332,54 @@ const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, c
   // PRIVATE — GRID
   // ─────────────────────────────────────────────
 
+  /**
+   * Flat, low-contrast board: your half, the enemy half and the neutral middle row each get
+   * their own tone (subtle checker inside each), so units and highlights read first.
+   * The old stone texture (board_skin) is only used if the theme asks for it.
+   */
   private buildGrid(): void {
     const g = this.layout.grid;
-    const T = this.theme.board;
+    const T = this.theme.board as any;
     const boardW = g.cols * g.cellSize, boardH = g.rows * g.cellSize;
-    const hasSkin = this.scene.textures.exists('board_skin');
+    const useSkin = T.useBoardSkinTexture === true && this.scene.textures.exists('board_skin');
+    const half = Math.floor(g.rows / 2);           // rows 0..2 = P1 half, 3 = neutral, 4..6 = P2 half
+    const tones = {
+      mine:    [ThemeLoader.hexToNum(T.ownHalfA ?? '#24364F'), ThemeLoader.hexToNum(T.ownHalfB ?? '#20304A')],
+      theirs:  [ThemeLoader.hexToNum(T.enemyHalfA ?? '#3A2633'), ThemeLoader.hexToNum(T.enemyHalfB ?? '#35222E')],
+      neutral: [ThemeLoader.hexToNum(T.neutralA ?? '#34363F'), ThemeLoader.hexToNum(T.neutralB ?? '#30323A')],
+    };
 
-    if (hasSkin) {
+    // Frame around the board
+    const frame = this.scene.add.graphics();
+    frame.fillStyle(0x0A0E18, 1);
+    // Dark backing wide enough for the A–G / 1–7 labels, then a gold rim around the squares
+    frame.fillStyle(0x0A0E18, 0.92);
+    frame.fillRoundedRect(g.originX - 28, g.originY - 26, boardW + 36, boardH + 32, 8);
+    frame.fillStyle(0x0A0E18, 1);
+    frame.fillRoundedRect(g.originX - 6, g.originY - 6, boardW + 12, boardH + 12, 6);
+    frame.lineStyle(2, 0xC9A45C, 0.55);
+    frame.strokeRoundedRect(g.originX - 6, g.originY - 6, boardW + 12, boardH + 12, 6);
+    this.cellContainer.add(frame);
+
+    if (useSkin) {
       this.cellContainer.add(
-        this.scene.add.image(g.originX + boardW / 2, g.originY + boardH / 2, 'board_skin')
-          .setDisplaySize(boardW, boardH)
+        this.scene.add.image(g.originX + boardW / 2, g.originY + boardH / 2, 'board_skin').setDisplaySize(boardW, boardH),
       );
     }
-
-    // When board_skin is present, use lower fill opacity and skip grid lines
-    // (the image already has aligned grout lines baked in)
-    const fillAlpha = hasSkin ? 0.35 : 0.6;
 
     for (let row = 0; row < g.rows; row++) {
       for (let col = 0; col < g.cols; col++) {
         const px = g.originX + col * g.cellSize;
         const displayRow = this.mirrorRow(row);
         const py = g.originY + displayRow * g.cellSize;
-        const isEven = (col + row) % 2 === 0;
+        const parity = (col + row) % 2;
+        const mineRow = this.localPlayerIndex === 0 ? row < half : row > half;
+        const zone = row === half ? tones.neutral : mineRow ? tones.mine : tones.theirs;
 
         const cell = this.scene.add.graphics();
-        cell.fillStyle(ThemeLoader.hexToNum(isEven ? T.cellEvenFill : T.cellOddFill), fillAlpha);
+        cell.fillStyle(zone[parity], useSkin ? 0.35 : 1);
         cell.fillRect(px, py, g.cellSize, g.cellSize);
-        cell.lineStyle(g.gridLineWidth, ThemeLoader.hexToNum(T.gridLineColor), hasSkin ? 0.25 : 1);
+        cell.lineStyle(1, 0x0A0E18, 0.9);
         cell.strokeRect(px, py, g.cellSize, g.cellSize);
 
         cell.setInteractive(
@@ -374,24 +394,19 @@ const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, c
         this.cellGraphics.set(this.cellKey(col, row), cell);
       }
     }
+
+    // Thin gold lines where the halves meet the neutral row
+    const seams = this.scene.add.graphics();
+    seams.lineStyle(2, 0xC9A45C, 0.35);
+    for (const r of [half, half + 1]) {
+      const y = g.originY + r * g.cellSize;
+      seams.lineBetween(g.originX, y, g.originX + boardW, y);
+    }
+    this.cellContainer.add(seams);
   }
 
-  private buildHalfTints(): void {
-    const g = this.layout.grid;
-    const T = this.theme.board;
-    const playerHalf = ThemeLoader.hexToColorAlpha(T.playerHalfTint);
-    const enemyHalf  = ThemeLoader.hexToColorAlpha(T.enemyHalfTint);
-    const deployRows = 3;
-
-    const pt = this.scene.add.graphics();
-    pt.fillStyle(playerHalf.color, playerHalf.alpha);
-    pt.fillRect(g.originX, g.originY + (g.rows - deployRows) * g.cellSize,
-                g.cols * g.cellSize, deployRows * g.cellSize);
-    const et = this.scene.add.graphics();
-    et.fillStyle(enemyHalf.color, enemyHalf.alpha);
-    et.fillRect(g.originX, g.originY, g.cols * g.cellSize, deployRows * g.cellSize);
-    this.cellContainer.add([pt, et]);
-  }
+  /** Kept for theme compatibility — the flat board already colours each half. */
+  private buildHalfTints(): void { /* zones are coloured in buildGrid */ }
 
   private buildCoords(): void {
     if (!this.layout.grid.coordsVisible) return;
@@ -399,19 +414,20 @@ const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, c
     const fc = {
       fontFamily: this.theme.fonts.coordLabel.family,
       fontSize: `${g.coordsFontSize}px`,
+      fontStyle: 'bold',
       color: this.theme.board.coordColor,
     };
     const labels = 'ABCDEFGHIJKL'.slice(0, g.cols);
     for (let col = 0; col < g.cols; col++) {
       this.coordContainer.add(
         this.scene.add.text(g.originX + col * g.cellSize + g.cellSize / 2,
-          g.originY - g.coordsFontSize - 2, labels[col], fc).setOrigin(0.5, 0.5)
+          g.originY - 14, labels[col], fc).setOrigin(0.5, 0.5)
       );
     }
     for (let row = 0; row < g.rows; row++) {
       const dr = this.mirrorRow(row);
       this.coordContainer.add(
-        this.scene.add.text(g.originX - g.coordsFontSize - 2,
+        this.scene.add.text(g.originX - 16,
           g.originY + dr * g.cellSize + g.cellSize / 2, String(row + 1), fc).setOrigin(0.5, 0.5)
       );
     }
@@ -438,17 +454,18 @@ const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, c
 
     switch (type) {
       case 'move': {
-        const { color, alpha } = ThemeLoader.hexToColorAlpha(T.cellValidMove);
-        gfx.fillStyle(color, alpha); gfx.fillRect(px, py, g.cellSize, g.cellSize);
+        // Blue dot (+ faint wash): "you can go here"
+        const cx = px + g.cellSize / 2, cy = py + g.cellSize / 2;
+        gfx.fillStyle(0x4FA3FF, 0.12); gfx.fillRect(px, py, g.cellSize, g.cellSize);
+        gfx.fillStyle(0x0A0E18, 0.55); gfx.fillCircle(cx, cy, 13);
+        gfx.fillStyle(0x4FA3FF, 0.95); gfx.fillCircle(cx, cy, 9);
         break;
       }
       case 'attackRange': {
-        const cx = px + g.cellSize / 2, cy = py + g.cellSize / 2, s = g.cellSize * 0.2;
+        // Reach of the selected unit: small faint red ring (no target there)
+        const cx = px + g.cellSize / 2, cy = py + g.cellSize / 2;
         const m = this.scene.add.graphics();
-        m.lineStyle(1.5, 0xFF4444, 0.4);
-        m.lineBetween(cx - s, cy - s, cx + s, cy + s);
-        m.lineBetween(cx + s, cy - s, cx - s, cy + s);
-        m.lineStyle(1, 0xFF4444, 0.3); m.strokeCircle(cx, cy, s * 0.8);
+        m.lineStyle(2, 0xFF5A5A, 0.35); m.strokeCircle(cx, cy, 7);
         this.attackMarkerContainer.add(m);
         const markerKey = `${this.cellKey(col, row)}_attackRange_marker`;
         this.highlights.set(markerKey, m);
@@ -456,13 +473,16 @@ const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, c
         break;
       }
       case 'attack': {
-        const cx = px + g.cellSize / 2, cy = py + g.cellSize / 2, s = g.cellSize * 0.3;
+        // Red crosshair over the target + red cell frame: "you can hit this"
+        const cx = px + g.cellSize / 2, cy = py + g.cellSize / 2, r = g.cellSize * 0.24;
         const m = this.scene.add.graphics();
-        m.fillStyle(0x000000, 0.6); m.fillCircle(cx, cy, s * 0.7);
-        m.lineStyle(3, 0xFF4444, 1.0);
-        m.lineBetween(cx - s * 0.5, cy - s * 0.5, cx + s * 0.5, cy + s * 0.5);
-        m.lineBetween(cx + s * 0.5, cy - s * 0.5, cx - s * 0.5, cy + s * 0.5);
-        m.lineStyle(2, 0xFF4444, 0.9); m.strokeCircle(cx, cy, s * 0.7);
+        m.lineStyle(3, 0xFF3B3B, 0.9); m.strokeRect(px + 2, py + 2, g.cellSize - 4, g.cellSize - 4);
+        m.fillStyle(0x000000, 0.35); m.fillCircle(cx, cy, r + 3);
+        m.lineStyle(3, 0xFF3B3B, 1); m.strokeCircle(cx, cy, r);
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          m.lineBetween(cx + dx * (r - 6), cy + dy * (r - 6), cx + dx * (r + 9), cy + dy * (r + 9));
+        }
+        m.fillStyle(0xFF3B3B, 1); m.fillCircle(cx, cy, 3);
         this.attackMarkerContainer.add(m);
         const markerKey = `${this.cellKey(col, row)}_attack_marker`;
         this.highlights.set(markerKey, m);
@@ -475,14 +495,20 @@ const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, c
         break;
       }
       case 'selected': {
-        gfx.lineStyle(3, ThemeLoader.hexToNum(T.cellSelected), 1);
+        gfx.lineStyle(4, 0xFFD54F, 1);
         gfx.strokeRect(px + 1, py + 1, g.cellSize - 2, g.cellSize - 2);
         break;
       }
       case 'deploy': {
-        gfx.fillStyle(0x00ff88, 0.25); gfx.fillRect(px, py, g.cellSize, g.cellSize);
-        gfx.lineStyle(3, 0x00ff88, 0.9);
-        gfx.strokeRect(px + 2, py + 2, g.cellSize - 4, g.cellSize - 4);
+        // Green frame with corner marks: "you can place a card here"
+        gfx.fillStyle(0x3DDC84, 0.14); gfx.fillRect(px, py, g.cellSize, g.cellSize);
+        gfx.lineStyle(2, 0x3DDC84, 0.8);
+        gfx.strokeRect(px + 5, py + 5, g.cellSize - 10, g.cellSize - 10);
+        const k = 16;
+        gfx.lineStyle(4, 0x3DDC84, 1);
+        for (const [x, y, sx, sy] of [[px + 4, py + 4, 1, 1], [px + g.cellSize - 4, py + 4, -1, 1], [px + 4, py + g.cellSize - 4, 1, -1], [px + g.cellSize - 4, py + g.cellSize - 4, -1, -1]]) {
+          gfx.lineBetween(x, y, x + sx * k, y); gfx.lineBetween(x, y, x, y + sy * k);
+        }
         break;
       }
       case 'hover': {
@@ -491,7 +517,8 @@ const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, c
         break;
       }
     }
-    this.highlightContainer.add(gfx);
+    // The selection frame must sit ABOVE the unit art (thumbnails cover the whole cell)
+    (type === 'selected' ? this.attackMarkerContainer : this.highlightContainer).add(gfx);
     this.highlights.set(key, gfx);
     typeSet.add(key);
   }
@@ -624,18 +651,18 @@ const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, c
 
       // UNIT_STATS_BATCH: bulk update all unit stats in one pass (from aura recalc)
       EventBus.on('UNIT_STATS_BATCH' as any, ({ units }: {
-        units: Array<{ instanceId: string; atk: number; currentHP: number; maxHP: number; canAct: boolean }>;
+        units: Array<{ instanceId: string; atk: number; currentHP: number; maxHP: number; canAct: boolean; spent?: boolean }>;
       }) => {
         for (const u of units) {
-          this.updateStatsByInstanceId(u.instanceId, u.atk, u.currentHP, u.maxHP, u.canAct);
+          this.updateStatsByInstanceId(u.instanceId, u.atk, u.currentHP, u.maxHP, u.canAct, u.spent);
         }
       }),
 
       // UNIT_STATS_CHANGED: single unit update — look up by instanceId, works mid-tween
-      EventBus.on('UNIT_STATS_CHANGED' as any, ({ instanceId, atk, currentHP, maxHP, canAct }: {
-        instanceId: string; atk?: number; currentHP?: number; maxHP?: number; canAct: boolean;
+      EventBus.on('UNIT_STATS_CHANGED' as any, ({ instanceId, atk, currentHP, maxHP, canAct, spent }: {
+        instanceId: string; atk?: number; currentHP?: number; maxHP?: number; canAct: boolean; spent?: boolean;
       }) => {
-        this.updateStatsByInstanceId(instanceId, atk, currentHP, maxHP, canAct);
+        this.updateStatsByInstanceId(instanceId, atk, currentHP, maxHP, canAct, spent);
       }),
 
       // CAN_ACT_UPDATE: toggle glow per unit on turn boundary

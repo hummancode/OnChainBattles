@@ -8,11 +8,11 @@
   "grid": {
     "cols": 7,
     "rows": 7,
-    "cellSize": 102,
-    "originX": 283,
-    "originY": 3,
+    "cellSize": 96,
+    "originX": 304,
+    "originY": 26,
     "coordsVisible": true,
-    "coordsFontSize": 11,
+    "coordsFontSize": 14,
     "gridLineWidth": 1
   },
   "leftHUD": {
@@ -60,9 +60,9 @@
       "typeIconSize": 16, "cornerRadius": 6
     },
     "thumbnail": {
-      "width": 100, "height": 100,
-      "margin": 1, "hpBarHeight": 0,
-      "badgeFontSize": 13, "badgeWidth": 24, "badgeHeight": 18
+      "width": 92, "height": 92,
+      "margin": 2, "hpBarHeight": 0,
+      "badgeFontSize": 16, "badgeWidth": 28, "badgeHeight": 22
     },
     "detail": {
       "width": 220, "height": 320,
