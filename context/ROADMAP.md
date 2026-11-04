@@ -108,6 +108,23 @@ Bot-vs-bot fuzz (`npm run test:fuzz`) + kod incelemesi: motor 10, sunucu 7, iste
 
 ---
 
+## Hikâye puzzle'ları (satranç tarzı) 🚧 yarım — devam edilecek
+
+Sınırlı hamle hakkıyla (3–5) çözülen, rakibin her turda otomatik cevap verdiği senaryolar.
+
+| Parça | Durum |
+|---|---|
+| Motor: `GameEngine.loadPosition` (elle kurulmuş pozisyon) | ✅ |
+| `src/game/scenarios/ScenarioRunner.ts`: hamle bütçesi, hedefler (KILL_KING / KILL_UNITS / SURVIVE), tur limiti, rakip cevabı (senaryo → Zor bot) | ✅ testli |
+| Arayüz: Hub → PUZZLES → `ScenarioSelectScene`; savaşta hikâye girişi, hamle/tur paneli, HINT / RESTART / EXIT, anlatım bantları, sonuç ekranı, ilerleme kaydı | ✅ (ilk puzzle ile tarayıcıda denendi) |
+| Puzzle 1 "Breach the Gate" | ✅ oyunda |
+| Puzzle 2–5 taslakları (`src/game/scenarios/drafts.ts`): mekanikleri çözücüyle doğrulandı, **hikâye metinleri yazılmadı** | ⏳ |
+| Puzzle 6 + metinler, `scenarios.ts`'e taşıma, tam akış QA, sürüm notları | ⏳ |
+
+Araçlar: `tests/engine/scenarios/solver.ts` (kaba kuvvet çözücü), `tests/engine/scenarios/scenarios.test.ts` (çözüm kazanır, pas geçmek kazanmaz, kısa yol yok).
+
+---
+
 ## Faz 5 — Web3 / canlıya hazırlık ⏸ (askıda)
 
 - Beraberlik iadesinin (`refundTie`) Fuji'de uçtan uca testi
