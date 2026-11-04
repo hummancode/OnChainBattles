@@ -40,9 +40,11 @@ export function setupHUDRefresh(
 
   // Debounce: coalesce multiple events in the same frame into one refresh
   let refreshPending = false;
+  let rafId: number | null = null;
 
   const doRefresh = () => {
     refreshPending = false;
+    rafId = null;
     const state = engine.getState();
     if (!state) return;
     if (hand) reconcileHand(engine, localPlayerIndex, hand);
@@ -81,11 +83,13 @@ export function setupHUDRefresh(
   const scheduleRefresh = () => {
     if (!refreshPending) {
       refreshPending = true;
-      requestAnimationFrame(doRefresh);
+      rafId = requestAnimationFrame(doRefresh);
     }
   };
 
   const unsubs: Array<() => void> = [];
+  // A frame scheduled just before teardown must not refresh a shut-down scene.
+  unsubs.push(() => { if (rafId !== null) cancelAnimationFrame(rafId); rafId = null; refreshPending = false; });
   unsubs.push(EventBus.on(EV.LEG_GAINED,          scheduleRefresh));
   unsubs.push(EventBus.on(EV.LEG_SPENT,           scheduleRefresh));
   unsubs.push(EventBus.on('LEG_RATE_CHANGED',     scheduleRefresh));

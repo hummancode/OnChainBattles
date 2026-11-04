@@ -148,4 +148,27 @@ describe('Server review findings', () => {
     await sleep(60);
     expect(both).toBe(1);
   });
+
+  it('refuses new rooms when the server is at its room cap', async () => {
+    const prev = RoomManager.MAX_ROOMS;
+    RoomManager.MAX_ROOMS = rooms.roomCount();
+    try {
+      const c = await connect();
+      const err = once<any>(c, 'lobby:error');
+      c.emit('lobby:create', { playerName: 'X', settings: {} });
+      expect((await err).message).toMatch(/busy/i);
+      const err2 = once<any>(c, 'error');
+      c.emit('createRoom', { roomCode: 'CAP001', playerName: 'X' });
+      expect((await err2).message).toMatch(/busy/i);
+    } finally { RoomManager.MAX_ROOMS = prev; }
+  });
+
+  it('caps the pre-battle action queue', async () => {
+    const a = await connect(), b = await connect();
+    const c1 = once(a, 'roomCreated'); a.emit('createRoom', { roomCode: 'QCAP01', playerName: 'A' }); await c1;
+    const j1 = once(b, 'roomJoined'); b.emit('joinRoom', { roomCode: 'QCAP01', playerName: 'B' }); await j1;
+    for (let i = 0; i < 500; i++) a.emit('game_action', { roomCode: 'QCAP01', action: { type: 'END_PLAY_PHASE' } });
+    await sleep(150);
+    expect(rooms.getRoom('QCAP01')!.actionQueue.length).toBeLessThanOrEqual(64);
+  });
 });

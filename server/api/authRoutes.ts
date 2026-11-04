@@ -43,6 +43,10 @@ const WINDOW_MS = 15 * 60 * 1000;
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
+  // Bounded memory: drop expired windows once the map grows (it was never pruned)
+  if (loginAttempts.size > 5000) {
+    for (const [k, v] of loginAttempts) if (v.resetAt < now) loginAttempts.delete(k);
+  }
   const entry = loginAttempts.get(ip);
   if (!entry || entry.resetAt < now) {
     loginAttempts.set(ip, { count: 1, resetAt: now + WINDOW_MS });
@@ -116,8 +120,11 @@ authRouter.get('/nonce', (req, res) => {
   }
 
   cleanExpiredNonces();
-  const nonce = crypto.randomBytes(32).toString('hex');
-  nonceStore.set(wallet, { nonce, expiresAt: Date.now() + 5 * 60 * 1000 });
+  // Reuse a live nonce: issuing a new one on every request let anyone invalidate
+  // another wallet's pending login by asking for its nonce.
+  const live = nonceStore.get(wallet);
+  const nonce = live && live.expiresAt > Date.now() ? live.nonce : crypto.randomBytes(32).toString('hex');
+  if (!live || live.nonce !== nonce) nonceStore.set(wallet, { nonce, expiresAt: Date.now() + 5 * 60 * 1000 });
 
   res.json({ nonce, message: buildNonceMessage(nonce) });
 });

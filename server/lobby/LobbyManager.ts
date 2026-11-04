@@ -39,6 +39,9 @@ export class LobbyManager {
         socket.emit('lobby:error', { message: 'Finish your current match first.' }); return;
       }
       const playerId = found?.room.players.find(p => p.id === socket.id)?.playerId ?? null;
+      if (this.rooms.atCapacity()) {
+        socket.emit('lobby:error', { message: 'Server is busy — try again in a minute.' }); return;
+      }
 
       this.rooms.removeFromAllRooms(socket.id);
       const code = this.rooms.generateUniqueCode();

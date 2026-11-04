@@ -17,12 +17,12 @@ Used to identify weak areas and improve code quality over time.
 | network | 15 | 6 | 8 | 1 |
 | state | 25 | 4 | 20 | 1 |
 | rendering | 11 | 1 | 9 | 1 |
-| race-condition | 5 | 2 | 3 | 0 |
-| memory-leak | 6 | 0 | 6 | 0 |
+| race-condition | 6 | 2 | 4 | 0 |
+| memory-leak | 7 | 0 | 7 | 0 |
 | web3 | 3 | 0 | 3 | 0 |
 | type-safety | 7 | 2 | 5 | 0 |
-| security | 12 | 1 | 11 | 0 |
-| **TOTAL** | **119** | **21** | **92** | **6** |
+| security | 13 | 1 | 12 | 0 |
+| **TOTAL** | **122** | **21** | **95** | **6** |
 
 ---
 
@@ -1249,3 +1249,33 @@ Used to identify weak areas and improve code quality over time.
 - **Fix**: Parse as UTC (`T…Z`) unless the value already carries a zone.
 - **Prevention**: Treat zone-less DB timestamps as UTC everywhere.
 - **Files**: server/api/puzzleRoutes.ts
+
+### BUG-120: Unbounded server state (rooms, pre-battle queue, login attempts) and nonce overwrite
+- **Date**: 2026-11-04
+- **Category**: `security`
+- **Discovered by**: `claude`
+- **Symptom**: A script could create unlimited rooms, push unlimited actions into a room's pre-battle queue, grow the login rate-limit map forever, and invalidate another wallet's pending login by requesting its nonce again.
+- **Root cause**: No caps on `rooms` / `actionQueue`; `loginAttempts` never pruned; `/nonce` always replaced the stored nonce.
+- **Fix**: `RoomManager.MAX_ROOMS` (env `MAX_ROOMS`, default 1000) → "Server is busy"; `SessionManager.MAX_QUEUED_ACTIONS = 64`; expired login windows pruned above 5000 entries; a live nonce is reused.
+- **Prevention**: Every map/array fed by clients gets a bound and an eviction rule.
+- **Files**: server/rooms/RoomManager.ts, server/net/wireConnection.ts, server/lobby/LobbyManager.ts, server/game/SessionManager.ts, server/api/authRoutes.ts
+
+### BUG-121: Moved unit was only re-keyed after its 220 ms tween
+- **Date**: 2026-11-04
+- **Category**: `race-condition`
+- **Discovered by**: `claude`
+- **Symptom**: A death/stat event or click on the destination square right after a move (fast bot turns, replays at 3x, move-then-attack) found no unit there.
+- **Root cause**: `animateUnitMove` updated `unitsByCell` in the tween's onComplete.
+- **Fix**: Re-key and update the logical position immediately; the tween is purely visual.
+- **Prevention**: Logical state changes synchronously; animations never own state.
+- **Files**: src/renderers/BoardRenderer.ts
+
+### BUG-122: Deferred UI refreshes could fire after the battle scene shut down
+- **Date**: 2026-11-04
+- **Category**: `memory-leak`
+- **Discovered by**: `claude`
+- **Symptom**: A `setTimeout` (can-act indicators) and a `requestAnimationFrame` (HUD refresh) scheduled just before leaving a match ran against a dead scene.
+- **Root cause**: Neither was tracked or cancelled in the teardown functions.
+- **Fix**: EngineEventBridge tracks its timers and clears them on unwire; HUD refresh cancels its pending frame.
+- **Prevention**: Every timer/frame request is owned by something with a cleanup path (Symmetry rule).
+- **Files**: src/scenes/battle/EngineEventBridge.ts, src/scenes/battle/HUDRefreshCoordinator.ts

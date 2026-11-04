@@ -233,23 +233,22 @@ const thumb = new UnitThumbnail(this.scene, this.layout, this.theme, data, cx, c
     const targetX = g.originX + to.col * g.cellSize + (g.cellSize - L.width) / 2;
     const targetY = g.originY + displayRow * g.cellSize + (g.cellSize - L.height) / 2;
 
+    // Re-key NOW (logical position), animate the visual afterwards: events and clicks that
+    // arrive during the tween must find the unit on its new square.
+    if (this.unitsByCell.get(fromKey) === thumb) this.unitsByCell.delete(fromKey);
+    const newKey = this.cellKey(to.col, to.row);
+    this.unitsByCell.set(newKey, thumb);
+    thumb.col = to.col;
+    thumb.row = to.row;
+    thumb.cellKey = newKey;
+
     this.scene.tweens.add({
       targets: thumb.container,
       x: targetX,
       y: targetY,
       duration: 220,
       ease: 'Quad.easeInOut',
-onComplete: () => {
-        // Re-key in cell map (instanceId map unchanged — same object)
-        this.unitsByCell.delete(fromKey);
-        const newKey = this.cellKey(to.col, to.row);
-        this.unitsByCell.set(newKey, thumb);
-        // Update logical position + cellKey so pointer closures report correct cell
-        thumb.col = to.col;
-        thumb.row = to.row;
-        thumb.cellKey = newKey;
-        onComplete?.();
-      },
+      onComplete: () => onComplete?.(),
     });
   }
 

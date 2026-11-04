@@ -25,6 +25,9 @@ const log = new Logger('Session');
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
 export class SessionManager {
+  /** Actions held before both players are battle-ready (a real client sends a handful). */
+  static MAX_QUEUED_ACTIONS = 64;
+
   /** Extension points (persistence, turn timer) — set by app.ts / tests. */
   hooks: {
     onActionCommitted?: (roomCode: string, room: Room) => void;
@@ -96,6 +99,10 @@ export class SessionManager {
       if (room.battleReadyCount < 2) {
         // Legacy: queued until both are ready, validated by the simulation at flush time.
         action.by = playerIndex;
+        if (room.actionQueue.length >= SessionManager.MAX_QUEUED_ACTIONS) {
+          log.warn(`Dropped queued ${action.type} in ${roomCode} — queue full`);
+          return;
+        }
         room.actionQueue.push(action);
         log.debug(`Queued action (opponent not ready): ${action.type}`);
         return;

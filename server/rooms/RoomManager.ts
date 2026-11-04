@@ -33,6 +33,14 @@ export class RoomManager {
    * Lobby kick / leave / start and joining elsewhere all respect this — they used to
    * splice players out of running matches, shifting seat indices (and payouts).
    */
+  /** Upper bound on live rooms (abuse guard; MAX_ROOMS env overrides). */
+  static MAX_ROOMS = Number(process.env.MAX_ROOMS) || 1000;
+
+  roomCount(): number { return this.rooms.size; }
+
+  /** True when no new room may be created right now. */
+  atCapacity(): boolean { return this.rooms.size >= RoomManager.MAX_ROOMS; }
+
   static isLocked(room: Room): boolean {
     return !!room.simulation || room.battleReadyCount > 0 ||
       (room.status !== undefined && room.status !== 'waiting' && room.status !== 'full');

@@ -99,6 +99,12 @@ export function getActiveProfiler(): RenderProfiler | null { return _activeProfi
 export function wireEngineToEventBus(engine: any, localPlayerIndex: number): () => void {
   const profiler = new RenderProfiler();
   _activeProfiler = profiler;
+  // Deferred UI refreshes — cancelled on teardown so they never touch a shut-down scene.
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  const later = (fn: () => void, ms: number) => {
+    const t = setTimeout(() => { timers.delete(t); fn(); }, ms);
+    timers.add(t);
+  };
 
   const handler = (event: any) => {
     switch (event.type) {
@@ -268,7 +274,7 @@ export function wireEngineToEventBus(engine: any, localPlayerIndex: number): () 
       case 'TURN_STARTED': {
         profiler.begin('TURN_STARTED');
         EventBus.emit(event.type, event);
-        setTimeout(() => refreshCanActIndicators(engine), 300);
+        later(() => refreshCanActIndicators(engine), 300);
         profiler.end();
         break;
       }
@@ -322,6 +328,8 @@ export function wireEngineToEventBus(engine: any, localPlayerIndex: number): () 
   engine.on(handler);
   return () => {
     engine.off(handler);
+    for (const t of timers) clearTimeout(t);
+    timers.clear();
     _activeProfiler = null;
   };
 }

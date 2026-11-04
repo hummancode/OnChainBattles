@@ -59,6 +59,10 @@ export function wireConnection(
       socket.emit('error', { message: 'Room code unavailable — try again.' });
       return;
     }
+    if (rooms.atCapacity()) {
+      socket.emit('error', { message: 'Server is busy — try again in a minute.' });
+      return;
+    }
     rooms.createRoom(socket.id, roomCode, playerName, guestSessionId);
     socket.join(roomCode);
     socket.emit('roomCreated', { roomCode, playerIndex: 0 });
