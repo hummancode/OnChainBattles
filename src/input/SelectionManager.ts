@@ -239,7 +239,7 @@ export class SelectionManager {
     }
 
     if (phase !== 'ACT') {
-      this.toast('Units move and attack in the ACT phase — press TO ACT PHASE when you're done playing cards');
+      this.toast('Units move and attack in the ACT phase — press TO ACT PHASE when done playing cards');
       return;
     }
 
