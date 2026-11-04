@@ -61,8 +61,12 @@ export function executeMove(ctx: GameContext, unitId: string, col: number, row: 
     if (!canUnitAttack(unit)) return false;
     unit.hasMoved = true;
     executeCombat(ctx, unit, landingEnemy, true);  // isAssassinJump = true → sets hasActed
-    if (ctx.status !== EngineStatus.GAME_OVER && ctx.board.getUnitById(unitId)
-        && !ctx.board.getUnit(col, row)) {
+    // Kings never leave the board in combat (the game ends instead). A killing leap still
+    // lands: the fallen King is taken off its square so the Assassin can stand there.
+    if (landingEnemy.cardId === 'king' && landingEnemy.currentDef <= 0 && ctx.status === EngineStatus.GAME_OVER) {
+      ctx.board.removeUnit(landingEnemy.instanceId);
+    }
+    if (ctx.board.getUnitById(unitId) && !ctx.board.getUnit(col, row)) {
       ctx.board.moveUnit(unitId, col, row);
       unit.lastMoveDirection = { dx: Math.sign(col - from.col), dy: Math.sign(row - from.row) };
       ctx.emit({ type: 'UNIT_MOVED', instanceId: unitId, cardId: unit.cardId, owner: unit.owner, from, to: { col, row } });

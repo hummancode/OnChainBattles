@@ -16,13 +16,13 @@ Used to identify weak areas and improve code quality over time.
 | logic | 43 | 5 | 35 | 3 |
 | network | 16 | 6 | 9 | 1 |
 | state | 27 | 4 | 22 | 1 |
-| rendering | 15 | 1 | 13 | 1 |
+| rendering | 16 | 2 | 13 | 1 |
 | race-condition | 6 | 2 | 4 | 0 |
 | memory-leak | 7 | 0 | 7 | 0 |
 | web3 | 3 | 0 | 3 | 0 |
 | type-safety | 7 | 2 | 5 | 0 |
 | security | 13 | 1 | 12 | 0 |
-| **TOTAL** | **139** | **21** | **112** | **6** |
+| **TOTAL** | **140** | **22** | **112** | **6** |
 
 ---
 
@@ -1451,3 +1451,13 @@ Used to identify weak areas and improve code quality over time.
 - **Fix**: `canAct` asks the engine: a unit is selectable if it still has valid moves or attacks.
 - **Prevention**: UI permission checks must query the engine rules, never re-implement them.
 - **Files**: src/scenes/battle/InputCoordinator.ts
+
+### BUG-140: Dead King stayed on the board at game over; a killing Assassin leap didn't land
+- **Date**: 2026-11-04
+- **Category**: `rendering`
+- **Discovered by**: `user`
+- **Symptom**: When a puzzle/match ended on a King kill, the King card stayed on the board showing 0 HP, and an Assassin that killed it with a jump stayed on its start square.
+- **Root cause**: Kings never emit UNIT_DIED (the game ends instead), so the renderer never played their death; the jump-landing code skipped the move when the game was over and the King still occupied the square.
+- **Fix**: EngineEventBridge emits UNIT_DIED for every 0-HP King on GAME_OVER (death animation in all modes); a killing jump onto a King removes the fallen King and lands the Assassin; HUD shows 0 HP for a missing King.
+- **Prevention**: Terminal states need a visual end state too — test what the board shows after GAME_OVER, not just the result.
+- **Files**: src/game/phases/ActPhase.ts, src/scenes/battle/EngineEventBridge.ts, src/scenes/battle/HUDRefreshCoordinator.ts, tests/engine/regression/kingFallsVisibly.test.ts

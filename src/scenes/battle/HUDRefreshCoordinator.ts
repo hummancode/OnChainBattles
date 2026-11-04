@@ -51,7 +51,8 @@ export function setupHUDRefresh(
 
     const getKingHP = (owner: number) => {
       const cell = state.board.find((c) => c.unit?.cardId === 'king' && c.unit?.owner === owner);
-      return { current: cell?.unit?.currentDef ?? 30, max: cell?.unit?.maxDef ?? 30 };
+      // No King on the board = it fell (an Assassin's killing leap takes its square)
+      return { current: cell?.unit?.currentDef ?? 0, max: cell?.unit?.maxDef ?? 10 };
     };
 
     const playerKing = getKingHP(localPlayerIndex);

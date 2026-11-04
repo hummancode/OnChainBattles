@@ -564,6 +564,13 @@
       "text": "The Lancer's charge works from the UI: after moving, select it again to attack.",
       "created": "2026-11-04T20:02:00",
       "edited": null
+    },
+    {
+      "id": "20261104210000000000",
+      "category": "Bug Fix",
+      "text": "The defeated King now falls from the board when a match ends, and an Assassin's killing leap lands on the King's square.",
+      "created": "2026-11-04T21:00:00",
+      "edited": null
     }
   ],
   "revoked": []

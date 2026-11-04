@@ -312,6 +312,14 @@ export function wireEngineToEventBus(engine: any, localPlayerIndex: number): () 
 
       case 'GAME_OVER': {
         profiler.begin('GAME_OVER');
+        // Kings never get a UNIT_DIED (the game ends instead) — play their fall now so the
+        // board doesn't keep showing a 0-HP King under the result.
+        for (const cell of engine.getState().board) {
+          const u = cell.unit;
+          if (u?.cardId === 'king' && u.currentDef <= 0) {
+            EventBus.emit('UNIT_DIED', { col: cell.col, row: cell.row, instanceId: u.instanceId });
+          }
+        }
         EventBus.emit('GAME_OVER', event);
         profiler.end();
         break;
