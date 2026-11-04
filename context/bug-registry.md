@@ -20,9 +20,9 @@ Used to identify weak areas and improve code quality over time.
 | race-condition | 6 | 2 | 4 | 0 |
 | memory-leak | 7 | 0 | 7 | 0 |
 | web3 | 3 | 0 | 3 | 0 |
-| type-safety | 7 | 2 | 5 | 0 |
+| type-safety | 8 | 2 | 5 | 1 |
 | security | 13 | 1 | 12 | 0 |
-| **TOTAL** | **140** | **22** | **112** | **6** |
+| **TOTAL** | **141** | **22** | **112** | **7** |
 
 ---
 
@@ -1461,3 +1461,13 @@ Used to identify weak areas and improve code quality over time.
 - **Fix**: EngineEventBridge emits UNIT_DIED for every 0-HP King on GAME_OVER (death animation in all modes); a killing jump onto a King removes the fallen King and lands the Assassin; HUD shows 0 HP for a missing King.
 - **Prevention**: Terminal states need a visual end state too — test what the board shows after GAME_OVER, not just the result.
 - **Files**: src/game/phases/ActPhase.ts, src/scenes/battle/EngineEventBridge.ts, src/scenes/battle/HUDRefreshCoordinator.ts, tests/engine/regression/kingFallsVisibly.test.ts
+
+### BUG-141: Broken build pushed — unescaped apostrophe in a hint string
+- **Date**: 2026-11-04
+- **Category**: `type-safety`
+- **Discovered by**: `test`
+- **Symptom**: `npm run typecheck` failed (TS1002 unterminated string) on a commit that had already been pushed; the client bundle would not build.
+- **Root cause**: A single-quoted toast text gained "you're"; the pre-commit check ran as `npm run typecheck | tail`, and the pipe's exit status (tail's) hid the failure, so the `&&` chain went on to commit and push.
+- **Fix**: Reworded the string; re-ran typecheck + build with `set -o pipefail` before committing.
+- **Prevention**: Never pipe a gate command without `pipefail`; prefer double quotes / template literals for UI copy.
+- **Files**: src/input/SelectionManager.ts
