@@ -263,10 +263,14 @@ export interface Room {
   gameSeed: number | null;
   cryptoReadyCount: number;
   battleReadyCount: number;
+  /** Player indices that sent cryptoReady (dedupe). */
+  cryptoReadyPlayers?: Set<number>;
   /** Player indices that sent player_ready (dedupes repeats after a refresh). */
   readyPlayers?: Set<number>;
   /** Server-side MatchSimulation (server/game/MatchSimulation.ts) — typed as unknown to keep shared/ server-agnostic. */
   simulation?: unknown;
+  /** Last committed action / rejoin (server-only) — the stale sweep keys off this. */
+  lastActivityAt?: number;
   /** Turn clock (server-only). */
   turnTimer?: ReturnType<typeof setTimeout>;
   turnTimerKey?: string;

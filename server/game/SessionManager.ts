@@ -6,13 +6,14 @@
 
 import type { Server, Socket } from 'socket.io';
 import type { ClientToServerEvents, ServerToClientEvents } from '../../shared/types/NetworkEvents.js';
-import type { RoomManager } from '../rooms/RoomManager.js';
+import { RoomManager } from '../rooms/RoomManager.js';
 import type { PayoutService } from './PayoutService.js';
 import { Logger } from '../utils/Logger.js';
 import { GameLogWriter } from './GameLogWriter.js';
 import { verifyToken } from '../api/middleware.js';
 import { validateDeck } from '../validation/DeckValidator.js';
 import { recordMatch } from '../api/matchService.js';
+import { getOwnedCards } from '../api/collectionHelpers.js';
 import { UNITS_ONLY_DECK_IDS } from '../../src/game/data/DeckDefinitions.js';
 import type { Room, GameAction } from '../../shared/types/NetworkEvents.js';
 import { MatchSimulation } from './MatchSimulation.js';
@@ -203,6 +204,13 @@ export class SessionManager {
     }
 
     socket.on('cryptoReady', ({ roomCode }) => {
+      // Only seated players, once each (a double emit used to fake "both deposited")
+      const room = this.rooms.getRoom(roomCode);
+      const idx = room?.players.findIndex(p => p.id === socket.id) ?? -1;
+      if (!room || idx === -1) return;
+      room.cryptoReadyPlayers ??= new Set();
+      if (room.cryptoReadyPlayers.has(idx)) return;
+      room.cryptoReadyPlayers.add(idx);
       const count = this.rooms.incrementCryptoReady(roomCode);
       if (count === 1) {
         socket.to(roomCode).emit('hostDepositConfirmed');
@@ -226,7 +234,10 @@ export class SessionManager {
 
     // ── Deck: validate and store deck for match ──
     socket.on('submitDeck' as any, ({ roomCode, deckIds }: { roomCode: string; deckIds: string[] }) => {
-      const result = validateDeck(deckIds, null);
+      const pid = this.rooms.getRoom(roomCode)?.players.find(p => p.id === socket.id)?.playerId ?? null;
+      let owned: Map<string, number> | null = null;
+      if (pid != null) { try { const m = getOwnedCards(pid); owned = m.size ? m : null; } catch { owned = null; } }
+      const result = validateDeck(deckIds, owned); // logged-in: must own the cards
       if (!result.valid) {
         socket.emit('deckRejected', { errors: result.errors });
         return;
@@ -265,6 +276,7 @@ export class SessionManager {
     }
 
     room.actionCount += 1;
+    room.lastActivityAt = Date.now();
     room.globalSeq += 1;
     action.serverSeq = room.globalSeq;
     action.by = byPlayer;
@@ -451,7 +463,10 @@ export class SessionManager {
     if (!room) {
       // Server restarted mid-match? Rebuild the room + simulation from disk.
       const restored = this.hooks.restoreRoom?.(roomCode) ?? null;
-      if (restored) {
+      // Only bring a stored match back for someone who actually owns a seat in it
+      // (otherwise anyone with the code could wake it up and start both grace timers).
+      const claimId = token ? verifyToken(token)?.playerId ?? null : null;
+      if (restored && RoomManager.findSeat(restored, playerName, guestSessionId, claimId) !== -1) {
         this.rooms.restoreRoom(roomCode, restored);
         room = restored;
         // Both players are "away" until they rejoin; this one is cancelled just below.
@@ -494,7 +509,8 @@ export class SessionManager {
     socket.emit('rejoinSuccess', {
       roomCode,
       playerIndex,
-      gameSeed: room.gameSeed ?? 0,
+      // The seed the server simulation runs on — room.gameSeed can be stale/clobbered
+      gameSeed: this.sim(room)?.seed ?? room.gameSeed ?? 0,
       decks: battleStarted ? (this.sim(room)?.decks ?? SessionManager.battleDecks(room)) : null,
       actionLog: room.actionLog.map(a => ({ ...a })),
       lastSeqNum: room.lastSeqNum[playerIndex],

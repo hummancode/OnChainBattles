@@ -15,14 +15,14 @@ Used to identify weak areas and improve code quality over time.
 |----------|-------|------------|--------------|------------|
 | logic | 31 | 5 | 23 | 3 |
 | network | 13 | 6 | 6 | 1 |
-| state | 19 | 4 | 14 | 1 |
+| state | 21 | 4 | 16 | 1 |
 | rendering | 10 | 1 | 8 | 1 |
 | race-condition | 4 | 2 | 2 | 0 |
 | memory-leak | 5 | 0 | 5 | 0 |
 | web3 | 3 | 0 | 3 | 0 |
 | type-safety | 7 | 2 | 5 | 0 |
-| security | 7 | 1 | 6 | 0 |
-| **TOTAL** | **101** | **21** | **74** | **6** |
+| security | 12 | 1 | 11 | 0 |
+| **TOTAL** | **108** | **21** | **81** | **6** |
 
 ---
 
@@ -1069,3 +1069,73 @@ Used to identify weak areas and improve code quality over time.
 - **User found 12 bugs** (34%) — gameplay-visible issues (freezes, wrong movement, UI blocking, route/scene bugs).
 - **Claude found 22 bugs** (63%) — mostly code-quality and subtle logic issues.
 - **Tests found 1 bug** (3%) — BUG-033 (glTexture) was the first bug caught by automated browser perf tests via CDP.
+
+### BUG-102: Malformed socket payloads crashed handlers / the server
+- **Date**: 2026-11-04
+- **Category**: `security`
+- **Discovered by**: `claude`
+- **Symptom**: `socket.emit('joinRoom')` with no/primitive payload threw inside destructuring; an async handler rejection was unhandled.
+- **Root cause**: Handlers destructured the payload directly and had no try/catch.
+- **Fix**: `server/net/wireConnection.ts` — `hardenSocket()` drops non-object payloads (except no-payload events) and wraps every handler (sync + promise) in a catch. Connection wiring moved out of app.ts so it is testable.
+- **Prevention**: Never trust socket payload shape; register handlers through one hardened wrapper.
+- **Files**: server/net/wireConnection.ts, server/app.ts
+
+### BUG-103: createRoom could overwrite an existing (even in-battle) room
+- **Date**: 2026-11-04
+- **Category**: `security`
+- **Discovered by**: `claude`
+- **Symptom**: Emitting `createRoom` with a live room code replaced that room, kicking both players out of their match.
+- **Root cause**: No existence/format check before `rooms.createRoom(code)`.
+- **Fix**: Refuse an existing or malformed code ("Room code unavailable — try again.").
+- **Prevention**: Creation APIs must never be upserts.
+- **Files**: server/net/wireConnection.ts
+
+### BUG-104: Rooms could be joined / kicked / restarted / left mid-battle; legacy join bypassed passwords
+- **Date**: 2026-11-04
+- **Category**: `security`
+- **Discovered by**: `claude`
+- **Symptom**: A third socket could take a seat in a battle room, the host could kick or `start_game` again during a match, `lobby:create`/`join` silently removed a player from their running match, and the legacy `joinRoom` ignored room passwords.
+- **Root cause**: Seat-changing paths only checked room capacity, not whether a match was under way.
+- **Fix**: `RoomManager.isLocked(room)` (simulation / battle-ready / non-waiting status) guards joinRoom, removeFromAllRooms, kick, start_game, leave, lobby create/join; legacy join refuses password rooms.
+- **Prevention**: One "is the match running?" predicate used by every seat mutation.
+- **Files**: server/rooms/RoomManager.ts, server/lobby/LobbyManager.ts
+
+### BUG-105: Game seed could be 0 (unseeded Math.random shuffle) and rejoin sent the wrong seed
+- **Date**: 2026-11-04
+- **Category**: `state`
+- **Discovered by**: `claude`
+- **Symptom**: Rare desyncs: seed 0 makes the engine fall back to Math.random; rejoin after a server restart sent `room.gameSeed` instead of the simulation's seed.
+- **Root cause**: `randomInt(0, …)` / `Math.floor(Math.random()*N)` include 0; rejoinSuccess read the room field.
+- **Fix**: Seeds drawn from [1, …); rejoin uses `sim.seed`.
+- **Prevention**: Treat 0 as "unseeded" everywhere; the simulation is the single source of the seed.
+- **Files**: server/rooms/RoomManager.ts, server/lobby/LobbyManager.ts, server/game/SessionManager.ts
+
+### BUG-106: Stale-room sweep could delete a long-running active match
+- **Date**: 2026-11-04
+- **Category**: `state`
+- **Discovered by**: `claude`
+- **Symptom**: A match lasting longer than the stale-room TTL was removed by the janitor.
+- **Root cause**: The sweep only looked at `createdAt`.
+- **Fix**: `room.lastActivityAt` stamped in `commitAction()`; sweep uses max(createdAt, lastActivityAt).
+- **Prevention**: Liveness must be based on last activity, not creation time.
+- **Files**: server/rooms/RoomManager.ts, server/game/SessionManager.ts, shared/types/NetworkEvents.ts
+
+### BUG-107: Submitted decks were not checked against the player's collection
+- **Date**: 2026-11-04
+- **Category**: `security`
+- **Discovered by**: `claude`
+- **Symptom**: A modified client could submit a legal-shaped deck of cards it does not own.
+- **Root cause**: `deck_submitted` / `submitDeck` ran DeckValidator without ownership; `getOwnedCards` lived privately in deckRoutes.
+- **Fix**: Exported `getOwnedCards` from collectionHelpers and validated ownership on both paths.
+- **Prevention**: Every server path that accepts a deck uses the same validate-with-ownership helper.
+- **Files**: server/api/collectionHelpers.ts, server/api/deckRoutes.ts, server/lobby/LobbyManager.ts, server/game/SessionManager.ts
+
+### BUG-108: cryptoReady could be faked; rejoin woke stored matches for any identity
+- **Date**: 2026-11-04
+- **Category**: `security`
+- **Discovered by**: `claude`
+- **Symptom**: One player emitting `cryptoReady` twice (or an outsider) produced `bothCryptoReady`; a rejoin with a wrong identity restored a stored match from disk and started both grace timers.
+- **Root cause**: `incrementCryptoReady` counted emits, not players; handleRejoin restored the room before checking the seat.
+- **Fix**: Per-room `cryptoReadyPlayers` set (seated players only, once each); `RoomManager.findSeat()` shared by reassignSocket and the restore path, which now restores only for a matching seat.
+- **Prevention**: Count distinct participants, never events; authorize before any side effect.
+- **Files**: server/game/SessionManager.ts, server/rooms/RoomManager.ts, shared/types/NetworkEvents.ts

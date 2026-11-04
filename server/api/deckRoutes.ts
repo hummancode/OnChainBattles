@@ -5,6 +5,7 @@
 
 import { Router } from 'express';
 import { getDB } from '../db/database.js';
+import { getOwnedCards } from './collectionHelpers.js';
 import { requireAuth } from './middleware.js';
 import { validateDeck } from '../validation/DeckValidator.js';
 import { sanitizeText } from '../utils/sanitize.js';
@@ -13,13 +14,6 @@ export const deckRouter = Router();
 
 const MAX_DECKS = 10;
 
-function getOwnedCards(playerId: number): Map<string, number> {
-  const db = getDB();
-  const rows = db.prepare(
-    'SELECT card_id, owned_copies FROM collections WHERE player_id = ?'
-  ).all(playerId) as Array<{ card_id: string; owned_copies: number }>;
-  return new Map(rows.map(r => [r.card_id, r.owned_copies]));
-}
 
 // GET /api/decks
 deckRouter.get('/', requireAuth, (req, res) => {

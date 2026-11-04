@@ -10,7 +10,6 @@ import { Server } from 'socket.io';
 import { instrument } from '@socket.io/admin-ui';
 import path from 'path';
 import dotenv from 'dotenv';
-import { verifyMessage } from 'ethers';
 import type { ClientToServerEvents, ServerToClientEvents } from '../shared/types/NetworkEvents.js';
 import { RoomManager } from './rooms/RoomManager.js';
 import { PayoutService } from './game/PayoutService.js';
@@ -22,6 +21,7 @@ import { runMigrations } from './db/migrations.js';
 import { MatchStore } from './game/MatchStore.js';
 import { apiRouter } from './api/index.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
+import { wireConnection } from './net/wireConnection.js';
 import { RoomJanitor } from './lobby/RoomJanitor.js';
 import bcryptBoot from 'bcryptjs';
 import { initializeCollection as initCollBoot } from './api/collectionHelpers.js';
@@ -150,74 +150,7 @@ io.on('connection', (socket) => {
     next();
   });
 
-  // ── Room events ──
-  socket.on('createRoom', ({ roomCode, playerName, guestSessionId }) => {
-    roomManager.createRoom(socket.id, roomCode, playerName, guestSessionId);
-    socket.join(roomCode);
-    socket.emit('roomCreated', { roomCode, playerIndex: 0 });
-  });
-
-  socket.on('joinRoom', ({ roomCode, playerName, guestSessionId }) => {
-    const result = roomManager.joinRoom(socket.id, roomCode, playerName, guestSessionId);
-    if (typeof result === 'string') {
-      socket.emit('error', { message: result });
-      return;
-    }
-    socket.join(roomCode);
-    socket.emit('roomJoined', { roomCode, playerIndex: 1 });
-
-    const host = result.players[0];
-    io.to(host.id).emit('opponentJoined', { playerName, playerIndex: 0 });
-    socket.emit('opponentJoined', { playerName: host.name, playerIndex: 1 });
-
-    // Broadcast shared shuffle seed
-    io.to(roomCode).emit('game_seed', { seed: result.gameSeed! });
-  });
-
-  socket.on('registerWallet', ({ roomCode, walletAddress, message, signature }) => {
-    // Verify signature proves ownership of claimed wallet
-    try {
-      const recovered = verifyMessage(message, signature);
-      if (recovered.toLowerCase() !== walletAddress.toLowerCase()) {
-        console.warn(`[Server] Wallet verification failed: claimed ${walletAddress}, recovered ${recovered}`);
-        socket.emit('error', { message: 'Wallet verification failed' });
-        return;
-      }
-      if (!message.includes(roomCode)) {
-        console.warn(`[Server] Wallet verification: message doesn't contain roomCode`);
-        socket.emit('error', { message: 'Invalid verification message' });
-        return;
-      }
-      // Only accept registerWallet once per player
-      const room = roomManager.getRoom(roomCode);
-      const player = room?.players.find(p => p.id === socket.id);
-      if (player?.wallet) {
-        console.warn(`[Server] Wallet already registered for ${player.name}, ignoring re-registration`);
-        return;
-      }
-      roomManager.registerWallet(socket.id, roomCode, walletAddress);
-    } catch (err) {
-      console.error(`[Server] Wallet verification error:`, err);
-      socket.emit('error', { message: 'Wallet verification failed' });
-    }
-  });
-
-  // ── Rejoin after disconnect ──
-  socket.on('rejoin_room', ({ roomCode, playerName, guestSessionId, token }) => {
-    session.handleRejoin(socket, roomCode, playerName, guestSessionId, token);
-  });
-
-  // ── Game session events ──
-  session.registerHandlers(socket);
-
-  // ── Lobby events ──
-  lobby.registerHandlers(socket);
-
-  // ── Disconnect ──
-  socket.on('disconnect', () => {
-    lobby.handleLobbyDisconnect(socket);
-    session.handleDisconnect(socket);
-  });
+  wireConnection(io, socket, { rooms: roomManager, session, lobby });
 });
 
 // Public room list (no auth required)

@@ -6,7 +6,8 @@
 
 import type { Server, Socket } from 'socket.io';
 import type { ClientToServerEvents, ServerToClientEvents, Room } from '../../shared/types/NetworkEvents.js';
-import type { RoomManager } from '../rooms/RoomManager.js';
+import { RoomManager } from '../rooms/RoomManager.js';
+import { getOwnedCards } from '../api/collectionHelpers.js';
 import { createLobbyRoom } from './lobbyHelpers.js';
 import { sanitizeText } from '../utils/sanitize.js';
 import { validateDeck } from '../validation/DeckValidator.js';
@@ -33,6 +34,9 @@ export class LobbyManager {
     socket.on('lobby:create', ({ playerName, settings, guestSessionId }) => {
       // Look up playerId BEFORE removing from rooms
       const found = this.rooms.findBySocket(socket.id);
+      if (found && RoomManager.isLocked(found.room)) {
+        socket.emit('lobby:error', { message: 'Finish your current match first.' }); return;
+      }
       const playerId = found?.room.players.find(p => p.id === socket.id)?.playerId ?? null;
 
       this.rooms.removeFromAllRooms(socket.id);
@@ -46,6 +50,10 @@ export class LobbyManager {
     });
 
     socket.on('lobby:join', ({ roomCode, playerName, password, guestSessionId }) => {
+      const current = this.rooms.findBySocket(socket.id);
+      if (current && RoomManager.isLocked(current.room)) {
+        socket.emit('lobby:error', { message: 'Finish your current match first.' }); return;
+      }
       this.rooms.removeFromAllRooms(socket.id);
       const room = this.rooms.getRoom(roomCode);
       if (!room) { socket.emit('lobby:error', { message: 'Room not found.' }); return; }
@@ -121,6 +129,7 @@ export class LobbyManager {
     socket.on('lobby:kick', ({ roomCode, targetPlayerName }) => {
       const room = this.rooms.getRoom(roomCode);
       if (!room || room.hostSocketId !== socket.id) return;
+      if (RoomManager.isLocked(room)) return; // can't kick the opponent out of a running match
       const idx = room.players.findIndex(p => p.name === targetPlayerName && p.id !== room.hostSocketId);
       if (idx === -1) return;
 
@@ -149,6 +158,9 @@ export class LobbyManager {
       const room = this.rooms.getRoom(roomCode);
       if (!room || room.hostSocketId !== socket.id) {
         socket.emit('lobby:error', { message: 'Only the host can start.' }); return;
+      }
+      if (RoomManager.isLocked(room)) {
+        socket.emit('lobby:error', { message: 'Match already started.' }); return;
       }
       if (room.players.length < 2) {
         socket.emit('lobby:error', { message: 'Need 2 players.' }); return;
@@ -191,7 +203,9 @@ export class LobbyManager {
       if (!room || room.status !== 'starting') return;
 
       // Validate deck server-side before accepting
-      const validation = validateDeck(deckIds);
+      // Logged-in players may only battle with cards they own (guests: free starter pool)
+      const pid = room.players.find(p => p.id === socket.id)?.playerId ?? null;
+      const validation = validateDeck(deckIds, pid != null ? safeOwned(pid) : null);
       if (!validation.valid) {
         console.warn(`[Lobby] Invalid deck from ${socket.id}: ${validation.errors.join(', ')}`);
         socket.emit('error', { message: `Invalid deck: ${validation.errors[0]}` });
@@ -242,7 +256,7 @@ export class LobbyManager {
       }
     }
 
-    const seed = Math.floor(Math.random() * 999999);
+    const seed = 1 + Math.floor(Math.random() * 999_998); // never 0 (0 = unseeded shuffle on clients)
     room.gameSeed = seed;
 
     this.io.to(roomCode).emit('lobby:game_starting', {
@@ -268,6 +282,7 @@ export class LobbyManager {
   private handleLeave(socket: TypedSocket, roomCode: string): void {
     const room = this.rooms.getRoom(roomCode);
     if (!room) return;
+    if (RoomManager.isLocked(room)) return; // leaving a running battle = disconnect (grace → forfeit)
     const idx = room.players.findIndex(p => p.id === socket.id);
     if (idx === -1) return;
 
@@ -297,4 +312,9 @@ export class LobbyManager {
   private emitSystem(roomCode: string, text: string): void {
     this.io.to(roomCode).emit('lobby:system_message', { text, timestamp: Date.now() });
   }
+}
+
+/** Ownership map, or null (= unchecked) if the DB lookup fails or the player has no collection. */
+function safeOwned(playerId: number): Map<string, number> | null {
+  try { const m = getOwnedCards(playerId); return m.size ? m : null; } catch { return null; }
 }

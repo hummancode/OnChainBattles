@@ -39,3 +39,11 @@ export function awardCard(playerId: number, cardId: string): boolean {
   console.log(`[Collection] Awarded ${cardId} to player #${playerId}`);
   return true;
 }
+
+/** cardId → owned copies (deck validation enforces ownership for logged-in players). */
+export function getOwnedCards(playerId: number): Map<string, number> {
+  const rows = getDB().prepare(
+    'SELECT card_id, owned_copies FROM collections WHERE player_id = ?'
+  ).all(playerId) as Array<{ card_id: string; owned_copies: number }>;
+  return new Map(rows.map(r => [r.card_id, r.owned_copies]));
+}

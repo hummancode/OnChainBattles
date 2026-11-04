@@ -19,11 +19,32 @@ export class RoomManager {
     this.cleanupTimer = setInterval(() => this.sweepStaleRooms(), 10 * 60 * 1000);
   }
 
+  /** Seat index matching the presented identity (see reassignSocket for the rules), or -1. */
+  static findSeat(room: Room, playerName: string, guestSessionId?: string, playerId?: number | null): number {
+    let idx = -1;
+    if (playerId != null) idx = room.players.findIndex(p => p.playerId === playerId);
+    if (idx === -1 && guestSessionId) idx = room.players.findIndex(p => p.guestSessionId === guestSessionId);
+    if (idx === -1) idx = room.players.findIndex(p => p.name === playerName && p.playerId == null && !p.guestSessionId);
+    return idx;
+  }
+
+  /**
+   * Seats can't change once a battle is under way (deck launch started or engine running).
+   * Lobby kick / leave / start and joining elsewhere all respect this — they used to
+   * splice players out of running matches, shifting seat indices (and payouts).
+   */
+  static isLocked(room: Room): boolean {
+    return !!room.simulation || room.battleReadyCount > 0 ||
+      (room.status !== undefined && room.status !== 'waiting' && room.status !== 'full');
+  }
+
+  /** Remove rooms idle for 2h. Idle = no committed action since then, not merely "created 2h ago". */
   private sweepStaleRooms(): void {
     const now = Date.now();
     for (const [code, room] of this.rooms) {
-      if (now - room.createdAt > RoomManager.STALE_ROOM_MS) {
-        log.info(`Sweeping stale room: ${code} (age: ${Math.round((now - room.createdAt) / 60_000)}m)`);
+      const last = Math.max(room.createdAt, room.lastActivityAt ?? 0);
+      if (now - last > RoomManager.STALE_ROOM_MS) {
+        log.info(`Sweeping stale room: ${code} (idle: ${Math.round((now - last) / 60_000)}m)`);
         this.deleteRoom(code);
       }
     }
@@ -58,11 +79,14 @@ export class RoomManager {
     const room = this.rooms.get(roomCode);
     if (!room) return 'Room not found. Check the code.';
     if (room.players.length >= 2) return 'Room is full.';
+    // Legacy join must not bypass lobby rules (password, status) or enter a running battle
+    if (RoomManager.isLocked(room)) return 'Match already in progress.';
+    if (room.settings?.password) return 'This room needs a password — join it from the room browser.';
 
     room.players.push({ id: socketId, name: playerName, wallet: null, guestSessionId: guestSessionId ?? null });
 
     // Generate shared shuffle seed (32-bit, cryptographically random)
-    const seed = randomInt(0, 2 ** 32);
+    const seed = randomInt(1, 2 ** 32); // 0 would make clients fall back to Math.random shuffles
     room.gameSeed = seed;
 
     log.info(` ${playerName} joined room: ${roomCode}, seed: ${seed}`);
@@ -126,12 +150,7 @@ export class RoomManager {
   reassignSocket(roomCode: string, playerName: string, newSocketId: string, guestSessionId?: string, playerId?: number | null): number {
     const room = this.rooms.get(roomCode);
     if (!room) return -1;
-    let idx = -1;
-    if (playerId != null) idx = room.players.findIndex(p => p.playerId === playerId);
-    if (idx === -1 && guestSessionId) idx = room.players.findIndex(p => p.guestSessionId === guestSessionId);
-    if (idx === -1) {
-      idx = room.players.findIndex(p => p.name === playerName && p.playerId == null && !p.guestSessionId);
-    }
+    const idx = RoomManager.findSeat(room, playerName, guestSessionId, playerId);
     if (idx === -1) {
       log.warn(` Rejoin refused for "${playerName}" in ${roomCode}: identity does not match any seat`);
       return -1;
@@ -251,6 +270,7 @@ export class RoomManager {
     for (const [code, room] of this.rooms) {
       const idx = room.players.findIndex(p => p.id === socketId);
       if (idx !== -1) {
+        if (RoomManager.isLocked(room)) continue; // never leave a running battle this way
         room.players.splice(idx, 1);
         leftCodes.push(code);
         if (room.players.length === 0) {
