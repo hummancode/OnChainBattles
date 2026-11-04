@@ -14,15 +14,15 @@ Used to identify weak areas and improve code quality over time.
 | Category | Count | User-Found | Claude-Found | Test-Found |
 |----------|-------|------------|--------------|------------|
 | logic | 31 | 5 | 23 | 3 |
-| network | 13 | 6 | 6 | 1 |
-| state | 21 | 4 | 16 | 1 |
-| rendering | 10 | 1 | 8 | 1 |
-| race-condition | 4 | 2 | 2 | 0 |
-| memory-leak | 5 | 0 | 5 | 0 |
+| network | 15 | 6 | 8 | 1 |
+| state | 25 | 4 | 20 | 1 |
+| rendering | 11 | 1 | 9 | 1 |
+| race-condition | 5 | 2 | 3 | 0 |
+| memory-leak | 6 | 0 | 6 | 0 |
 | web3 | 3 | 0 | 3 | 0 |
 | type-safety | 7 | 2 | 5 | 0 |
 | security | 12 | 1 | 11 | 0 |
-| **TOTAL** | **108** | **21** | **81** | **6** |
+| **TOTAL** | **117** | **21** | **90** | **6** |
 
 ---
 
@@ -1139,3 +1139,93 @@ Used to identify weak areas and improve code quality over time.
 - **Fix**: Per-room `cryptoReadyPlayers` set (seated players only, once each); `RoomManager.findSeat()` shared by reassignSocket and the restore path, which now restores only for a matching seat.
 - **Prevention**: Count distinct participants, never events; authorize before any side effect.
 - **Files**: server/game/SessionManager.ts, server/rooms/RoomManager.ts, shared/types/NetworkEvents.ts
+
+### BUG-109: Client sent actions its own engine refused; practice actions reached the socket
+- **Date**: 2026-11-04
+- **Category**: `network`
+- **Discovered by**: `claude`
+- **Symptom**: END TURN during a pending choice, or a SELECT_TARGET on a non-target, was sent anyway → server rejection / resync loop. Practice and tutorial moves were buffered by SocketManager (offline) and could be flushed into a later real room.
+- **Root cause**: InputCoordinator / BattleScene called engine methods and `sendGameAction` unconditionally; the void-returning engine methods hid refusals.
+- **Fix**: `dispatchLocal(engine, action, sink)` applies through `applyAction` (same acceptance rule as the server) and sends only accepted actions; offline battles pass a no-op sink. BattleStateSync uses it too.
+- **Prevention**: Local input, relay, replay and server validation all go through ActionApplier — never call engine + send separately.
+- **Files**: src/scenes/battle/InputCoordinator.ts, src/scenes/BattleScene.ts, src/scenes/battle/BattleStateSync.ts
+
+### BUG-110: Clicking during the opponent's pending choice resolved it locally
+- **Date**: 2026-11-04
+- **Category**: `state`
+- **Discovered by**: `claude`
+- **Symptom**: While the opponent was picking a target (engine AWAITING_INPUT), a board/hand click on our side ran `selectTarget`/`selectDiscard` on our engine → desync.
+- **Root cause**: SelectionManager's awaiting-input branch never checked whose turn it was.
+- **Fix**: SelectionManager ignores pending clicks when `!isMyTurn()` (toast "Your opponent is choosing…"); InputCoordinator's `act()` also requires our turn.
+- **Prevention**: Every input path checks ownership of the decision, not just engine status.
+- **Files**: src/input/SelectionManager.ts, src/scenes/battle/InputCoordinator.ts
+
+### BUG-111: Deselecting a hand card left it armed
+- **Date**: 2026-11-04
+- **Category**: `state`
+- **Discovered by**: `claude`
+- **Symptom**: Clicking a selected hand card un-highlighted it, but the next board click still deployed it.
+- **Root cause**: HandRenderer emits `INPUT_HAND_CLICK { index: null }` on deselect; SelectionManager ignored null.
+- **Fix**: null index clears a `card_selected` selection.
+- **Prevention**: Handle every value of an event payload, including the "clear" value.
+- **Files**: src/input/SelectionManager.ts
+
+### BUG-112: Second result screen / lobby visit had dead buttons; stale lobby chat
+- **Date**: 2026-11-04
+- **Category**: `state`
+- **Discovered by**: `claude`
+- **Symptom**: After the first match, ResultScene buttons did nothing; returning to LobbyScene/RoomBrowserScene could leave them stuck and show the previous room's chat/state.
+- **Root cause**: Phaser reuses scene instances; `transitioning`, `latestState`, `chatTexts` were only initialised as class fields.
+- **Fix**: Reset per-visit fields in `init()`/`create()`; ResultScene hooks its shutdown via `events.once('shutdown')`.
+- **Prevention**: All per-visit scene state is reset in init/create, never by field initialisers.
+- **Files**: src/scenes/ResultScene.ts, src/scenes/LobbyScene.ts, src/scenes/RoomBrowserScene.ts
+
+### BUG-113: Server-decided result + local GAME_OVER recorded two results
+- **Date**: 2026-11-04
+- **Category**: `race-condition`
+- **Discovered by**: `claude`
+- **Symptom**: A forfeit/disconnect result followed by a late engine GAME_OVER counted W/L twice and restarted the result screen.
+- **Root cause**: `resultShown` lived only in NetworkCoordinator; GameOverHandler didn't check it.
+- **Fix**: Shared `resultLatch` (`claimResult()` / `resetResult()`) used by both paths.
+- **Prevention**: One latch per "exactly once" outcome, shared by every producer.
+- **Files**: src/scenes/battle/resultLatch.ts, src/scenes/battle/GameOverHandler.ts, src/scenes/battle/NetworkCoordinator.ts
+
+### BUG-114: Reconnect catch-up skipped turn-timeout auto actions
+- **Date**: 2026-11-04
+- **Category**: `network`
+- **Discovered by**: `claude`
+- **Symptom**: If our turn timed out while our socket was down, our engine stayed on our turn after reconnecting (desync → resync).
+- **Root cause**: `catchUpFromLog` skipped every action with `by === local`, but server auto actions carry our index and were never applied locally.
+- **Fix**: Include `a.auto` actions.
+- **Prevention**: "Who sent it" ≠ "who already applied it" — filter on the latter.
+- **Files**: src/scenes/battle/NetworkCoordinator.ts
+
+### BUG-115: Hand UI drifted at the hand limit / after overflow trim
+- **Date**: 2026-11-04
+- **Category**: `rendering`
+- **Discovered by**: `claude`
+- **Symptom**: A phantom card appeared when drawing at the hand limit (card was burned), and Motherland overflow trim (handIndex -1) left extra cards in the UI.
+- **Root cause**: The hand UI relied on incremental CARD_DRAWN/CARD_DISCARDED events that can't describe these cases.
+- **Fix**: Bridge skips CARD_DRAWN for a burned card; HUD refresh calls `reconcileHand()` which rebuilds the hand when it differs from engine state.
+- **Prevention**: State-Driven Rendering (§3.6) — every incremental UI gets a full-state reconcile.
+- **Files**: src/scenes/battle/HUDRefreshCoordinator.ts, src/scenes/battle/EngineEventBridge.ts, src/renderers/HandRenderer.ts, src/scenes/BattleScene.ts
+
+### BUG-116: Detaching one LobbySocketManager silenced the next scene's
+- **Date**: 2026-11-04
+- **Category**: `memory-leak`
+- **Discovered by**: `claude`
+- **Symptom**: Lobby errors ("Room is full") and state updates sometimes went nowhere after a scene change.
+- **Root cause**: `detach()` used `removeAllListeners(ev)` on the shared socket, removing the listeners of the manager the next scene had just attached.
+- **Fix**: Each manager tracks and removes only its own bound listeners.
+- **Prevention**: On a shared emitter, always `off(ev, fn)` with the exact function — never removeAllListeners.
+- **Files**: src/lobby/LobbySocketManager.ts
+
+### BUG-117: Hub "Last match" banner never showed
+- **Date**: 2026-11-04
+- **Category**: `state`
+- **Discovered by**: `claude`
+- **Symptom**: The Hub's "Last: …" banner was always missing; draws would have read "beat you".
+- **Root cause**: ResultScene called `clearMatchData()` (which nulls lastMatch) right before starting HubScene.
+- **Fix**: Preserve lastMatch across the clear; banner handles draws.
+- **Prevention**: Don't clear data that the next scene is documented to read.
+- **Files**: src/scenes/ResultScene.ts, src/scenes/HubScene.ts

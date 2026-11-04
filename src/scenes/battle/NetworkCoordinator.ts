@@ -5,6 +5,7 @@
 
 import type { GameEngine } from '../../game/GameEngine';
 import type { GameAction } from '../../network/SocketManager';
+import { claimResult } from './resultLatch';
 import SocketManager from '../../network/SocketManager';
 import GameState from '../../GameState';
 import { EventBus, EV } from '../../events/EventBus';
@@ -32,11 +33,12 @@ export function resetNetworkSyncState(serverSeq = 0): void {
 /**
  * Socket reconnected (page NOT refreshed): the local engine is intact but may have missed
  * opponent actions relayed while we were offline. Apply exactly those, in server order.
- * Our own actions are never re-applied — they're already in the local engine.
+ * Our own actions are never re-applied (already in the local engine) — except server auto
+ * actions (turn timeout), which carry our index but were never applied locally.
  */
 export function catchUpFromLog(deps: NetworkCoordinatorDeps, log: readonly GameAction[]): number {
   const missed = log.filter(a =>
-    a.by !== deps.localPlayerIndex && (a.serverSeq ?? 0) > lastAppliedServerSeq);
+    (a.by !== deps.localPlayerIndex || a.auto) && (a.serverSeq ?? 0) > lastAppliedServerSeq);
   for (const action of missed) replayOpponentAction(deps, action);
   if (missed.length) console.log(`[NetworkCoordinator] Caught up on ${missed.length} missed opponent action(s)`);
   return missed.length;
@@ -99,8 +101,6 @@ export function handleOpponentReconnect(deps: NetworkCoordinatorDeps): void {
   scene.time.delayedCall(2000, () => flash.destroy());
 }
 
-/** One result screen per match, whichever signal arrives first. */
-let resultShown = false;
 
 /**
  * End the match from a server-side decision (opponent abandoned, turn-timeout forfeit,
@@ -112,8 +112,8 @@ export function showServerResult(
   r: { winnerIndex: number; reason: string; turns?: number },
 ): void {
   const { engine, scene, playerName, opponentName, localPlayerIndex } = deps;
-  if (resultShown || engine.getState()?.status === 'GAME_OVER') return;
-  resultShown = true;
+  // If our own engine already reached GAME_OVER, GameOverHandler owns the result.
+  if (engine.getState()?.status === 'GAME_OVER' || !claimResult()) return;
 
   for (const obj of disconnectOverlay) obj.destroy();
   disconnectOverlay = [];
@@ -155,7 +155,6 @@ export function handleFinalDisconnect(deps: NetworkCoordinatorDeps): void {
 }
 
 export function setupSocketCallbacks(deps: NetworkCoordinatorDeps): void {
-  resultShown = false;
   SocketManager.setCallbacks({
     onRoomCreated: (code) => GameState.setRoomCode(code),
     onRoomJoined: (code) => GameState.setRoomCode(code),

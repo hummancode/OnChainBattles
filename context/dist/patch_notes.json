@@ -368,6 +368,55 @@
       "text": "Solving a puzzle now actually adds its prize card to your collection.",
       "created": "2026-11-04T10:00:07",
       "edited": null
+    },
+    {
+      "id": "20261104150000000000",
+      "category": "Bug Fix",
+      "text": "Fixed a batch of rule bugs found by automated bot-vs-bot testing: Mystic now revives your strongest fallen unit, Casus Belli deploys a unit from your hand, Civil War and Disease last their full duration, Treason returns units correctly.",
+      "created": "2026-11-04T15:00:00",
+      "edited": null
+    },
+    {
+      "id": "20261104150001000000",
+      "category": "Bug Fix",
+      "text": "Ending your turn while a choice is open, or clicking during your opponent's choice, no longer desyncs the match.",
+      "created": "2026-11-04T15:01:00",
+      "edited": null
+    },
+    {
+      "id": "20261104150002000000",
+      "category": "Bug Fix",
+      "text": "Clicking a selected hand card again now really deselects it.",
+      "created": "2026-11-04T15:02:00",
+      "edited": null
+    },
+    {
+      "id": "20261104150003000000",
+      "category": "Bug Fix",
+      "text": "Results are counted exactly once, and the result / lobby screens work every time (not just the first match).",
+      "created": "2026-11-04T15:03:00",
+      "edited": null
+    },
+    {
+      "id": "20261104150004000000",
+      "category": "Bug Fix",
+      "text": "Your hand no longer shows phantom cards when drawing at the hand limit.",
+      "created": "2026-11-04T15:04:00",
+      "edited": null
+    },
+    {
+      "id": "20261104150005000000",
+      "category": "Bug Fix",
+      "text": "Rooms can't be joined, restarted or taken over while a match is running; long matches are no longer cleaned up as stale.",
+      "created": "2026-11-04T15:05:00",
+      "edited": null
+    },
+    {
+      "id": "20261104150006000000",
+      "category": "Bug Fix",
+      "text": "The Hub shows your last match result again.",
+      "created": "2026-11-04T15:06:00",
+      "edited": null
     }
   ],
   "revoked": []

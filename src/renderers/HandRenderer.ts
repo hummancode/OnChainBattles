@@ -71,6 +71,9 @@ export class HandRenderer {
   // PUBLIC API
   // ─────────────────────────────────────────────
 
+  /** Card ids currently shown (hand cards use the card id as their render id). */
+  cardIds(): string[] { return this.cards.map(c => c.id); }
+
   /** Full rebuild of hand display from card data array. */
   setHand(cards: CardRenderData[]): void {
     this.cards = cards;

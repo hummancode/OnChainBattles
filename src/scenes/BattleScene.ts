@@ -33,7 +33,7 @@ import { TutorialCoordinator } from './battle/TutorialCoordinator';
 import { SfxCoordinator } from './battle/SfxCoordinator';
 import { TUTORIAL_DECK, TUTORIAL_BOT_DECK, TUTORIAL_SEED } from '../game/data/TutorialSetup';
 import { setupHUDRefresh } from './battle/HUDRefreshCoordinator';
-import { createSelectionManager } from './battle/InputCoordinator';
+import { createSelectionManager, dispatchLocal, networkSink, type ActionSink } from './battle/InputCoordinator';
 import { setupGameOverHandler } from './battle/GameOverHandler';
 import { engineStateHash } from '../game/utils/stateHash';
 import { GameLogger } from '../game/GameLogger';
@@ -196,7 +196,10 @@ export default class BattleScene extends Phaser.Scene {
     };
 
     // ─── HUD refresh ─────────────────────────────
-    this.hudUnsubs = setupHUDRefresh(this.engine, localPlayerIndex, playerName, opponentName);
+    this.hudUnsubs = setupHUDRefresh(this.engine, localPlayerIndex, playerName, opponentName, replay ? undefined : {
+      cardIds: () => this.handRenderer?.cardIds() ?? [],
+      setHand: (c) => this.handRenderer?.setHand(c),
+    });
 
     // ─── Renderers ───────────────────────────────
     this.boardRenderer   = new BoardRenderer(this, layout, theme, localPlayerIndex);
@@ -208,7 +211,9 @@ export default class BattleScene extends Phaser.Scene {
 
     // ─── Input ───────────────────────────────────
     // Replays are read-only: no SelectionManager → no clicks reach the engine.
-    if (!replay) this.selectionManager = createSelectionManager(this.engine, layout, localPlayerIndex);
+    // Practice/tutorial actions stay local (they used to be buffered and later flushed to a real room).
+    const sink: ActionSink = offline ? () => {} : networkSink;
+    if (!replay) this.selectionManager = createSelectionManager(this.engine, layout, localPlayerIndex, sink);
 
     // ─── Initial HUD emit ────────────────────────
     EventBus.emit(EV.HUD_REFRESH, {
@@ -226,12 +231,10 @@ export default class BattleScene extends Phaser.Scene {
       const state = this.engine.getState();
       if (state.turn?.activePlayer !== localPlayerIndex) return;
       const phase = state.turn?.phase;
-      if (phase === 'PLAY') {
-        this.engine.endPlayPhase();
-        SocketManager.sendGameAction({ type: 'END_PLAY_PHASE' });
-      } else if (phase === 'ACT') {
-        this.engine.endActPhase();
-        SocketManager.sendGameAction({ type: 'END_ACT_PHASE' });
+      if (phase !== 'PLAY' && phase !== 'ACT') return;
+      // Refused during a pending choice → nothing sent (used to desync / get rejected).
+      if (!dispatchLocal(this.engine, { type: phase === 'PLAY' ? 'END_PLAY_PHASE' : 'END_ACT_PHASE' }, sink)) {
+        EventBus.emit(EV.UI_TOAST, { message: 'Finish the current choice first' });
       }
     });
 

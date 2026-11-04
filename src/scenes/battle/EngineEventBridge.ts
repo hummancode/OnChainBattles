@@ -128,6 +128,8 @@ export function wireEngineToEventBus(engine: any, localPlayerIndex: number): () 
       case 'CARD_DRAWN': {
         profiler.begin('CARD_DRAWN');
         if (event.player === (localPlayerIndex as Player)) {
+          // At the hand limit the drawn card is burned (goes to discard) — nothing to show.
+          if (engine.getState().players[event.player]?.hand[event.handIndex] !== event.cardId) { profiler.end(); break; }
           const card = toCardRenderData(event.cardId, event.cardId, event.player, localPlayerIndex);
           EventBus.emit('CARD_DRAWN', { card, handIndex: event.handIndex, deckRemaining: event.deckRemaining });
         } else {

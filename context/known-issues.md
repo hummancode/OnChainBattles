@@ -14,6 +14,12 @@
 - SimpleBot is a single greedy difficulty; it ignores structures' long-term value and never holds cards back
 - IGameEngineAPI.getValidDeployPositions interface takes unused `cardIndex` param
 
+### Found in the 4 Nov 2026 review — left open
+- **Crypto (Phase 5)**: no refund if a match dies before both `player_ready`; `onSettled` deletes the active-match row before the payout tx confirms (no retry); `tx_hash` stored as null; deposits are never verified on-chain; puzzle-attempt `txHash` unverified + cooldown parses a UTC timestamp as local time
+- **Abuse limits**: room creation and per-room action queue are unbounded; `loginAttempts` map never pruned; wallet nonce can be overwritten by a second request
+- **Design question**: Casus Belli deploys on the enemy back row (row 6 for P1) while the card text says "front row of the enemy half" (row 4)
+- **Minor UI**: BoardRenderer re-keys a moved unit after its tween (fast follow-up events can target the old key); EngineEventBridge `setTimeout` / HUD refresh `requestAnimationFrame` aren't cancelled on scene shutdown
+
 ### Security (Dev-Only)
 - Hardcoded dev JWT secret in middleware.ts (`'ocb-dev-secret-DO-NOT-USE-IN-PROD'`)
 - Socket.IO Admin UI accessible without auth in dev mode
@@ -26,6 +32,11 @@
 - **Principle**: Every stat modification must be traceable to its source. No silent deltas.
 
 ---
+
+## Fixed (4 November 2026 — general bug review, BUG-092…117)
+- **Engine (fuzz + review, BUG-092…101)**: bot-vs-bot fuzzing (`npm run test:fuzz`) went from 214 crashes / 154 invariant breaks / 6 replay divergences in 400 games to zero; fixes to Mystic revive, Casus Belli deploy, Civil War / Disease durations, Treason return, exhaustion, king-death checks after resolutions, refunds
+- **Server (BUG-102…108)**: hardened socket handlers, no room overwrite, rooms locked mid-battle, nonzero seeds, activity-based stale sweep, deck ownership checks, cryptoReady dedupe, rejoin identity check before restoring from disk
+- **Client (BUG-109…117)**: only engine-accepted actions are sent (none in practice), no resolving the opponent's pending choice, deselect disarms the card, scene flags reset on reuse, one result per match, timeout catch-up, hand reconcile, lobby listener isolation, last-match banner
 
 ## Fixed (3 November 2026 — polish & cleanup, BUG-086…091)
 - **Hand as compact rows** (cost, art, name, ATK/DEF, type) — 8+ cards readable; large preview on hover; unaffordable cards dimmed.

@@ -29,6 +29,9 @@ export default class RoomBrowserScene extends Phaser.Scene {
   constructor() { super('RoomBrowserScene'); }
 
   create(): void {
+    this.transitioning = false; // reused scene instance
+    this.roomTexts = [];
+    this.failCount = 0;
     const { width, height } = this.scale;
 
     if (this.textures.exists('bg_main_menu')) {

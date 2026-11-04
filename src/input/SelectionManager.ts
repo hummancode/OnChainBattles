@@ -84,6 +84,8 @@ export class SelectionManager {
    */
   onBoardCellClicked(col: number, row: number): void {
     if (this.engine.isAwaitingInput()) {
+      // The pending choice belongs to the active player — not ours to resolve.
+      if (!this.engine.isMyTurn()) { this.toast('Your opponent is choosing…'); return; }
       if (this.pendingKind === 'COLUMN') {
         // Any cell picks its column (Earthquake)
         this.engine.selectColumn(col);
@@ -126,6 +128,7 @@ export class SelectionManager {
    */
   onHandCardClicked(index: number): void {
     if (this.engine.isAwaitingInput()) {
+      if (!this.engine.isMyTurn()) { this.toast('Your opponent is choosing…'); return; }
       this.engine.selectHandCard(index);
       this.clearSelection();
       return;
@@ -375,6 +378,7 @@ private publishHighlights(): void {
 
     EventBus.on(EV.INPUT_HAND_CLICK, ({ index }) => {
       if (index !== null) this.onHandCardClicked(index);
+      else if (this.state.mode === 'card_selected') this.clearSelection(); // deselect disarms the card
     }),
 
       // When engine enters AWAITING_INPUT, set mode

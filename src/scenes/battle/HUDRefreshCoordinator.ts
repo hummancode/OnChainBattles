@@ -6,12 +6,35 @@
 import { EventBus, EV } from '../../events/EventBus';
 import type { GameEngine } from '../../game/GameEngine';
 import GameState from '../../GameState';
+import type { Player } from '../../game/types/GameTypes';
+import type { CardRenderData } from '../../game/types/UITypes';
+import { toCardRenderData } from './EngineEventBridge';
+
+export interface HandView {
+  cardIds(): string[];
+  setHand(cards: CardRenderData[]): void;
+}
+
+/**
+ * State-driven safety net for the hand (§3.6): incremental draw/discard events can't describe
+ * a burned draw at the hand limit or an overflow trim (handIndex -1). If the rendered hand
+ * differs from the engine's, rebuild it. Returns true if it had to.
+ */
+export function reconcileHand(engine: GameEngine, localPlayerIndex: number, hand: HandView): boolean {
+  const ids = engine.getState().players[localPlayerIndex]?.hand ?? [];
+  const shown = hand.cardIds();
+  if (shown.length === ids.length && shown.every((id, i) => id === ids[i])) return false;
+  const me = localPlayerIndex as Player;
+  hand.setHand(ids.map(id => toCardRenderData(id, id, me, localPlayerIndex)));
+  return true;
+}
 
 export function setupHUDRefresh(
   engine: GameEngine,
   localPlayerIndex: number,
   playerName: string,
   opponentName: string,
+  hand?: HandView,
 ): Array<() => void> {
   const oppIdx = localPlayerIndex === 0 ? 1 : 0;
 
@@ -22,6 +45,7 @@ export function setupHUDRefresh(
     refreshPending = false;
     const state = engine.getState();
     if (!state) return;
+    if (hand) reconcileHand(engine, localPlayerIndex, hand);
 
     const getKingHP = (owner: number) => {
       const cell = state.board.find((c) => c.unit?.cardId === 'king' && c.unit?.owner === owner);
@@ -71,6 +95,8 @@ export function setupHUDRefresh(
   unsubs.push(EventBus.on('TURN_STARTED',         scheduleRefresh));
   unsubs.push(EventBus.on(EV.CARD_PLAYED,         scheduleRefresh));
   unsubs.push(EventBus.on('OPPONENT_CARD_DRAWN',  scheduleRefresh));
+  unsubs.push(EventBus.on(EV.CARD_DRAWN,          scheduleRefresh));
+  unsubs.push(EventBus.on(EV.CARD_DISCARDED,      scheduleRefresh));
 
   return unsubs;
 }

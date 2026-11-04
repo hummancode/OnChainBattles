@@ -147,8 +147,8 @@ export default class HubScene extends Phaser.Scene {
     // Last match banner
     if (GameState.lastMatch) {
       const m = GameState.lastMatch;
-      const color = m.playerWon ? '#00ff88' : '#ff6666';
-      const text = m.playerWon
+      const color = m.isTie ? '#dddddd' : m.playerWon ? '#00ff88' : '#ff6666';
+      const text = m.isTie ? `Last: draw vs ${m.opponentName} (${m.turns} turns)` : m.playerWon
         ? `Last: You beat ${m.opponentName} (${m.turns} turns)`
         : `Last: ${m.opponentName} beat you (${m.turns} turns)`;
       this.add.text(CX, 610, text, {

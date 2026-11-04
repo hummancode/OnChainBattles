@@ -13,7 +13,7 @@ import { EventBus } from '../../events/EventBus';
 import type { GameEngine } from '../../game/GameEngine';
 import type { Player } from '../../game/types/GameTypes';
 import type { HandRenderer } from '../../renderers/HandRenderer';
-import SocketManager from '../../network/SocketManager';
+import { dispatchLocal, networkSink } from './InputCoordinator';
 import { toCardRenderData, unitCanAct, emitAllUnitStats, refreshCanActIndicators } from './EngineEventBridge';
 
 export function syncUIFromEngine(engine: GameEngine, localPlayerIndex: number, hand: HandRenderer): void {
@@ -55,6 +55,5 @@ export function resumePendingAfterRejoin(engine: GameEngine, localPlayerIndex: n
     EventBus.emit('PENDING_DISCARD', { type: 'PENDING_DISCARD', reason: 'Discard 1 card from your hand.', count: 1 });
     return;
   }
-  engine.cancelPending();
-  SocketManager.sendGameAction({ type: 'CANCEL_PENDING' });
+  dispatchLocal(engine, { type: 'CANCEL_PENDING' }, networkSink);
 }

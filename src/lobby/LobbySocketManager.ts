@@ -48,43 +48,41 @@ export class LobbySocketManager {
     this.handlers = handlers;
   }
 
+  /** Our own listeners, so detach() never removes another manager's (scenes overlap on transitions). */
+  private bound: Array<[string, (...args: any[]) => void]> = [];
+  private boundSocket: Socket | null = null;
+
   /** Start listening for lobby events on the shared socket. */
   attach(): void {
     if (this.attached) return;
     const s = this.getSocket();
     if (!s) return;
     this.attached = true;
+    this.boundSocket = s;
+    const on = (ev: string, fn: (d: any) => void) => { s.on(ev, fn); this.bound.push([ev, fn]); };
 
-    s.on('lobby:created',          (d: any) => this.handlers.onCreated?.(d.code));
-    s.on('lobby:joined',           (d: any) => this.handlers.onJoined?.(d.code));
-    s.on('lobby:state',            (d: any) => this.handlers.onStateUpdate?.(d));
-    s.on('lobby:room_list',        (d: any) => this.handlers.onRoomList?.(d.rooms));
-    s.on('lobby:chat_message',     (d: any) => this.handlers.onChatMessage?.(d));
-    s.on('lobby:system_message',   (d: any) => this.handlers.onSystemMessage?.(d.text));
-    s.on('lobby:kicked',           (d: any) => this.handlers.onKicked?.(d.reason));
-    s.on('lobby:game_starting',    (d: any) => this.handlers.onGameStarting?.(d));
-    s.on('lobby:error',            (d: any) => this.handlers.onError?.(d.message));
-    s.on('lobby:deposit_phase',    (d: any) => this.handlers.onDepositPhase?.(d.stakeAmount));
-    s.on('lobby:opponent_deposited', ()     => this.handlers.onOpponentDeposited?.());
-    s.on('lobby:both_deposited',   ()       => this.handlers.onBothDeposited?.());
-    s.on('lobby:submit_decks',     ()       => this.handlers.onSubmitDecks?.());
-    s.on('lobby:password_required',(d: any) => this.handlers.onPasswordRequired?.(d.roomCode));
+    on('lobby:created',            (d) => this.handlers.onCreated?.(d.code));
+    on('lobby:joined',             (d) => this.handlers.onJoined?.(d.code));
+    on('lobby:state',              (d) => this.handlers.onStateUpdate?.(d));
+    on('lobby:room_list',          (d) => this.handlers.onRoomList?.(d.rooms));
+    on('lobby:chat_message',       (d) => this.handlers.onChatMessage?.(d));
+    on('lobby:system_message',     (d) => this.handlers.onSystemMessage?.(d.text));
+    on('lobby:kicked',             (d) => this.handlers.onKicked?.(d.reason));
+    on('lobby:game_starting',      (d) => this.handlers.onGameStarting?.(d));
+    on('lobby:error',              (d) => this.handlers.onError?.(d.message));
+    on('lobby:deposit_phase',      (d) => this.handlers.onDepositPhase?.(d.stakeAmount));
+    on('lobby:opponent_deposited', ()  => this.handlers.onOpponentDeposited?.());
+    on('lobby:both_deposited',     ()  => this.handlers.onBothDeposited?.());
+    on('lobby:submit_decks',       ()  => this.handlers.onSubmitDecks?.());
+    on('lobby:password_required',  (d) => this.handlers.onPasswordRequired?.(d.roomCode));
   }
 
-  /** Stop listening. Call on scene shutdown. */
+  /** Stop listening. Call on scene shutdown. Removes only this manager's listeners. */
   detach(): void {
     if (!this.attached) return;
-    const s = this.getSocket();
-    if (s) {
-      const events = [
-        'lobby:created', 'lobby:joined', 'lobby:state', 'lobby:room_list',
-        'lobby:chat_message', 'lobby:system_message', 'lobby:kicked',
-        'lobby:game_starting', 'lobby:error', 'lobby:deposit_phase',
-        'lobby:opponent_deposited', 'lobby:both_deposited', 'lobby:submit_decks',
-        'lobby:password_required',
-      ];
-      for (const ev of events) s.removeAllListeners(ev);
-    }
+    for (const [ev, fn] of this.bound) this.boundSocket?.off(ev, fn);
+    this.bound = [];
+    this.boundSocket = null;
     this.attached = false;
   }
 

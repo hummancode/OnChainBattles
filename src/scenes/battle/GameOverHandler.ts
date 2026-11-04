@@ -7,6 +7,7 @@ import { EventBus, EV } from '../../events/EventBus';
 import type { GameEngine } from '../../game/GameEngine';
 import GameState from '../../GameState';
 import SocketManager from '../../network/SocketManager';
+import { claimResult, resetResult } from './resultLatch';
 
 export function setupGameOverHandler(
   scene: Phaser.Scene,
@@ -18,8 +19,10 @@ export function setupGameOverHandler(
   /** offline = practice / tutorial vs the bot: show the result, but don't count it or tell the server. */
   opts: { offline?: boolean } = {},
 ): () => void {
+  resetResult();
   const unsub = EventBus.on(EV.GAME_OVER, (ev: any) => {
     if (!scene.scene.isActive('BattleScene')) return;
+    if (!claimResult()) return; // a server-decided result was already shown
 
     const result = ev.result ?? ev;
     const turnCount = result?.turns ?? engine.getState().turn?.turnNumber ?? 0;

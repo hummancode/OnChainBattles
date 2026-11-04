@@ -29,6 +29,9 @@ export default class ResultScene extends Phaser.Scene {
   }
 
   create() {
+    // Scene instances are reused: without this, the second result screen's buttons were dead.
+    this.transitioning = false;
+    this.events.once('shutdown', () => this.shutdown());
     const { width, height } = this.scale;
     const match = GameState.lastMatch;
     const payoutResult = GameState.payoutResult;
@@ -279,10 +282,12 @@ export default class ResultScene extends Phaser.Scene {
     this.transitioning = true;
     this.autoReturnTimer?.destroy();
     SocketManager.disconnect();
-    // Don't clear match data yet — HubScene reads lastMatch for banner
     this.cameras.main.fadeOut(200, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
+      // Keep lastMatch for the Hub's "Last:" banner (clearMatchData wiped it before Hub read it)
+      const last = GameState.lastMatch;
       GameState.clearMatchData();
+      if (last) GameState.setLastMatch(last);
       this.scene.start('HubScene');
     });
   }

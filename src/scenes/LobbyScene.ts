@@ -47,6 +47,11 @@ export default class LobbyScene extends Phaser.Scene {
   init(data: LobbySceneData): void {
     this.roomCode = data.roomCode ?? '';
     this.isHost = data.isHost ?? false;
+    // Reused scene instance: reset per-visit state (stuck 'transitioning', previous room's chat/state).
+    this.transitioning = false;
+    this.latestState = null;
+    this.chatTexts = [];
+    this.playerListTexts = [];
   }
 
   create(): void {
