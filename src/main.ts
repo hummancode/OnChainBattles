@@ -6,6 +6,7 @@ import HubScene           from './scenes/HubScene';
 import DeckBuilderScene   from './scenes/DeckBuilderScene';
 import PuzzleScene        from './scenes/PuzzleScene';
 import ProfileScene       from './scenes/ProfileScene';
+import ScenarioSelectScene from './scenes/ScenarioSelectScene';
 import RoomBrowserScene   from './scenes/RoomBrowserScene';
 import LobbyScene         from './scenes/LobbyScene';
 import BattleScene        from './scenes/BattleScene';
@@ -32,6 +33,7 @@ const config: Phaser.Types.Core.GameConfig = {
         PuzzleScene,
         ProfileScene,
         RoomBrowserScene,
+        ScenarioSelectScene,
         LobbyScene,
         BattleScene,
         ResultScene,

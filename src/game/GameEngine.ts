@@ -59,6 +59,18 @@ import { getValidMoves, getValidAttacks, getAttackRange, getValidDeploySquares }
 // PUBLIC API INTERFACE (consumed by SelectionManager)
 // ─────────────────────────────────────────────
 
+/** Hand-made starting position (scenarios / puzzles). Player index = owner. */
+export interface PositionSetup {
+  units: Array<{ cardId: string; owner: Player; col: number; row: number; hp?: number; canAct?: boolean }>;
+  hands: [string[], string[]];
+  /** Draw piles (top first). Omit to keep the dealt decks; [] = nothing to draw. */
+  decks?: [string[], string[]];
+  /** LEG pool per player (capped by the rate unless overflow). */
+  leg?: [number, number];
+  /** legRateBase per player (effective rate = base + bonuses − penalties, min 1). */
+  legRate?: [number, number];
+}
+
 export interface IGameEngineAPI {
   getValidMoveSquares(unitId: string): Position[];
   getValidAttackSquares(unitId: string): Position[];
@@ -206,6 +218,37 @@ export class GameEngine implements IGameEngineAPI {
 
   getPendingCommand(): PendingCommand | null {
     return this.pending ? structuredClone(this.pending) : null;
+  }
+
+  /**
+   * Scenario / puzzle setup: replace the opening position with a hand-made one.
+   * Only valid right after startGame() (P1's first PLAY phase, nothing pending).
+   * Units start ready to act unless `canAct: false`; `hp` lowers current DEF.
+   * Emits nothing — callers paint the UI from state (syncUIFromEngine).
+   */
+  loadPosition(setup: PositionSetup): boolean {
+    if (this.turnNumber !== 1 || this.activePlayer !== Player.P1 || this.phase !== TurnPhase.PLAY || this.pending) return false;
+    this.board.clear();
+    this.graveyard.clear();
+    for (const s of setup.units) {
+      const u = this.unitFactory.create(s.cardId, s.owner, { col: s.col, row: s.row });
+      u.isJustPlaced = s.canAct === false;
+      u.isActive = true;
+      if (s.hp != null) u.currentDef = Math.max(1, Math.min(u.maxDef, s.hp));
+      this.board.placeUnit(u);
+    }
+    for (const p of [Player.P1, Player.P2]) {
+      const ps = this.players[p];
+      ps.hand = [...(setup.hands[p] ?? [])];
+      if (setup.decks) ps.deck = [...(setup.decks[p] ?? [])];
+      ps.discard = [];
+      const mod = this.mods[p];
+      if (setup.legRate) mod.legRateBase = setup.legRate[p];
+      if (setup.leg) mod.legPool = setup.leg[p];
+    }
+    this.auras.recalculateModifiers(this.board, this.mods);
+    this.auras.evaluateAuras(this.board, this.mods);
+    return true;
   }
 
   getState(): GameStateSnapshot {

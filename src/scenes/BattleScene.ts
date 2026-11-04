@@ -9,6 +9,9 @@
 //   - GameOverHandler:        GAME_OVER → ResultScene
 // ============================================================
 
+import { ScenarioRunner } from '../game/scenarios/ScenarioRunner';
+import { SCENARIOS } from '../game/scenarios/scenarios';
+import { ScenarioCoordinator } from './battle/ScenarioCoordinator';
 import Phaser from 'phaser';
 import { GameEngine } from '../game/GameEngine';
 import { LayoutLoader } from '../config/LayoutLoader';
@@ -61,6 +64,8 @@ interface BattleSceneData {
   replay?: ReplayData;
   /** Offline match vs SimpleBot (P2); `tutorial` adds the guided lesson. */
   vsBot?: { tutorial?: boolean; difficulty?: BotDifficulty };
+  /** Offline story puzzle (src/game/scenarios). */
+  scenario?: { id: string };
 }
 
 export default class BattleScene extends Phaser.Scene {
@@ -105,8 +110,9 @@ export default class BattleScene extends Phaser.Scene {
     // event bridge exists, so the replay is silent and the UI is painted once from state.
     const replay = this.sceneData?.replay;
     const vsBot = this.sceneData?.vsBot;
-    const offline = !!replay || !!vsBot;
-    if (vsBot) GameState.roomCode = ''; // no stale room → no wrong replay / rejoin afterwards
+    const scenarioDef = this.sceneData?.scenario ? SCENARIOS.find(s => s.id === this.sceneData.scenario!.id) : undefined;
+    const offline = !!replay || !!vsBot || !!scenarioDef;
+    if (vsBot || scenarioDef) GameState.roomCode = ''; // no stale room → no wrong replay / rejoin afterwards
     const isRejoin = !offline && !SocketManager.isConnected() && !!GameState.roomCode && GameState.hasBattleSession();
     const isResync = !offline && GameState.pendingResync && SocketManager.isConnected() && !!GameState.roomCode;
     GameState.pendingResync = false;
@@ -139,7 +145,7 @@ export default class BattleScene extends Phaser.Scene {
       }
     }
 
-    const localPlayerIndex = replay ? (replay.viewAs ?? 0) : vsBot ? 0 : (GameState.playerIndex ?? 0);
+    const localPlayerIndex = replay ? (replay.viewAs ?? 0) : (vsBot || scenarioDef) ? 0 : (GameState.playerIndex ?? 0);
     const playerName   = replay ? replay.playerNames[localPlayerIndex] : (this.sceneData?.playerName   ?? GameState.playerName   ?? 'You');
     const opponentName = replay ? replay.playerNames[1 - localPlayerIndex] : (this.sceneData?.opponentName  ?? GameState.opponentName ?? 'Opponent');
 
@@ -159,6 +165,8 @@ export default class BattleScene extends Phaser.Scene {
         console.error('[BattleScene] Rejoin replay diverged — state may be out of sync');
       }
     }
+    // Story puzzle: build the hand-made position silently (before the bridge), paint from state later.
+    this.scenarioRunner = scenarioDef ? new ScenarioRunner(scenarioDef, this.engine) : undefined;
     // Every outgoing action carries our post-action state hash → server detects desyncs.
     if (!offline) SocketManager.setHashSource(() => engineStateHash(this.engine));
     this.bridgeUnsub = wireEngineToEventBus(this.engine, localPlayerIndex);
@@ -213,7 +221,9 @@ export default class BattleScene extends Phaser.Scene {
     // Replays are read-only: no SelectionManager → no clicks reach the engine.
     // Practice/tutorial actions stay local (they used to be buffered and later flushed to a real room).
     const sink: ActionSink = offline ? () => {} : networkSink;
-    if (!replay) this.selectionManager = createSelectionManager(this.engine, layout, localPlayerIndex, sink);
+    const runner = this.scenarioRunner;
+    const apply = runner ? (a: GameAction) => runner.play(a) : undefined;
+    if (!replay) this.selectionManager = createSelectionManager(this.engine, layout, localPlayerIndex, sink, apply);
 
     // ─── Initial HUD emit ────────────────────────
     EventBus.emit(EV.HUD_REFRESH, {
@@ -233,13 +243,15 @@ export default class BattleScene extends Phaser.Scene {
       const phase = state.turn?.phase;
       if (phase !== 'PLAY' && phase !== 'ACT') return;
       // Refused during a pending choice → nothing sent (used to desync / get rejected).
-      if (!dispatchLocal(this.engine, { type: phase === 'PLAY' ? 'END_PLAY_PHASE' : 'END_ACT_PHASE' }, sink)) {
+      const end: GameAction = { type: phase === 'PLAY' ? 'END_PLAY_PHASE' : 'END_ACT_PHASE' };
+      if (!(apply ? apply(end) : dispatchLocal(this.engine, end, sink))) {
         EventBus.emit(EV.UI_TOAST, { message: 'Finish the current choice first' });
       }
     });
 
     // ─── Game over ───────────────────────────────
-    if (!replay) this.gameOverUnsub = setupGameOverHandler(this, this.engine, localPlayerIndex, playerName, opponentName, this.sceneData.isCryptoMode, { offline: !!vsBot });
+    // Story puzzles show their own result (ScenarioCoordinator), never the ResultScene.
+    if (!replay && !runner) this.gameOverUnsub = setupGameOverHandler(this, this.engine, localPlayerIndex, playerName, opponentName, this.sceneData.isCryptoMode, { offline: !!vsBot });
 
     // ─── Network ─────────────────────────────────
     if (!offline) setupSocketCallbacks({
@@ -268,6 +280,9 @@ export default class BattleScene extends Phaser.Scene {
     // ─── Start / resume ────────────────────────────
     if (replay) {
       this.runReplay(replay);
+    } else if (runner) {
+      syncUIFromEngine(this.engine, localPlayerIndex, this.handRenderer);
+      this.startScenario(runner);
     } else if (vsBot) {
       if (vsBot.tutorial) {
         // Same playable opening for every new player (tests/tutorial/tutorialSetup.test.ts)
@@ -295,6 +310,30 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   private tutorial?: TutorialCoordinator;
+  private scenarioRunner?: ScenarioRunner;
+  private scenarioUI?: ScenarioCoordinator;
+
+  /** Story puzzle: coordinator UI + the opponent's paced, automatic replies. */
+  private startScenario(runner: ScenarioRunner): void {
+    const data = this.sys.settings.data as BattleSceneData;
+    this.scenarioUI = new ScenarioCoordinator(this, runner, {
+      restart: () => this.scene.restart(data),
+      next: (id) => this.scene.restart({ ...data, opponentName: SCENARIOS.find(s => s.id === id)?.title ?? 'Enemy', scenario: { id } }),
+      exit: () => {
+        this.cameras.main.fadeOut(250, 0, 0, 0);
+        this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('ScenarioSelectScene'));
+      },
+    });
+    const timer = this.time.addEvent({
+      delay: 700, loop: true,
+      callback: () => {
+        if (runner.status !== 'playing') { timer.remove(false); return; }
+        if (this.scenarioUI?.introOpen) return;
+        if (runner.opponentToMove) runner.stepOpponent();
+      },
+    });
+  }
+
   private sfx?: SfxCoordinator;
 
   /** Drive player 2 with SimpleBot; actions go through applyAction like any other source. */
@@ -387,6 +426,9 @@ export default class BattleScene extends Phaser.Scene {
   shutdown() {
     this.tutorial?.cleanup();
     this.tutorial = undefined;
+    this.scenarioUI?.cleanup();
+    this.scenarioUI = undefined;
+    this.scenarioRunner = undefined;
     this.sfx?.cleanup();
     this.sfx = undefined;
     SocketManager.setHashSource(null);

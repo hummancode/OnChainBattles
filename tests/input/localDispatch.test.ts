@@ -101,3 +101,19 @@ describe('Assassin jump attack via the board', () => {
     sm.destroy(); off();
   });
 });
+
+describe('story puzzle input routing', () => {
+  it('board input goes through the scenario runner (moves counted), never the network', async () => {
+    const { ScenarioRunner } = await import('../../src/game/scenarios/ScenarioRunner');
+    const { SCENARIOS } = await import('../../src/game/scenarios/scenarios');
+    const r = new ScenarioRunner(SCENARIOS[0]);
+    const sent: GameAction[] = [];
+    const sm = createSelectionManager(r.engine, {} as any, 0, a => sent.push(a), a => r.play(a));
+    const api = (sm as any).engine as IGameEngineAPI;
+    r.play({ type: 'END_PLAY_PHASE' });
+    api.attackUnit(1, 3, 3, 5);            // Archer shoots the Pikeman
+    expect(r.movesUsed).toBe(1);
+    expect(sent).toEqual([]);
+    sm.destroy();
+  });
+});

@@ -32,6 +32,8 @@ export function createSelectionManager(
   layout: BattleLayoutJSON,
   localPlayerIndex: number,
   send: ActionSink = networkSink,
+  /** Override how an accepted local action is applied (story puzzles route through ScenarioRunner). */
+  apply?: (action: GameAction) => boolean,
 ): SelectionManager {
   const getBoardUnit = (col: number, row: number) => {
     const cell = engine.getState().board.find((c) => c.col === col && c.row === row);
@@ -39,7 +41,7 @@ export function createSelectionManager(
   };
   const myTurn = () => engine.getState().turn?.activePlayer === localPlayerIndex;
   /** Every engine-changing input goes through here: only on our turn, only if accepted. */
-  const act = (action: GameAction): boolean => myTurn() && dispatchLocal(engine, action, send);
+  const act = (action: GameAction): boolean => myTurn() && (apply ? apply(action) : dispatchLocal(engine, action, send));
 
   return new SelectionManager(layout, {
     getAttackRange: (col: number, row: number) => {

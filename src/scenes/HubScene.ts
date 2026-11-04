@@ -480,7 +480,7 @@ export default class HubScene extends Phaser.Scene {
     this.transitioning = true;
     this.cameras.main.fadeOut(300, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
-      this.scene.start('PuzzleScene');
+      this.scene.start('ScenarioSelectScene');
     });
   }
 
