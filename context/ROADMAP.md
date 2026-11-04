@@ -1,6 +1,6 @@
 # OnChainBattles — Yol Haritası
 
-_Son güncelleme: 3 Kasım 2026 (Faz 1–4 tamam)_
+_Son güncelleme: 4 Kasım 2026 (Faz 1–4 + genel inceleme tamam, MVP 1 sürüyor; kripto askıda)_
 
 Durum işaretleri: ✅ bitti · 🔜 sıradaki · ⏳ planlı
 
@@ -87,7 +87,28 @@ Açık kalan içerik işleri: alta yelpaze el düzeni, eksik kart çizimleri, pu
 
 ---
 
-## Faz 5 — Web3 / canlıya hazırlık ⏳
+## Genel inceleme ✅ (4 Kasım 2026)
+
+Bot-vs-bot fuzz (`npm run test:fuzz`) + kod incelemesi: motor 10, sunucu 7, istemci 9 hata (BUG-092…117).
+400 maçta çökme / kural ihlali / tekrar izleme farkı: 214 / 154 / 6 → 0 / 0 / 0.
+
+---
+
+## MVP 1 — temel oyun, sağlamlık, arayüz 🔜 (kripto askıda)
+
+| # | İş | Durum |
+|---|----|-------|
+| M.1 | Kripto `VITE_ENABLE_CRYPTO` / `ENABLE_CRYPTO` bayraklarıyla gizli (varsayılan kapalı; kod duruyor). Sunucu bahisli oda kurdurmuyor, zincir üstü puzzle'ları gizliyor | ✅ |
+| M.2 | Puzzle'lar cüzdansız çözülebiliyor (BUG-118), bekleme süresi UTC (BUG-119) | ✅ |
+| M.3 | Eski QUICK PLAY (MainMenu/RoomScene) kaldırıldı; lobi tek çok oyunculu yol. Lobi "Invite" bağlantısı → Hub'da katılma penceresi kodla dolu açılıyor | ✅ |
+| M.4 | Pratik botu Kolay / Normal / Zor (SmartBot: takas değerlendirmesi, tehdit haritası, kral güvenliği, sonraki tura saldırı kurma). Ölçüm: Zor–Kolay %85, Zor–Normal %63, Normal–Kolay ≥ %60 | ✅ |
+| M.5 | Kart metni ↔ motor denetimi (15 uyumsuzluk): Casus Belli rakip yarının ön sırası, Assassin çapraz sıçrama saldırısı, Village fixed desenleri de yavaşlatıyor, Castle ACT'te saldırmıyor, Pikeman karşı saldırıda ×3, Treason sadece birim, metin düzeltmeleri | 🔜 |
+| M.6 | Sağlamlık: oda / kuyruk / giriş denemesi limitleri, nonce, hareket animasyonu eşlemesi, zamanlayıcı temizliği (BUG-120…122) | ✅ |
+| M.7 | Arayüz turu (tüm sahneler) + iki tarayıcıyla uçtan uca maç | 🔜 |
+
+---
+
+## Faz 5 — Web3 / canlıya hazırlık ⏸ (askıda)
 
 - Beraberlik iadesinin (`refundTie`) Fuji'de uçtan uca testi
 - Escrow kontratı için bağımsız inceleme, mainnet öncesi rake/limit ayarları

@@ -417,6 +417,48 @@
       "text": "The Hub shows your last match result again.",
       "created": "2026-11-04T15:06:00",
       "edited": null
+    },
+    {
+      "id": "20261104160000000000",
+      "category": "New Content",
+      "text": "Practice vs Bot now has three difficulties: Easy, Normal and Hard. Hard weighs trades, keeps its King safe and sets up attacks. Your last choice is remembered.",
+      "created": "2026-11-04T16:00:00",
+      "edited": null
+    },
+    {
+      "id": "20261104160001000000",
+      "category": "New Content",
+      "text": "Lobby INVITE button copies a link; opening it takes your friend straight to the join dialog with the room code filled in.",
+      "created": "2026-11-04T16:01:00",
+      "edited": null
+    },
+    {
+      "id": "20261104160002000000",
+      "category": "Mechanics",
+      "text": "Crypto stakes and wallet features are paused for MVP 1 — every match is free play.",
+      "created": "2026-11-04T16:02:00",
+      "edited": null
+    },
+    {
+      "id": "20261104160003000000",
+      "category": "Bug Fix",
+      "text": "Puzzles can be solved with a normal account, no wallet needed; the 24 h retry timer is now exact.",
+      "created": "2026-11-04T16:03:00",
+      "edited": null
+    },
+    {
+      "id": "20261104160004000000",
+      "category": "Mechanics",
+      "text": "The old Quick Play menu was removed — Host / Browse / Join is the one way to play online.",
+      "created": "2026-11-04T16:04:00",
+      "edited": null
+    },
+    {
+      "id": "20261104160005000000",
+      "category": "Bug Fix",
+      "text": "Units no longer briefly 'lose' their square while sliding to a new one (fast turns and 3x replays).",
+      "created": "2026-11-04T16:05:00",
+      "edited": null
     }
   ],
   "revoked": []

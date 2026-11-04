@@ -43,4 +43,6 @@ const config: Phaser.Types.Core.GameConfig = {
 };
 
 const game = new Phaser.Game(config);
+// Dev only: expose the game for Playwright QA / DevTools inspection.
+if (import.meta.env.DEV) (window as any).game = game;
 export default game;

@@ -53,9 +53,9 @@ export default class LoginScene extends Phaser.Scene {
     // Panel
     const panel = this.add.graphics();
     panel.fillStyle(0x16213e, 0.90);
-    panel.fillRoundedRect(width / 2 - 260, height / 2 - 240, 520, 480, 10);
+    panel.fillRoundedRect(width / 2 - 260, height / 2 - 240, 520, CRYPTO_ENABLED ? 480 : 400, 10);
     panel.lineStyle(2, 0x4fc3f7, 0.4);
-    panel.strokeRoundedRect(width / 2 - 260, height / 2 - 240, 520, 480, 10);
+    panel.strokeRoundedRect(width / 2 - 260, height / 2 - 240, 520, CRYPTO_ENABLED ? 480 : 400, 10);
 
     this.cameras.main.fadeIn(400, 0, 0, 0);
 
@@ -68,7 +68,7 @@ export default class LoginScene extends Phaser.Scene {
     }).setOrigin(0.5);
     y += 35;
 
-    this.add.text(cx, y, 'Chess-like On-Chain Card Game', {
+    this.add.text(cx, y, CRYPTO_ENABLED ? 'Chess-like On-Chain Card Game' : 'Chess-like Tactical Card Game', {
       fontSize: '14px', fontFamily: FONT, color: '#777777',
     }).setOrigin(0.5);
     y += 45;
