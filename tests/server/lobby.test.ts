@@ -56,7 +56,15 @@ describe('createLobbyRoom', () => {
     expect(room.settings!.roomName).toBe("Host's Room");
   });
 
+  it('forces free play while crypto is suspended (MVP 1)', () => {
+    delete process.env.ENABLE_CRYPTO;
+    const room = createLobbyRoom('s1', 'Host', null, { isCrypto: true, stakeAmount: 0.5 });
+    expect(room.settings!.isCrypto).toBe(false);
+    expect(room.settings!.stakeAmount).toBe(0);
+  });
+
   it('merges custom settings with defaults', () => {
+    process.env.ENABLE_CRYPTO = 'true';
     const room = createLobbyRoom('s1', 'Host', null, {
       isPublic: false,
       isCrypto: true,
@@ -69,6 +77,7 @@ describe('createLobbyRoom', () => {
     expect(room.settings!.stakeAmount).toBe(0.01);
     expect(room.settings!.roomName).toBe('Custom Room');
     expect(room.settings!.maxPlayers).toBe(2); // default preserved
+    delete process.env.ENABLE_CRYPTO;
   });
 
   it('truncates room name to 40 chars', () => {

@@ -6,6 +6,7 @@
 
 import type { Server, Socket } from 'socket.io';
 import type { ClientToServerEvents, ServerToClientEvents, Room } from '../../shared/types/NetworkEvents.js';
+import { cryptoEnabled } from '../config/features.js';
 import { RoomManager } from '../rooms/RoomManager.js';
 import { getOwnedCards } from '../api/collectionHelpers.js';
 import { createLobbyRoom } from './lobbyHelpers.js';
@@ -148,8 +149,10 @@ export class LobbyManager {
       if (room.settings) {
         if (typeof settings.isPublic === 'boolean') room.settings.isPublic = settings.isPublic;
         if (typeof settings.roomName === 'string') room.settings.roomName = sanitizeText(settings.roomName, 40) || room.settings.roomName;
-        if (typeof settings.isCrypto === 'boolean') room.settings.isCrypto = settings.isCrypto;
-        if (typeof settings.stakeAmount === 'number') room.settings.stakeAmount = settings.stakeAmount;
+        if (cryptoEnabled()) {
+          if (typeof settings.isCrypto === 'boolean') room.settings.isCrypto = settings.isCrypto;
+          if (typeof settings.stakeAmount === 'number') room.settings.stakeAmount = settings.stakeAmount;
+        }
       }
       this.emitState(roomCode);
     });

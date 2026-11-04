@@ -10,6 +10,8 @@ import SocketManager from '../network/SocketManager';
 import { AuthManager } from '../auth/AuthManager';
 import { DeckLoader } from '../config/DeckLoader';
 import { LobbySocketManager } from '../lobby/LobbySocketManager';
+import { CRYPTO_ENABLED } from '../config/features';
+import { ShareHelper } from '../ui/ShareHelper';
 import { DOMInputManager } from '../ui/DOMInputManager';
 import { MenuButton } from '../ui/MenuButton';
 import { ToastNotification } from '../ui/ToastNotification';
@@ -53,7 +55,7 @@ export default class HubScene extends Phaser.Scene {
 
     // Wallet/email badge
     let badge = '';
-    if (player?.wallet) badge = ` (${player.wallet.slice(0, 6)}...)`;
+    if (CRYPTO_ENABLED && player?.wallet) badge = ` (${player.wallet.slice(0, 6)}...)`;
     else if (player?.email) badge = ` (${player.email})`;
 
     this.add.text(CX, 75, `Welcome, ${displayName}${badge}`, {
@@ -132,10 +134,6 @@ export default class HubScene extends Phaser.Scene {
       onPointerDown: () => this.startBotMatch(true),
     });
 
-    new MenuButton(this, CX, y += gap - 5, '[ QUICK PLAY (LEGACY) ]', {
-      color: '#777777', fontSize: '16px',
-      onPointerDown: () => this.goToLegacy(),
-    });
 
     // W/L record
     if (GameState.winCount + GameState.lossCount > 0) {
@@ -174,6 +172,13 @@ export default class HubScene extends Phaser.Scene {
       },
     });
     this.lobbySM.attach();
+
+    // Invite link (?room=CODE): open the join dialog prefilled, once.
+    const invited = ShareHelper.getRoomCodeFromURL();
+    if (invited) {
+      ShareHelper.clearRoomCodeFromURL();
+      this.time.delayedCall(450, () => this.showJoinOverlay(invited));
+    }
 
     this.events.once('shutdown', () => {
       this.cleanup();
@@ -230,6 +235,7 @@ export default class HubScene extends Phaser.Scene {
     });
     this.hostOverlay.add(publicBtn);
 
+    if (CRYPTO_ENABLED) {
     const cryptoBtn = this.add.text(CX, 360, '[ FREE PLAY ]', {
       fontSize: '18px', fontFamily: '"Courier New", monospace', color: '#4fc3f7',
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
@@ -239,6 +245,7 @@ export default class HubScene extends Phaser.Scene {
       cryptoBtn.setColor(isCrypto ? '#f5a623' : '#4fc3f7');
     });
     this.hostOverlay.add(cryptoBtn);
+    }
 
     // Create button
     const submitCreate = () => {
@@ -300,7 +307,7 @@ export default class HubScene extends Phaser.Scene {
 
   // ─── Join Overlay ──────────────────────────────────────────
 
-  private showJoinOverlay(): void {
+  private showJoinOverlay(prefill = ''): void {
     if (this.joinOverlay) return;
     const { width, height } = this.scale;
 
@@ -327,6 +334,7 @@ export default class HubScene extends Phaser.Scene {
       gameX: CX, gameY: 325, width: 200, height: 40,
       placeholder: '6-digit code', maxLength: 6, uppercase: true,
     });
+    if (prefill) codeInput.value = prefill;
 
     const submitJoin = () => {
       const code = codeInput.value.trim();
@@ -414,15 +422,6 @@ export default class HubScene extends Phaser.Scene {
     this.cameras.main.fadeOut(300, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       this.scene.start('PuzzleScene');
-    });
-  }
-
-  private goToLegacy(): void {
-    if (this.transitioning) return;
-    this.transitioning = true;
-    this.cameras.main.fadeOut(300, 0, 0, 0);
-    this.cameras.main.once('camerafadeoutcomplete', () => {
-      this.scene.start('MainMenuScene');
     });
   }
 

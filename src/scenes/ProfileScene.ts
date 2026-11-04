@@ -4,6 +4,7 @@
 // puzzle stats, collection overview.
 // ============================================================
 
+import { CRYPTO_ENABLED } from '../config/features';
 import Phaser from 'phaser';
 import { AuthManager } from '../auth/AuthManager';
 import { CollectionAPI, CollectionCard } from '../deck/CollectionAPI';
@@ -205,7 +206,7 @@ export default class ProfileScene extends Phaser.Scene {
       }));
       y += 22;
     }
-    if (p.wallet) {
+    if (CRYPTO_ENABLED && p.wallet) {
       objs.push(this.add.text(140, y, `Wallet: ${p.wallet.slice(0, 6)}...${p.wallet.slice(-4)}`, {
         fontSize: '13px', fontFamily: FONT, color: '#AAAAAA',
       }));
@@ -336,7 +337,8 @@ export default class ProfileScene extends Phaser.Scene {
     }));
     y += 28;
 
-    // Wallet status
+    // Wallet status (crypto builds only)
+    if (CRYPTO_ENABLED) {
     const walletIcon = p.wallet ? '#00ff88' : '#555555';
     objs.push(this.add.text(140, y, p.wallet ? `Wallet: ${p.wallet.slice(0, 6)}...${p.wallet.slice(-4)}` : 'Wallet: Not linked', {
       fontSize: '14px', fontFamily: FONT, color: walletIcon,
@@ -360,6 +362,7 @@ export default class ProfileScene extends Phaser.Scene {
       });
       objs.push(linkWalletBtn.text);
       y += 50;
+    }
     }
 
     // Link email form (wallet-only users)
@@ -406,7 +409,7 @@ export default class ProfileScene extends Phaser.Scene {
     }
 
     // Both linked
-    if (p.email && p.wallet) {
+    if (p.email && (p.wallet || !CRYPTO_ENABLED)) {
       objs.push(this.add.text(140, y, 'All accounts linked!', {
         fontSize: '16px', fontFamily: FONT, fontStyle: 'bold', color: '#00ff88',
       }));
@@ -436,7 +439,7 @@ export default class ProfileScene extends Phaser.Scene {
     objs.push(this.add.text(140, y, 'Result', { fontSize: '10px', fontFamily: FONT, color: '#444444' }));
     objs.push(this.add.text(230, y, 'Opponent', { fontSize: '10px', fontFamily: FONT, color: '#444444' }));
     objs.push(this.add.text(500, y, 'Turns', { fontSize: '10px', fontFamily: FONT, color: '#444444' }));
-    objs.push(this.add.text(580, y, 'Stake', { fontSize: '10px', fontFamily: FONT, color: '#444444' }));
+    if (CRYPTO_ENABLED) objs.push(this.add.text(580, y, 'Stake', { fontSize: '10px', fontFamily: FONT, color: '#444444' }));
     objs.push(this.add.text(700, y, 'Date', { fontSize: '10px', fontFamily: FONT, color: '#444444' }));
     y += 18;
 
@@ -463,7 +466,7 @@ export default class ProfileScene extends Phaser.Scene {
 
       // Stake
       const stakeLabel = m.stakeAmount > 0 ? `${m.stakeAmount} AVAX` : 'Free';
-      objs.push(this.add.text(580, y, stakeLabel, {
+      if (CRYPTO_ENABLED) objs.push(this.add.text(580, y, stakeLabel, {
         fontSize: '13px', fontFamily: FONT, color: m.stakeAmount > 0 ? '#f5a623' : '#555555',
       }));
 

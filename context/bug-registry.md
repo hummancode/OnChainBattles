@@ -13,7 +13,7 @@ Used to identify weak areas and improve code quality over time.
 
 | Category | Count | User-Found | Claude-Found | Test-Found |
 |----------|-------|------------|--------------|------------|
-| logic | 31 | 5 | 23 | 3 |
+| logic | 33 | 5 | 25 | 3 |
 | network | 15 | 6 | 8 | 1 |
 | state | 25 | 4 | 20 | 1 |
 | rendering | 11 | 1 | 9 | 1 |
@@ -22,7 +22,7 @@ Used to identify weak areas and improve code quality over time.
 | web3 | 3 | 0 | 3 | 0 |
 | type-safety | 7 | 2 | 5 | 0 |
 | security | 12 | 1 | 11 | 0 |
-| **TOTAL** | **117** | **21** | **90** | **6** |
+| **TOTAL** | **119** | **21** | **92** | **6** |
 
 ---
 
@@ -1229,3 +1229,23 @@ Used to identify weak areas and improve code quality over time.
 - **Fix**: Preserve lastMatch across the clear; banner handles draws.
 - **Prevention**: Don't clear data that the next scene is documented to read.
 - **Files**: src/scenes/ResultScene.ts, src/scenes/HubScene.ts
+
+### BUG-118: Free (off-chain) puzzles demanded a wallet signature
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: Email/guest-free players could not submit any puzzle answer without MetaMask, although the route comment said "free puzzles just need auth".
+- **Root cause**: The signature check ran for every attempt, not only on-chain ones; the client always connected + signed.
+- **Fix**: Signature only for on-chain puzzles (server + PuzzleScene); on-chain puzzles hidden/refused while `ENABLE_CRYPTO` is off.
+- **Prevention**: Gate each crypto requirement on the property that needs it (on-chain payout), not globally.
+- **Files**: server/api/puzzleRoutes.ts, server/config/features.ts, src/scenes/PuzzleScene.ts
+
+### BUG-119: Puzzle cooldown read SQLite UTC timestamps as local time
+- **Date**: 2026-11-04
+- **Category**: `logic`
+- **Discovered by**: `claude`
+- **Symptom**: On a server not running in UTC the 24 h cooldown was shifted by the zone offset (too short or too long).
+- **Root cause**: `new Date("YYYY-MM-DD HH:MM:SS")` parses as local time; SQLite CURRENT_TIMESTAMP is UTC.
+- **Fix**: Parse as UTC (`T…Z`) unless the value already carries a zone.
+- **Prevention**: Treat zone-less DB timestamps as UTC everywhere.
+- **Files**: server/api/puzzleRoutes.ts

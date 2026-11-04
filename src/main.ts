@@ -8,8 +8,6 @@ import PuzzleScene        from './scenes/PuzzleScene';
 import ProfileScene       from './scenes/ProfileScene';
 import RoomBrowserScene   from './scenes/RoomBrowserScene';
 import LobbyScene         from './scenes/LobbyScene';
-import MainMenuScene      from './scenes/MainMenuScene';
-import RoomScene          from './scenes/RoomScene';
 import BattleScene        from './scenes/BattleScene';
 import ResultScene        from './scenes/ResultScene';
 
@@ -35,8 +33,6 @@ const config: Phaser.Types.Core.GameConfig = {
         ProfileScene,
         RoomBrowserScene,
         LobbyScene,
-        MainMenuScene,
-        RoomScene,
         BattleScene,
         ResultScene,
     ],

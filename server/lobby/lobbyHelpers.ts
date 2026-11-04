@@ -4,6 +4,7 @@
 // ============================================================
 
 import type { Room, RoomSettings } from '../../shared/types/NetworkEvents.js';
+import { cryptoEnabled } from '../config/features.js';
 
 const DEFAULT_SETTINGS: RoomSettings = {
   isPublic: true,
@@ -27,6 +28,8 @@ export function createLobbyRoom(
     ...settings,
     roomName: (settings.roomName ?? `${hostName}'s Room`).slice(0, 40),
   };
+  // Crypto suspended (MVP 1): stake rooms can't be created even by a modified client.
+  if (!cryptoEnabled()) { merged.isCrypto = false; merged.stakeAmount = 0; }
 
   return {
     players: [{

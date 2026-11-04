@@ -429,8 +429,8 @@ export default class PuzzleScene extends Phaser.Scene {
         }).setOrigin(0.5));
       }
 
-      // Wallet signature notice
-      objs.push(this.add.text(CX, submitY + (puzzle.attempt_fee > 0 ? 48 : 30), 'Wallet signature required to submit', {
+      // Wallet signature notice (on-chain puzzles only)
+      if (puzzle.on_chain) objs.push(this.add.text(CX, submitY + (puzzle.attempt_fee > 0 ? 48 : 30), 'Wallet signature required to submit', {
         fontSize: '10px', fontFamily: FONT, color: '#777777',
       }).setOrigin(0.5));
     }
@@ -853,8 +853,9 @@ export default class PuzzleScene extends Phaser.Scene {
   private async submitAttempt(): Promise<void> {
     if (!this.activePuzzle || !AuthManager.isLoggedIn()) return;
 
-    // All puzzle attempts require a connected wallet
-    if (!WalletManager.isConnected()) {
+    // On-chain puzzles pay out to a wallet → connect + sign. Off-chain ones only need the login.
+    const onChain = !!this.activePuzzle.on_chain;
+    if (onChain && !WalletManager.isConnected()) {
       try {
         await WalletManager.connect();
       } catch {
@@ -869,9 +870,9 @@ export default class PuzzleScene extends Phaser.Scene {
     });
 
     // Sign the attempt to prove wallet ownership
-    let signature: string;
-    let walletAddress: string;
-    try {
+    let signature: string | undefined;
+    let walletAddress: string | undefined;
+    if (onChain) try {
       const signer = WalletManager.getSigner();
       if (!signer) throw new Error('No signer');
       walletAddress = await signer.getAddress();

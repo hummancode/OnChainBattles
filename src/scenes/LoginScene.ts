@@ -3,6 +3,7 @@
 // Entry scene: email login, email register, wallet login, or guest.
 // ============================================================
 
+import { CRYPTO_ENABLED } from '../config/features';
 import Phaser from 'phaser';
 import { AuthManager } from '../auth/AuthManager';
 import { DeckLoader } from '../config/DeckLoader';
@@ -112,13 +113,15 @@ export default class LoginScene extends Phaser.Scene {
     }).setOrigin(0.5);
     y += 35;
 
-    // ── Wallet Login ────────────────────────────────────────
-    const walletBtn = new MenuButton(this, cx, y, '[ LOGIN WITH WALLET ]', {
-      color: '#f5a623', fontSize: '20px',
-      onPointerDown: () => this.handleWalletLogin(),
-    });
-    this.allButtons.push(walletBtn);
-    y += 50;
+    // ── Wallet Login (crypto builds only) ───────────────────
+    if (CRYPTO_ENABLED) {
+      const walletBtn = new MenuButton(this, cx, y, '[ LOGIN WITH WALLET ]', {
+        color: '#f5a623', fontSize: '20px',
+        onPointerDown: () => this.handleWalletLogin(),
+      });
+      this.allButtons.push(walletBtn);
+      y += 50;
+    }
 
     // ── Guest ───────────────────────────────────────────────
     const guestBtn = new MenuButton(this, cx, y, '[ PLAY AS GUEST ]', {

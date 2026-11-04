@@ -230,13 +230,6 @@ export default class ResultScene extends Phaser.Scene {
     rematchBtn.on('pointerout', () => rematchBtn.setColor('#00FF88'));
     rematchBtn.on('pointerdown', () => this.goToRematch());
 
-    // Legacy menu
-    const menuBtn = this.add.text(width / 2 + 160, btnY, '[ LEGACY ]', {
-      fontSize: '18px', color: '#777777',
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    menuBtn.on('pointerover', () => menuBtn.setColor('#FFFFFF'));
-    menuBtn.on('pointerout', () => menuBtn.setColor('#777777'));
-    menuBtn.on('pointerdown', () => this.goToMenu());
 
     // Watch replay (server stores every settled match: seed + decks + action log)
     if (GameState.roomCode) {
@@ -266,7 +259,7 @@ export default class ResultScene extends Phaser.Scene {
   private addAutoReturn(): void {
     this.autoReturnTimer = this.time.delayedCall(15000, () => {
       if (!this.scene.isActive('ResultScene')) return;
-      this.goToMenu();
+      this.goToHub();
     });
   }
 
@@ -314,15 +307,4 @@ export default class ResultScene extends Phaser.Scene {
     });
   }
 
-  private goToMenu(): void {
-    if (this.transitioning) return;
-    this.transitioning = true;
-    this.autoReturnTimer?.destroy();
-    SocketManager.disconnect();
-    this.cameras.main.fadeOut(200, 0, 0, 0);
-    this.cameras.main.once('camerafadeoutcomplete', () => {
-      GameState.clearMatchData();
-      this.scene.start('MainMenuScene');
-    });
-  }
 }

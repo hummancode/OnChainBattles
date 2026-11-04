@@ -8,6 +8,7 @@ import { Router } from 'express';
 import { verifyMessage } from 'ethers';
 import { getDB } from '../db/database.js';
 import { requireAuth } from './middleware.js';
+import { cryptoEnabled } from '../config/features.js';
 import { normalizePlacement } from '../validation/PuzzleValidator.js';
 import { awardCard } from './collectionHelpers.js';
 import type { PuzzlePayoutService } from '../game/PuzzlePayoutService.js';
@@ -28,8 +29,8 @@ puzzleRouter.get('/', (_req, res) => {
     `SELECT id, title, description, difficulty, board_setup, hand_cards,
             prize_card_id, prize_pool, attempt_fee, required_cards, show_required_cards,
             on_chain, published, solved, solved_by_id, solved_at, created_at
-     FROM puzzles WHERE published = 1 ORDER BY created_at DESC`
-  ).all();
+     FROM puzzles WHERE published = 1 AND (on_chain = 0 OR ? = 1) ORDER BY created_at DESC`
+  ).all(cryptoEnabled() ? 1 : 0);
 
   res.json({
     puzzles: puzzles.map((p: any) => {
@@ -85,8 +86,8 @@ puzzleRouter.get('/:id', (req, res) => {
     `SELECT id, title, description, difficulty, board_setup, hand_cards,
             prize_card_id, prize_pool, attempt_fee, required_cards, show_required_cards,
             on_chain, published, solved, solved_by_id, solved_at, created_at
-     FROM puzzles WHERE id = ? AND published = 1`
-  ).get(req.params.id) as Record<string, unknown> | undefined;
+     FROM puzzles WHERE id = ? AND published = 1 AND (on_chain = 0 OR ? = 1)`
+  ).get(req.params.id, cryptoEnabled() ? 1 : 0) as Record<string, unknown> | undefined;
 
   if (!p) { res.status(404).json({ error: 'Puzzle not found.' }); return; }
 
@@ -114,7 +115,8 @@ puzzleRouter.post('/:id/attempt', requireAuth, async (req, res) => {
 
   // Load puzzle
   const puzzle = db.prepare('SELECT * FROM puzzles WHERE id = ? AND published = 1').get(req.params.id) as Record<string, unknown> | undefined;
-  if (!puzzle) { res.status(404).json({ error: 'Puzzle not found.' }); return; }
+  // On-chain puzzles don't exist while crypto is suspended
+  if (!puzzle || (puzzle.on_chain && !cryptoEnabled())) { res.status(404).json({ error: 'Puzzle not found.' }); return; }
   if (puzzle.solved) { res.status(400).json({ error: 'Puzzle already solved.' }); return; }
 
   const attemptFee = Number(puzzle.attempt_fee) || 0;
@@ -123,23 +125,24 @@ puzzleRouter.post('/:id/attempt', requireAuth, async (req, res) => {
 
   const { placement, txHash, signature, walletAddress } = req.body ?? {};
 
-  // All puzzle attempts require a wallet signature
-  if (!signature || !walletAddress) {
-    res.status(400).json({ error: 'Wallet signature required to submit solutions.' });
-    return;
-  }
-
-  // Verify wallet signature
-  const expectedMessage = `Puzzle attempt: puzzle #${req.params.id} by ${walletAddress}`;
-  try {
-    const recovered = verifyMessage(expectedMessage, signature);
-    if (recovered.toLowerCase() !== walletAddress.toLowerCase()) {
+  // On-chain puzzles pay out to a wallet → the attempt must be signed by it.
+  // Off-chain puzzles only need the login (requireAuth).
+  if (isOnChain) {
+    if (!signature || !walletAddress) {
+      res.status(400).json({ error: 'Wallet signature required to submit solutions.' });
+      return;
+    }
+    const expectedMessage = `Puzzle attempt: puzzle #${req.params.id} by ${walletAddress}`;
+    try {
+      const recovered = verifyMessage(expectedMessage, signature);
+      if (recovered.toLowerCase() !== walletAddress.toLowerCase()) {
+        res.status(403).json({ error: 'Invalid wallet signature.' });
+        return;
+      }
+    } catch {
       res.status(403).json({ error: 'Invalid wallet signature.' });
       return;
     }
-  } catch {
-    res.status(403).json({ error: 'Invalid wallet signature.' });
-    return;
   }
 
   // Paid puzzles additionally require on-chain tx hash
@@ -156,7 +159,9 @@ puzzleRouter.post('/:id/attempt', requireAuth, async (req, res) => {
   ).get(req.params.id, playerId) as Record<string, unknown> | undefined;
 
   if (lastAttempt) {
-    const lastTime = new Date(lastAttempt.attempted_at as string).getTime();
+    // SQLite CURRENT_TIMESTAMP is UTC without a zone ("YYYY-MM-DD HH:MM:SS") — parse it as UTC.
+    const raw = String(lastAttempt.attempted_at);
+    const lastTime = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(raw) ? raw : raw.replace(' ', 'T') + 'Z').getTime();
     const retryAt = lastTime + COOLDOWN_MS;
     if (Date.now() < retryAt) {
       res.status(429).json({
@@ -181,7 +186,7 @@ puzzleRouter.post('/:id/attempt', requireAuth, async (req, res) => {
   // Record attempt with wallet and optional tx hash
   db.prepare(
     'INSERT INTO puzzle_attempts (puzzle_id, player_id, placement, correct, tx_hash, wallet_address) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(req.params.id, playerId, JSON.stringify(placement), correct ? 1 : 0, txHash ?? null, walletAddress);
+  ).run(req.params.id, playerId, JSON.stringify(placement), correct ? 1 : 0, isOnChain ? txHash ?? null : null, isOnChain ? walletAddress : null);
 
   if (correct) {
     // Mark puzzle as solved

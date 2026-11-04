@@ -88,7 +88,7 @@ export class ShareHelper {
   /**
    * Read room code from URL query params if present.
    * Returns empty string if not found.
-   * Used by MainMenuScene to auto-fill the room code input.
+   * Used by HubScene to open the join dialog from an invite link.
    */
   static getRoomCodeFromURL(): string {
     try {
@@ -97,5 +97,15 @@ export class ShareHelper {
     } catch {
       return '';
     }
+  }
+
+  /** Drop ?room= from the address bar so a refresh / return to the Hub doesn't re-open it. */
+  static clearRoomCodeFromURL(): void {
+    try {
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has('room')) return;
+      url.searchParams.delete('room');
+      window.history.replaceState(null, '', url.toString());
+    } catch { /* non-browser */ }
   }
 }

@@ -78,11 +78,12 @@ export default class LobbyScene extends Phaser.Scene {
       fontStyle: 'bold', color: '#4fc3f7',
     }).setOrigin(0.5);
 
-    new MenuButton(this, CX + 160, 38, '[ Copy ]', {
+    // Invite link (?room=CODE opens the Hub's join dialog prefilled)
+    new MenuButton(this, CX + 165, 38, '[ Invite ]', {
       color: '#777777', fontSize: '12px', fontStyle: 'normal',
       onPointerDown: async () => {
-        const ok = await ShareHelper.copyToClipboard(this.roomCode);
-        if (ok) ToastNotification.show(this, `Copied: ${this.roomCode}`, { color: '#00ff88' });
+        const ok = await ShareHelper.copyToClipboard(ShareHelper.buildRoomLink(this.roomCode));
+        ToastNotification.show(this, ok ? 'Invite link copied' : `Room code: ${this.roomCode}`, { color: '#00ff88' });
       },
     });
 
