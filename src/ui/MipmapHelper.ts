@@ -14,6 +14,8 @@
 //      MipmapHelper.enableAll(this);
 // ============================================================
 
+import Phaser from 'phaser';
+
 export class MipmapHelper {
 
   /**

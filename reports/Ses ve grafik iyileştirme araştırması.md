@@ -70,6 +70,29 @@ Varlık boyutunda en büyük kazanç arka planlarda. Repo ölçümüne göre `pu
 
 Uygulama sırasında CLAUDE.md kuralları geçerli. Her filtre veya modal blur'ün kaldırma yolu olmalı. Her ses dinleyicisinin temizliği olmalı. Ses ve efekt ayarları kalıcı olmalı ve iptal edilebilmeli. Saf render değişiklikleri için test yazılamıyorsa bunun nedeni commit mesajında belirtilmeli.
 
+## Ek: doğrulama turu (4 Kasım 2026)
+
+[DOĞRULANMADI] işaretli maddeler, ağ izinlerinin açık bıraktığı kanallardan (npm kayıt sunucusu, resmi paket içerikleri) birincil kaynakla kontrol edildi.
+
+| Madde | Sonuç | Kaynak |
+|---|---|---|
+| Phaser 4.2.1'e yükseltme | **Çalışıyor, tek satırlık düzeltmeyle.** Tip kontrolü, 566 test ve üretim derlemesi temiz. Ama oyun ilk denemede açılışta çöktü: 4.2.x `window.Phaser`'ı global olarak tanımlamıyor ve `MipmapHelper.ts` Phaser'ı import etmeden kullanıyordu. Import eklendi (BUG-142); bu düzeltme rc.6'da da çalışıyor. Ardından pratik maç, puzzle, öğretici ve HUD 4.2.1'de hatasız çalıştı ve ekranlar rc.6 ile aynı göründü. Phaser paketi 1,24 MB'tan 1,38 MB'a büyüyor. | Paketin kendi `changelog/v4/4.0/MIGRATION-GUIDE.md` ve 4.1 / 4.2 / 4.2.1 notları; tarayıcıda deneme |
+| Yükseltmede kodu etkileyen değişiklikler | `setTintFill` kaldırıldı (kodda kullanılmıyor). Graphics, Text, input, kamera efektleri, loader ve Glow/Blur/ColorMatrix/Shadow imzaları rc.6 ile aynı. Görsel kontrol önerilen yerler: yuvarlak köşeli paneller (4.1'de düzeltme yapıldı; ekranlarda sorun görülmedi) ve pencere boyutu değişince DOM girişlerinin hizası (ScaleManager 4.2.1'de değişti; test edilmedi) | `research_notes/.../phaser421_verification.md` |
+| Yeni filtre ve nesne imzaları | `addVignette(x,y,radius,strength,color,blendMode)`, `Actions.AddEffectBloom(items,{threshold,blurRadius,…})`, `Actions.AddEffectShine`, `AddMaskShape`, `setTintMode` + `TintModes` (MULTIPLY, FILL, ADD, SCREEN, OVERLAY, HARD_LIGHT…), `add.gradient`, `add.noise`, `lights.addConeLight`. Hepsi 4.2.1 kaynak kodundaki JSDoc'tan alındı. | phaser@4.2.1 `src/` |
+| WebP/AVIF ve sıkıştırılmış doku | Phaser'ın loader'ı görseli tarayıcıya bırakıyor, yani WebP/AVIF tarayıcının desteklediği her yerde çalışır. Sıkıştırılmış doku olarak yalnızca KTX v1 ve PVR destekleniyor; KTX2/Basis desteği yok. | phaser@4.2.1 `ImageFile.js`, `KTXParser.js` |
+| `load.font` | `FontFace` oluşturup yüklenmesini bekliyor, loader ancak font hazır olunca bitiyor. Font yüklenemezse yalnızca bir uyarı yazıyor (sessiz hata). | `FontFile.js` |
+| Fontlarda Türkçe harfler | Cinzel, Cinzel Decorative, Inter, Source Sans 3, Noto Sans, EB Garamond, MedievalSharp, Uncial Antiqua, Almendra, Pirata One ve Grenze Gotisch'te ğĞşŞıİçÇöÖüÜ harflerinin hepsi var. **IM Fell English'te ğ Ğ ş Ş İ eksik**, Türkçe için uygun değil. **Önemli:** ğ, ş ve İ yalnızca `latin-ext` alt kümesinde. Fontu yalnızca `latin` ile yüklemek bu harfleri yedek fonta düşürür. Lisansların hepsi OFL-1.1. | @fontsource paketlerindeki font dosyaları, fontTools ile ölçüldü |
+| Tarayıcı codec ve format desteği | **Opus:** iOS Safari'de 18.4'ten beri tam destek, masaüstü Safari'de hâlâ yalnızca kısmi. **Ogg Vorbis:** Safari 27 ve iOS 18.4'ten beri destekleniyor. **MP3:** her yerde. **AAC:** Firefox'ta kısmi. **WebP ve AVIF:** güncel tüm tarayıcılarda. Öneri: her ses için `['ses.ogg', 'ses.mp3']` sırasıyla iki dosya verilsin; Phaser ilk desteklenen formatı seçer. | caniuse-lite 1.0.30001820 (caniuse'un resmi veri paketi) |
+| Ses araçlarının lisansları | ZzFX 1.4.0 MIT lisanslı, en küçük sürümü yaklaşık 4 KB. jsfxr 1.4.1 Unlicense (kamu malı). Howler 2.2.4 MIT, 36 KB (sıkıştırılmamış min dosya). | npm paket içerikleri |
+| MipmapHelper "0 doku" sonucu | 4.2.1'e özgü değil. Yardımcı yalnızca WebGL 2'de çalışıyor; test tarayıcısı WebGL 1 verdiği için 0 sayıldı. Gerçek bir GPU'da tekrar kontrol edilmeli. | Konsol çıktısı, `MipmapHelper.ts` |
+
+**Hâlâ doğrulanamayanlar (ağ izni gerekiyor):**
+- Kenney, Pixabay, Sonniss, Freesound, OpenGameArt ve CraftPix lisans metinleri (CraftPix'in NFT/kripto maddesi dahil)
+- Midjourney kullanım koşulları ve Flux model lisansları
+- phaser.io'daki Filter makalesi; geçiş kılavuzu ise paketin içinde bulunup okundu
+
+Bunlar için gereken alan adları: `kenney.nl`, `pixabay.com`, `sonniss.com`, `freesound.org`, `opengameart.org`, `craftpix.net`, `docs.midjourney.com`, `huggingface.co`.
+
 ## Sonuç
 
 Bu araştırmanın asıl dersi, OnChainBattles'ın ses ve görsel açığının bir **içerik açığından çok bir altyapı ve kullanım açığı** olması. Motorda glow, blur, renk matrisi, parçacık ve kamera efektleri zaten var ama neredeyse hiç kullanılmıyor. Ücretsiz ve ticari kullanıma uygun ses kütüphaneleri onlarca gigabayt. En pahalı görünen sorun olan 18 MB'lık yük ise birkaç dönüştürme komutuyla çözülüyor. Bu yüzden ilk iki haftada yeni sanat üretmeden de oyun belirgin şekilde daha iyi görünüp duyulabilir. Gerçek kalite sıçraması saldırı anının sahnelenmesinden gelecek: hit-stop, flaş, parçacık, katmanlı darbe sesi ve müzik ducking'inin aynı 100 ms'lik pencerede buluşması. Sıra tabanlı bir oyunda bu yoğunluğun dozu, Balatro'dan çok Into the Breach ve Hearthstone ölçüsünde tutulmalı.

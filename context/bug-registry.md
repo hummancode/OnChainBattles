@@ -20,9 +20,9 @@ Used to identify weak areas and improve code quality over time.
 | race-condition | 6 | 2 | 4 | 0 |
 | memory-leak | 7 | 0 | 7 | 0 |
 | web3 | 3 | 0 | 3 | 0 |
-| type-safety | 8 | 2 | 5 | 1 |
+| type-safety | 9 | 2 | 6 | 1 |
 | security | 13 | 1 | 12 | 0 |
-| **TOTAL** | **141** | **22** | **112** | **7** |
+| **TOTAL** | **142** | **22** | **113** | **7** |
 
 ---
 
@@ -1471,3 +1471,13 @@ Used to identify weak areas and improve code quality over time.
 - **Fix**: Reworded the string; re-ran typecheck + build with `set -o pipefail` before committing.
 - **Prevention**: Never pipe a gate command without `pipefail`; prefer double quotes / template literals for UI copy.
 - **Files**: src/input/SelectionManager.ts
+
+### BUG-142: Game crashed at boot on Phaser 4.2.x — code relied on the global `Phaser`
+- **Date**: 2026-11-04
+- **Category**: `type-safety`
+- **Discovered by**: `claude`
+- **Symptom**: With phaser@4.2.1 installed the game stopped in PreloadScene with `ReferenceError: Phaser is not defined` (no Login screen). Typecheck and all unit tests still passed.
+- **Root cause**: `MipmapHelper.ts` used `Phaser.Renderer.WebGL.WebGLRenderer` at runtime without importing Phaser; rc.6 happened to expose `window.Phaser`, 4.2.x's ESM build does not. The ambient Phaser types hide the missing import from tsc.
+- **Fix**: `import Phaser from 'phaser'` in MipmapHelper (works on rc.6 and 4.2.1). Verified in the browser on 4.2.1: practice match, story puzzle, tutorial, HUD — no errors.
+- **Prevention**: Every file that touches `Phaser.*` at runtime imports it; upgrade checks must include a real browser boot, not only tsc + tests.
+- **Files**: src/ui/MipmapHelper.ts
